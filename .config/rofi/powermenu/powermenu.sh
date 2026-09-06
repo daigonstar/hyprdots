@@ -76,7 +76,9 @@ run_cmd() {
 			elif [[ "$DESKTOP_SESSION" == 'bspwm' ]]; then
 				bspc quit
 			elif [[ "$DESKTOP_SESSION" == 'hyprland' ]]; then
-				hyprctl dispatch exit
+				# Legacy `hyprctl dispatch exit` no longer works under the
+				# Lua config parser; use the native dispatcher via eval.
+				hyprctl dispatch 'hl.dsp.exit()'
 			elif [[ "$DESKTOP_SESSION" == 'plasma' ]]; then
 				qdbus org.kde.ksmserver /KSMServer logout 0 0 0
 				

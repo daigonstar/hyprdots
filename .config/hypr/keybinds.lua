@@ -31,7 +31,7 @@ hl.bind(main_mod .. " + SHIFT + G", hl.dsp.exec_cmd("~/.config/hypr/scripts/game
 hl.bind(main_mod .. " + CTRL + O", hl.dsp.exec_cmd("~/.config/hypr/scripts/ollama.sh"))
 hl.bind(main_mod .. " + SHIFT + O", hl.dsp.exec_cmd("~/.config/hypr/scripts/stop_ollama.sh"))
 hl.bind(main_mod .. " + SHIFT + C", hl.dsp.exec_cmd("clipvault list | rofi -dmenu -display-columns 2 | clipvault get | wl-copy"))
-hl.bind(main_mod .. " + F12", hl.dsp.exec_cmd("hyprctl dispatch focusmonitor DP-1"))
+hl.bind(main_mod .. " + F12", hl.dsp.focus({ monitor = "DP-1" }))
 
 hl.bind("CONTROL + ALT + S", hl.dsp.exec_cmd("hyprshot -m window -o ~/Pictures/screenshots"))
 hl.bind("CONTROL + SHIFT + S", hl.dsp.exec_cmd("hyprshot -m region -o ~/Pictures/screenshots"))
@@ -41,10 +41,12 @@ hl.bind(main_mod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(main_mod .. " + up", hl.dsp.focus({ direction = "up" }))
 hl.bind(main_mod .. " + down", hl.dsp.focus({ direction = "down" }))
 
-hl.bind(main_mod .. " + SHIFT + left", hl.dsp.exec_cmd("hyprctl dispatch resizeactive '-50 0'"), { repeating = true })
-hl.bind(main_mod .. " + SHIFT + right", hl.dsp.exec_cmd("hyprctl dispatch resizeactive '50 0'"), { repeating = true })
-hl.bind(main_mod .. " + SHIFT + up", hl.dsp.exec_cmd("hyprctl dispatch resizeactive '0 -50'"), { repeating = true })
-hl.bind(main_mod .. " + SHIFT + down", hl.dsp.exec_cmd("hyprctl dispatch resizeactive '0 50'"), { repeating = true })
+-- `hyprctl dispatch resizeactive 'x y'` is legacy syntax and no longer works
+-- under the Lua config parser; use the native window.resize dispatcher.
+hl.bind(main_mod .. " + SHIFT + left", hl.dsp.window.resize({ x = -50, y = 0, relative = true }), { repeating = true })
+hl.bind(main_mod .. " + SHIFT + right", hl.dsp.window.resize({ x = 50, y = 0, relative = true }), { repeating = true })
+hl.bind(main_mod .. " + SHIFT + up", hl.dsp.window.resize({ x = 0, y = -50, relative = true }), { repeating = true })
+hl.bind(main_mod .. " + SHIFT + down", hl.dsp.window.resize({ x = 0, y = 50, relative = true }), { repeating = true })
 
 for workspace = 1, 10 do
     local key = workspace % 10
@@ -73,6 +75,9 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), locked)
 hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), locked)
 hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), locked)
 
-hl.bind(main_mod .. " + SHIFT + F", hl.dsp.exec_cmd("hyprctl dispatch fullscreen"))
-hl.bind(main_mod .. " + CTRL + F", hl.dsp.exec_cmd("hyprctl dispatch fullscreen 1"))
+-- `hyprctl dispatch fullscreen[ 1]` stopped working after the Lua migration:
+-- hyprctl's `dispatch` now expects a Lua dispatcher expression, not the old
+-- legacy dispatcher names. Use the native dispatcher directly instead.
+hl.bind(main_mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
+hl.bind(main_mod .. " + CTRL + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(main_mod .. " + K", hl.dsp.exec_cmd("~/.config/rofi/cheatsheet/cheatsheet.sh"))

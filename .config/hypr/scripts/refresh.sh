@@ -45,8 +45,8 @@ swaync-client --reload-config
 
 # Relaunching rainbow borders if the script exists
 sleep 1
-if file_exists "${SCRIPTSDIR}/RainbowBorders.sh"; then
-    ${SCRIPTSDIR}/RainbowBorders.sh &
+if file_exists "${SCRIPTSDIR}/rainbowb.sh"; then
+    ${SCRIPTSDIR}/rainbowb.sh &
 fi
 
 exit 0

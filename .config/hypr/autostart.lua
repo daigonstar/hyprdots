@@ -20,7 +20,9 @@ hl.on("hyprland.start", function()
         "hypridle",
         "wl-paste --watch clipvault store",
         "arch-update --tray",
-        "sleep 2 && hyprctl dispatch workspace 1 && hyprctl dispatch focusmonitor DP-1",
+        -- `hyprctl dispatch workspace 1`/`focusmonitor DP-1` are legacy
+        -- dispatcher names and no longer work under the Lua config parser.
+        "sleep 2 && hyprctl dispatch 'hl.dsp.focus({ workspace = 1 })' && hyprctl dispatch 'hl.dsp.focus({ monitor = \"DP-1\" })'",
     }
 
     for _, command in ipairs(commands) do

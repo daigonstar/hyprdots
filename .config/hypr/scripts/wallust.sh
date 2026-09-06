@@ -12,6 +12,10 @@ fi
 
 # 2. Safety check: Ensure it's a real file
 if [ -f "$wallpaper_path" ]; then
+    # Resolve symlinks (e.g. when called with .current_wallpaper itself, as
+    # gamemode.sh does) so we never `ln -sf` a path onto itself, which would
+    # leave .current_wallpaper as a broken self-referencing symlink.
+    wallpaper_path="$(readlink -f "$wallpaper_path")"
     echo "Wallust processing: $wallpaper_path"
 
     # Symlinks for Rofi and Styles
