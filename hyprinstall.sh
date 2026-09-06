@@ -293,10 +293,10 @@ run_cmd rm -rf "$target"
 run_cmd ln -sfn "$source" "$target"
 done
 
-# Add temp monitor and worspace configs
+# Add temp monitor and workspace configs (machine-local, gitignored; Lua since the 0.55+ config migration)
 
-run_cmd touch "$HOME/.config/hypr/monitors.conf"
-run_cmd touch "$HOME/.config/hypr/workspaces.conf"
+run_cmd touch "$HOME/.config/hypr/monitors.lua"
+run_cmd touch "$HOME/.config/hypr/workspaces.lua"
 
 # Starship config
 

@@ -3,6 +3,8 @@
 *.bak.*
 paru/
 /.config/hypr/monitors.conf
+/.config/hypr/monitors.lua
 .creds
 /.config/hypr/workspaces.conf
+/.config/hypr/workspaces.lua
 OrcaSlicer-Linux-flatpak_V2.3.1_x86_64.flatpak
