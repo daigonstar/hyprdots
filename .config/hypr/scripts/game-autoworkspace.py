@@ -18,6 +18,14 @@ the job.
 Launcher UI windows themselves (the Steam client, the Lutris library, the
 Heroic library) are explicitly excluded so only the actual game windows get
 redirected.
+
+It also remembers which workspace was active right before each game window
+appeared, and switches back to it once the game closes - but only if the
+user is still sitting on the games workspace at that point (if they've
+already navigated elsewhere themselves, we don't yank focus away from
+whatever they're doing), and only once every tracked game window has closed
+(so quitting one of several simultaneously-running games doesn't switch
+away while others are still up).
 """
 
 import json
@@ -67,6 +75,9 @@ CMDLINE_HINTS = (
 
 MAX_ANCESTRY_DEPTH = 25
 TARGET_WORKSPACE = 3
+
+# address -> workspace id the user was on right before that game window opened.
+tracked_games = {}
 
 
 def log(msg):
@@ -139,6 +150,16 @@ def find_client_by_address(address):
     return None
 
 
+def get_active_workspace_id():
+    try:
+        out = subprocess.run(
+            ["hyprctl", "-j", "activeworkspace"], capture_output=True, check=True, timeout=5
+        ).stdout
+        return json.loads(out).get("id")
+    except (subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+
+
 def route_to_workspace_3(address):
     selector = f"address:{address}"
     subprocess.run(
@@ -161,7 +182,8 @@ def handle_open_window(payload):
     if window_class.strip().lower() in EXCLUDED_CLASSES:
         return
 
-    client = find_client_by_address(f"0x{address}" if not address.startswith("0x") else address)
+    normalized_address = f"0x{address}" if not address.startswith("0x") else address
+    client = find_client_by_address(normalized_address)
     if client is None:
         return
 
@@ -173,8 +195,37 @@ def handle_open_window(payload):
         return
 
     if process_looks_like_game(pid):
-        log(f"detected game window class={window_class!r} pid={pid}, routing to workspace {TARGET_WORKSPACE}")
+        origin_workspace = get_active_workspace_id()
+        log(f"detected game window class={window_class!r} pid={pid}, routing to workspace {TARGET_WORKSPACE}"
+            f" (will return to workspace {origin_workspace} on close)")
+        tracked_games[client["address"]] = origin_workspace
         route_to_workspace_3(client["address"])
+
+
+def handle_close_window(address):
+    normalized_address = f"0x{address}" if not address.startswith("0x") else address
+    if normalized_address not in tracked_games:
+        return
+
+    origin_workspace = tracked_games.pop(normalized_address)
+
+    # Other tracked games are still open - don't switch away from workspace 3 yet.
+    if tracked_games:
+        return
+
+    if origin_workspace is None:
+        return
+
+    # Only restore focus if the user is still on the games workspace; if they
+    # already navigated elsewhere themselves, leave them where they are.
+    if get_active_workspace_id() != TARGET_WORKSPACE:
+        return
+
+    log(f"last tracked game closed, returning to workspace {origin_workspace}")
+    subprocess.run(
+        ["hyprctl", "dispatch", f'hl.dsp.focus({{ workspace = {origin_workspace} }})'],
+        capture_output=True,
+    )
 
 
 def listen_forever():
@@ -197,6 +248,11 @@ def listen_forever():
                                 handle_open_window(line[len("openwindow>>"):])
                             except Exception as exc:  # keep the daemon alive on unexpected errors
                                 log(f"error handling event: {exc}")
+                        elif line.startswith("closewindow>>"):
+                            try:
+                                handle_close_window(line[len("closewindow>>"):])
+                            except Exception as exc:
+                                log(f"error handling close event: {exc}")
         except (OSError, RuntimeError) as exc:
             log(f"socket error ({exc}), retrying in 3s")
             time.sleep(3)
