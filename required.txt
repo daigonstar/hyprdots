@@ -7,6 +7,7 @@ discord
 fastfetch
 ffmpegthumbnailer
 flatpak
+fuse2
 ghostty
 gnome-system-monitor
 gnome-keyring
@@ -22,6 +23,7 @@ material-black-colors-theme
 nwg-displays
 nwg-look
 papirus-icon-theme-git
+pacman-contrib
 pavucontrol
 playerctl
 python

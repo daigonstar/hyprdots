@@ -162,6 +162,16 @@ window#waybar {
     padding-top: 1px; /* Fine-tune the vertical position if it looks off */
     color: @color15;
 }
+#custom-updates {
+    padding: 0px 4px;
+    color: @color15;
+}
+#custom-updates.pending {
+    color: orange;
+}
+#custom-updates.critical {
+    color: red;
+}
 #custom-noti.notification {
     color: @color14;
 }

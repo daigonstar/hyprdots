@@ -431,26 +431,8 @@ fi
 # and turns every other connected output off for the greeter session only.
 # (This has no effect on Hyprland's own monitor layout at session start.)
 #
-# IMPORTANT: this script runs the detection step from inside the running
-# Hyprland (Wayland/Xwayland) session, where outputs are named the DRM way
-# (e.g. "DP-1", "HDMI-A-1"). SDDM's greeter, however, runs a real Xorg X
-# server which names the very same physical outputs differently (e.g.
-# "DisplayPort-0", "HDMI-A-0" for the amdgpu/modesetting drivers - same
-# connector, zero-indexed, different prefix for DisplayPort). If we don't
-# translate names, the xrandr commands baked into Xsetup silently do
-# nothing because the "DP-1" output simply doesn't exist under Xorg.
-translate_to_xorg_output_name() {
-    local name="$1"
-    if [[ "$name" =~ ^DP-([0-9]+)$ ]]; then
-        echo "DisplayPort-$(( BASH_REMATCH[1] - 1 ))"
-    elif [[ "$name" =~ ^HDMI-A-([0-9]+)$ ]]; then
-        echo "HDMI-A-$(( BASH_REMATCH[1] - 1 ))"
-    else
-        # Unknown/other connector types (eDP, VGA, DVI, etc.) are typically
-        # named the same way under both Wayland and Xorg; pass through as-is.
-        echo "$name"
-    fi
-}
+# Output names detected here (Wayland/Xwayland, e.g. "DP-1") are used as-is:
+# the SDDM greeter's Xorg modesetting driver uses the same DRM connector names.
 
 echo "🖥️  Configuring SDDM to only show the login screen on your main monitor..."
 
@@ -486,16 +468,10 @@ else
 
     log "INFO" "Selected '$MAIN_MONITOR' as the main monitor for SDDM."
 
-    MAIN_MONITOR_XORG="$(translate_to_xorg_output_name "$MAIN_MONITOR")"
-    if [[ "$MAIN_MONITOR_XORG" != "$MAIN_MONITOR" ]]; then
-        log "INFO" "Translated '$MAIN_MONITOR' (Wayland naming) to '$MAIN_MONITOR_XORG' (Xorg naming) for the SDDM greeter."
-    fi
-
-    XRANDR_BLOCK="xrandr --output $MAIN_MONITOR_XORG --primary --auto"
+    XRANDR_BLOCK="xrandr --output $MAIN_MONITOR --primary --auto"
     for mon in "${CONNECTED_MONITORS[@]}"; do
         if [[ "$mon" != "$MAIN_MONITOR" ]]; then
-            mon_xorg="$(translate_to_xorg_output_name "$mon")"
-            XRANDR_BLOCK+=$'\n'"xrandr --output $mon_xorg --off"
+            XRANDR_BLOCK+=$'\n'"xrandr --output $mon --off"
         fi
     done
 

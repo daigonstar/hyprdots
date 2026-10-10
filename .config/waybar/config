@@ -7,7 +7,7 @@
         "spacing": 10,
         "modules-left": ["clock","custom/chatgpt","group/expand2"],
         "modules-center": ["hyprland/window", "hyprland/workspaces","cava"],
-        "modules-right": ["group/expand","pulseaudio","bluetooth","battery","network","custom/power","custom/noti"],
+        "modules-right": ["group/expand","pulseaudio","bluetooth","custom/updates","battery","network","custom/power","custom/noti"],
 
     // Groups
 
@@ -84,11 +84,11 @@
 
         "network": {
             "format-wifi": "󰖩",
-            "format-ethernet":"🖧",
+            "format-ethernet":"󰈀",
             "format-disconnected": "",
             "tooltip-format-disconnected": "Error",
             "tooltip-format-wifi": "{essid} ({signalStrength}%) ",
-            "tooltip-format-ethernet": "{ifname} 🖧 ",
+            "tooltip-format-ethernet": "{ifname} 󰈀 ",
             "on-click": "ghostty -e nmtui"
         },
 
@@ -191,6 +191,14 @@
             "format": "|",
             "interval": "once",
             "tooltip": false
+        },
+
+        "custom/updates": {
+            "exec": "~/.config/waybar/scripts/updates.sh",
+            "return-type": "json",
+            "interval": 1800,
+            "signal": 8,
+            "on-click": "ghostty -e bash -ic 'update; pkill -RTMIN+8 waybar'"
         },
 
         "custom/power": {
