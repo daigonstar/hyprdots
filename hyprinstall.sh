@@ -135,9 +135,47 @@ read -rp "$prompt [$default]: " ans
 [[ "$ans" =~ ^[Yy] ]]
 }
 
+# Preflight: refuse to run as root, ensure sudo exists, and cache credentials
+# up front so none of the dozens of later `sudo` calls (some running inside
+# backgrounded AUR builds) ever stall or fail on a lapsed/missing prompt.
+preflight_checks() {
+if [[ "$DRY_RUN" == "true" ]]; then
+echo "[DRY RUN] Would run preflight checks (root/sudo/credential cache)"
+return
+fi
+if [[ "$EUID" -eq 0 ]]; then
+echo "This script must be run as a normal (non-root) user with sudo access, not as root." >&2
+echo "Create a user first, e.g.:" >&2
+echo "  useradd -m -G wheel -s /bin/bash <username> && passwd <username>" >&2
+echo "  pacman -S --needed sudo" >&2
+echo "  EDITOR=nano visudo   # uncomment '%wheel ALL=(ALL:ALL) ALL'" >&2
+echo "Then log in as that user and re-run this script." >&2
+exit 1
+fi
+if ! command -v sudo >/dev/null 2>&1; then
+echo "'sudo' is not installed. On a vanilla Arch install, run the following as root first:" >&2
+echo "  pacman -S --needed sudo" >&2
+echo "  usermod -aG wheel $USER" >&2
+echo "  EDITOR=nano visudo   # uncomment '%wheel ALL=(ALL:ALL) ALL'" >&2
+echo "Log out/in (or reboot) so the group membership takes effect, then re-run this script." >&2
+exit 1
+fi
+echo "Caching sudo credentials (you may be prompted for your password)..."
+if ! sudo -v; then
+echo "Failed to obtain sudo privileges. Ensure your user is in the 'wheel' group and sudoers is configured." >&2
+exit 1
+fi
+# Keep the sudo timestamp alive for the duration of the script so long AUR
+# builds don't hit an expired/backgrounded password prompt.
+( while true; do sudo -n true 2>/dev/null; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
+SUDO_KEEPALIVE_PID=$!
+trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
+}
+
 # Script start
 
 init_logging
+preflight_checks
 log "INFO" "Starting hyprinstall-final. Log: $LOGFILE"
 
 # Branch selection for repo operations (supports UPDATE_BRANCH env var or .update-branch file)
@@ -167,6 +205,16 @@ if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   run_cmd "git -C \"$REPO_DIR\" checkout \"$BRANCH\"" || true
   run_cmd "git -C \"$REPO_DIR\" pull --ff-only origin \"$BRANCH\"" || true
 fi
+
+# Full system sync/upgrade first. On a freshly imaged vanilla Arch install,
+# the package DB/keyring can be stale relative to current repos; installing
+# packages against a stale DB is the classic cause of partial-upgrade and
+# signature verification failures.
+log "INFO" "Refreshing package database and keyring before installing anything"
+run_cmd "sudo pacman -Sy --needed --noconfirm archlinux-keyring" ||
+  die "Failed to refresh archlinux-keyring. See $LOGFILE for details."
+run_cmd "sudo pacman -Syu --noconfirm" ||
+  die "Failed to sync/upgrade the system. See $LOGFILE for details."
 
 # Install core dependencies
 
@@ -318,6 +366,34 @@ for s in "${SCRIPT_FILES[@]}"; do
 sp="$DOTFILES_DIR/$s"
 [[ -f "$sp" ]] && run_cmd "chmod +x "$sp""
 done
+
+# Steam shortcut cleanup: periodically remove Steam-generated game launcher
+# entries via a systemd --user timer
+
+STEAM_CLEANUP_SCRIPT="$REPO_DIR/bash/remove-steam-shortcuts.sh"
+if [[ -f "$STEAM_CLEANUP_SCRIPT" ]]; then
+    echo "🧹 Setting up periodic Steam shortcut cleanup..."
+    run_cmd "chmod +x \"$STEAM_CLEANUP_SCRIPT\""
+    run_cmd "mkdir -p \"$HOME/.config/systemd/user\""
+    # The timer unit has no path references, so it can be symlinked as-is.
+    run_cmd "ln -sfn \"$DOTFILES_DIR/systemd/user/remove-steam-shortcuts.timer\" \"$HOME/.config/systemd/user/remove-steam-shortcuts.timer\""
+    # The service unit's ExecStart hardcodes %h/hyprdots/..., which only
+    # works if the repo was cloned to exactly $HOME/hyprdots. Generate a copy
+    # with ExecStart pointing at the repo's actual location instead.
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "[DRY RUN] Would generate $HOME/.config/systemd/user/remove-steam-shortcuts.service pointing at $STEAM_CLEANUP_SCRIPT"
+    else
+        sed "s|^ExecStart=.*|ExecStart=$STEAM_CLEANUP_SCRIPT|" \
+            "$DOTFILES_DIR/systemd/user/remove-steam-shortcuts.service" \
+            > "$HOME/.config/systemd/user/remove-steam-shortcuts.service"
+        log "OK" "Generated remove-steam-shortcuts.service with ExecStart=$STEAM_CLEANUP_SCRIPT"
+    fi
+    run_cmd "systemctl --user daemon-reload"
+    run_cmd "systemctl --user enable --now remove-steam-shortcuts.timer"
+    log "OK" "Steam shortcut cleanup timer enabled"
+else
+    log "WARN" "Steam cleanup script not found: $STEAM_CLEANUP_SCRIPT. Skipping."
+fi
 
 # Cursor icons + Flatpak overrides
 
