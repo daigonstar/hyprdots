@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically remove Steam-generated game shortcuts
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

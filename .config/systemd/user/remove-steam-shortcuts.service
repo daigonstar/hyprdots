@@ -1,0 +1,6 @@
+[Unit]
+Description=Remove Steam-generated game shortcuts from application launcher
+
+[Service]
+Type=oneshot
+ExecStart=%h/hyprdots/bash/remove-steam-shortcuts.sh
