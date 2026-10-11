@@ -37,6 +37,7 @@ RENOTIFY_SECONDS = CFG["renotify_hours"] * 3600
 JOURNAL_WINDOW = CFG["journal_window"]
 DISK_WARN, DISK_CRIT = CFG["disk_warn"], CFG["disk_crit"]
 MEM_WARN_PCT, SWAP_WARN_PCT = CFG["mem_warn_pct"], CFG["swap_warn_pct"]
+SWAP_RAM_PCT = 30  # swap is only flagged while less than this % of RAM is available
 TEMP_WARN, TEMP_CRIT = CFG["temp_warn"], CFG["temp_crit"]
 UPDATES_WARN = CFG["updates_warn"]
 JOURNAL_IGNORE = set(CFG["journal_ignore"])
@@ -87,7 +88,8 @@ def check_memory():
         findings.append(("warn", "mem:low", f"Only {avail_pct}% of RAM available"))
     if info.get("SwapTotal"):
         swap_pct = (info["SwapTotal"] - info["SwapFree"]) * 100 // info["SwapTotal"]
-        if swap_pct > SWAP_WARN_PCT:
+        # Heavily used swap is only a problem when RAM is short too; idle swap with free RAM is harmless
+        if swap_pct > SWAP_WARN_PCT and avail_pct < SWAP_RAM_PCT:
             findings.append(("warn", "mem:swap", f"Swap is {swap_pct}% used"))
     return findings
 

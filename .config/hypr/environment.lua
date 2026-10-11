@@ -6,5 +6,3 @@ hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("GDK_BACKEND", "wayland")
 hl.env("PROTON_ENABLE_WAYLAND", "1")
 
-hl.permission({ binary = "/usr/bin/hypr-dock", type = "screencopy", mode = "allow" })
-hl.permission({ binary = "/usr/bin/hypr-alttab", type = "screencopy", mode = "allow" })

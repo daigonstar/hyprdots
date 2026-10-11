@@ -21,4 +21,4 @@
 - Do not run full system updates (paru -Syu) on your own initiative; tell the user when updates are pending instead.
 
 ## Known issues
-- Wireless mouse is not detected by Hyprland (receivers show in lsusb, only the keyboard shows as an input device). Unresolved.
+- None recorded.
