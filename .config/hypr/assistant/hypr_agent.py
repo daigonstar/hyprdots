@@ -5,6 +5,7 @@ import glob
 import html
 import ipaddress
 import json
+import math
 import os
 import re
 import select
@@ -32,6 +33,7 @@ SETTINGS = usersettings.section("assistant", {
     "max_tool_steps": 15,
     "history_messages": 100,
     "accent": "36",
+    "animated_logo": True,
     "command_timeout": 20,
     "confirmed_command_timeout": 180,
     "web_timeout": 15,
@@ -186,13 +188,110 @@ def health_summary():
         return f"{_c('33', '⚠')} {len(lines)} issue(s) flagged by the health monitor {dim('(' + when + ') ask me about them')}"
     return f"{_c('32', '✓')} health monitor: all clear {dim('(' + when + ')')}"
 
+LOGO_WIDTH, LOGO_HEIGHT = 22, 14
+# Terminal cells are about twice as tall as wide, so the 22x14 grid spans 1.57 x 2.0 logo units
+LOGO_HALF_X = 0.786
+TRUECOLOR = USE_COLOR and os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit")
+SHADES = "█▓▒░"
+
+DROP_CENTER_Y, DROP_RADIUS, DROP_APEX_Y, DROP_THICKNESS = 0.4, 0.6, -1.7, 0.17
+
+def _in_drop(x, y, radius, apex_y):
+    """Teardrop: a circle plus the cone of tangent lines up to a point at (0, apex_y)."""
+    sin_t = radius / (DROP_CENTER_Y - apex_y)
+    tangent_y = DROP_CENTER_Y - radius * sin_t
+    if y > tangent_y:
+        return x * x + (y - DROP_CENTER_Y) ** 2 <= radius * radius
+    return apex_y <= y and abs(x) <= (y - apex_y) * sin_t / math.sqrt(1 - sin_t * sin_t)
+
+def _in_logo(x, y):
+    """The Hyprland-style outline: a hollow drop with a slit at the tip, cut flat at the top."""
+    if y < -1:
+        return False
+    sin_t = DROP_RADIUS / (DROP_CENTER_Y - DROP_APEX_Y)
+    inner_apex = DROP_APEX_Y + DROP_THICKNESS / sin_t
+    outer = _in_drop(x, y, DROP_RADIUS, DROP_APEX_Y)
+    inner = _in_drop(x, y, DROP_RADIUS - DROP_THICKNESS, inner_apex)
+    return outer and not inner and not (abs(x) < 0.07 and y < -0.3)
+
+def _in_sparkle(x, y, size):
+    """AI twist: four-point sparkle (astroid) in the middle of the drop."""
+    return (abs(x) / size) ** (2 / 3) + (abs(y - DROP_CENTER_Y) / size) ** (2 / 3) <= 1
+
+def _gradient(x, y, brightness):
+    """Blue at the bottom left to teal at the top right, like the Hyprland logo."""
+    t = max(0.0, min(1.0, (x / LOGO_HALF_X - y + 1) / 3))
+    r, g, b = (int((0 + 0 * t) * brightness), int((150 + 80 * t) * brightness), int((255 - 45 * t) * brightness))
+    return f"\033[38;2;{r};{g};{b}m"
+
+def logo_frame(angle, pulse=1.0):
+    """One frame of the logo rotating around its vertical axis; returns coloured rows."""
+    face = abs(math.cos(angle))
+    rows = []
+    for row in range(LOGO_HEIGHT):
+        y = (row - (LOGO_HEIGHT - 1) / 2) / ((LOGO_HEIGHT - 1) / 2)
+        line = ""
+        for col in range(LOGO_WIDTH):
+            screen_x = (col - (LOGO_WIDTH - 1) / 2) / ((LOGO_WIDTH - 1) / 2) * LOGO_HALF_X
+            if face < 0.08:
+                lit, spark = abs(screen_x) < 0.04 and -1 <= y <= 1, False
+                x = 0
+            else:
+                x = screen_x / face
+                spark = _in_sparkle(x, y, 0.3 * pulse)
+                lit = spark or _in_logo(x, y)
+            if not lit:
+                line += " "
+            elif not USE_COLOR:
+                line += "◆" if spark else "█"
+            elif TRUECOLOR:
+                shade = 0.45 + 0.55 * face
+                color = "\033[38;2;255;255;255m" if spark else _gradient(x, y, shade)
+                line += f"{color}█\033[0m"
+            else:
+                char = "█" if spark else SHADES[min(len(SHADES) - 1, int((1 - face) * len(SHADES)))]
+                line += _c("1;37" if spark else ACCENT, char)
+        rows.append(line)
+    return rows
+
+def _banner_text():
+    return [
+        "", "", "", "",
+        _c('1;' + ACCENT, '  Hyprland Assistant'),
+        dim(f"  {MODEL} · vision {VISION_MODEL}"),
+        dim(f"  unloads after {KEEP_ALIVE}"),
+        f"  {health_summary()}",
+        dim("  Ask about your PC, updates or problems."),
+        dim("  Type 'exit' to quit."),
+        "", "", "", "",
+    ]
+
+def _draw_banner(angle, text, pulse=1.0):
+    rows = logo_frame(angle, pulse)
+    return "\n".join("  " + rows[i] + text[i] for i in range(LOGO_HEIGHT))
+
 def print_banner():
+    text = _banner_text()
     print()
-    print(f"  {_c('1;' + ACCENT, '◆ Hyprland Assistant')}")
-    print(dim(f"  {MODEL} · vision {VISION_MODEL} · unloads after {KEEP_ALIVE}"))
-    print(f"  {health_summary()}")
-    print(dim("  Ask about your PC, updates or problems. Type 'exit' to quit."))
-    print()
+    if not (USE_COLOR and SETTINGS["animated_logo"]):
+        print(_draw_banner(0, text))
+        print()
+        return
+    frames = 40
+    sys.stdout.write("\033[?25l")
+    try:
+        for i in range(frames + 1):
+            # Ease out so the logo spins fast and settles face-on
+            progress = 1 - (1 - i / frames) ** 2
+            if i:
+                sys.stdout.write(f"\033[{LOGO_HEIGHT - 1}A\r")
+            pulse = 1 + 0.2 * math.sin(i / frames * 6 * math.pi) * (1 - i / frames)
+            sys.stdout.write(_draw_banner(2 * math.pi * 2 * progress, text, pulse).replace("\n", "\033[K\n") + "\033[K")
+            sys.stdout.flush()
+            time.sleep(0.04)
+    finally:
+        sys.stdout.write("\033[?25h\n\n")
+        sys.stdout.flush()
 
 # --- Thinking indicator ---
 class Spinner:
