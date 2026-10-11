@@ -68,6 +68,7 @@ flatpak
 bc
 wget
 vim
+github-cli
 sif-git
 
 # --- Theme, icons, fonts ---
