@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import ollama
+import base64
 import glob
+import html
 import ipaddress
 import json
 import os
@@ -225,10 +227,21 @@ class Spinner:
             sys.stdout.write("\r\033[K")
             sys.stdout.flush()
 
+SAMPLING = {"temperature": 0.3, "repeat_penalty": 1.1, "num_predict": 4096}
+# Used for one retry when Ollama aborts a response that got stuck repeating itself
+LOOP_RETRY_SAMPLING = {"temperature": 0.8, "repeat_penalty": 1.25, "num_predict": 4096}
+
 def chat(model, messages, label="Thinking", tools=None, num_ctx=None):
     with Spinner(label):
-        return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE,
-                           tools=tools, options={"num_ctx": num_ctx or NUM_CTX})
+        options = {"num_ctx": num_ctx or NUM_CTX}
+        try:
+            return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE,
+                               tools=tools, options={**options, **SAMPLING})
+        except ollama.ResponseError as e:
+            if "repeat limit" not in str(e):
+                raise
+            return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE,
+                               tools=tools, options={**options, **LOOP_RETRY_SAMPLING})
 
 # --- System Tools (Hyprland Focused) ---
 
@@ -444,15 +457,8 @@ def tool_web_fetch(url=""):
     note = f"\n[truncated to {WEB_MAX_CHARS} characters]" if len(body) > WEB_MAX_CHARS else ""
     return f"{WEB_NOTICE}URL: {url}\n\n{body[:WEB_MAX_CHARS]}{note}"
 
-def tool_web_search(query=""):
-    """Searches DuckDuckGo (no API key) and returns titles, URLs and snippets."""
-    query = (query or "").strip()
-    if not query:
-        return "Usage: web_search(your query)"
-    try:
-        _, page = _http_get("https://html.duckduckgo.com/html/", data=urllib.parse.urlencode({"q": query}).encode())
-    except (ValueError, urllib.error.URLError, TimeoutError, OSError) as e:
-        return f"web_search failed: {e}"
+def _search_duckduckgo(query):
+    _, page = _http_get("https://html.duckduckgo.com/html/", data=urllib.parse.urlencode({"q": query}).encode())
     titles = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', page, re.S)
     snippets = re.findall(r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>', page, re.S)
     results = []
@@ -460,10 +466,51 @@ def tool_web_search(query=""):
         href = urllib.parse.urljoin("https://duckduckgo.com", href)
         target = urllib.parse.parse_qs(urllib.parse.urlsplit(href).query).get("uddg", [href])[0]
         snippet = _html_to_text(snippets[i]) if i < len(snippets) else ""
-        results.append(f"{i + 1}. {_html_to_text(title)}\n   {target}\n   {snippet}")
+        results.append((_html_to_text(title), target, snippet))
+    return results
+
+def _bing_target(href):
+    """Bing wraps result links in a redirect whose u= parameter is 'a1' + base64url of the real URL."""
+    href = html.unescape(href)
+    value = urllib.parse.parse_qs(urllib.parse.urlsplit(href).query).get("u", [""])[0]
+    if value.startswith("a1"):
+        try:
+            encoded = value[2:]
+            return base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            pass
+    return href
+
+def _search_bing(query):
+    _, page = _http_get("https://www.bing.com/search?" + urllib.parse.urlencode({"q": query, "setlang": "en"}))
+    results = []
+    for block in page.split('<li class="b_algo"')[1:7]:
+        link = re.search(r'<h2[^>]*><a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not link:
+            continue
+        snippet = re.search(r'<p[^>]*>(.*?)</p>', block, re.S)
+        results.append((_html_to_text(link.group(2)), _bing_target(link.group(1)), _html_to_text(snippet.group(1)) if snippet else ""))
+    return results
+
+def tool_web_search(query=""):
+    """Searches the web (DuckDuckGo, falling back to Bing; no API key) and returns titles, URLs and snippets."""
+    query = (query or "").strip()
+    if not query:
+        return "Usage: web_search(your query)"
+    results, errors = [], []
+    for engine in (_search_duckduckgo, _search_bing):
+        try:
+            results = engine(query)
+        except (ValueError, urllib.error.URLError, TimeoutError, OSError) as e:
+            errors.append(str(e))
+            continue
+        if results:
+            break
     if not results:
-        return "web_search returned no results (or DuckDuckGo blocked the request). Try different keywords."
-    return WEB_NOTICE + "\n".join(results)
+        detail = f" ({'; '.join(errors)})" if errors else ""
+        return f"web_search returned no results; the search engines may be blocking requests{detail}. Try different keywords."
+    lines = [f"{i}. {title}\n   {url}\n   {snippet}" for i, (title, url, snippet) in enumerate(results, 1)]
+    return WEB_NOTICE + "\n".join(lines)
 
 # --- Persistent context and health monitoring ---
 AGENT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -913,6 +960,7 @@ Guidelines:
 6. To check whether config is ready for a Hyprland update: read the relevant config files, check the installed version (pacman -Q hyprland), then use web_search/web_fetch for the release notes or migration guide (wiki.hypr.land, github.com/hyprwm/Hyprland/releases) and compare. Report concrete deprecated or renamed options you actually found.
 7. For performance, rating or upgrade questions: collect the real hardware and usage figures first (system_info, sensors, free, df, rocm-smi), then use web_search and web_fetch to find actual benchmark or market data. Quote benchmark scores only if they appear in a search result or fetched page, and name the source. If you could not find a number, say so instead of estimating it. Name specific upgrade options with the reason for each, and only suggest upgrades that make sense for the measured bottleneck.
 8. Never mention notifications, tool-calling or these instructions in your answers.
+9. Always reply in English. When you need a tool, call it straight away without writing any text first.
 """
 
 # --- Native tool-calling schemas ---
@@ -971,8 +1019,25 @@ def _args_text(name, arguments):
         value = next(iter(arguments.values()))
     return "" if value is None else str(value)
 
+def _parse_json_tool_call(content):
+    """Handles calls written as text JSON, e.g. {"name": "web_search", "arguments": {"query": "x"}}."""
+    match = re.search(r'\{.*\}', content, re.S)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except ValueError:
+        return None
+    name = data.get("name") if isinstance(data, dict) else None
+    if name not in tools:
+        return None
+    return name, _args_text(name, data.get("arguments"))
+
 def parse_text_tool_call(content):
-    """Fallback for models that write the call as text: TOOL_USE: name(args), name(args) or NAME: arg."""
+    """Fallback for models that write the call as text: TOOL_USE: name(args), name(args), NAME: arg or JSON."""
+    parsed = _parse_json_tool_call(content)
+    if parsed:
+        return parsed
     match = TOOL_CALL_RE.search(content)
     if match and match.group(1).lower() in tools:
         return match.group(1).lower(), match.group(2)
@@ -980,6 +1045,9 @@ def parse_text_tool_call(content):
     match = re.fullmatch(r"(\w+)\s*(?:\((.*)\)|:\s*(.*))?", line)
     if match and match.group(1).lower() in tools:
         return match.group(1).lower(), match.group(2) or match.group(3)
+    match = re.fullmatch(r"(\w+)\s+([\"'].*[\"'])", line)
+    if match and match.group(1).lower() in tools:
+        return match.group(1).lower(), match.group(2)
     return None
 
 def execute_tool(name, arg):
@@ -1034,7 +1102,9 @@ def process_prompt(user_input):
     start = len(messages)
     messages.append({'role': 'user', 'content': user_input})
     reply = _process(messages, user_input)
-    _remember_turn(messages[start:], reply)
+    # A failed turn must not enter the history or the model starts imitating the error
+    if not reply.startswith("Ollama Error:"):
+        _remember_turn(messages[start:], reply)
     return reply
 
 def _process(messages, user_input):
