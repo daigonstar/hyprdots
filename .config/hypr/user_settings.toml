@@ -33,6 +33,7 @@ temp_warn = 85              # temperature warning in °C
 temp_crit = 95              # temperature critical in °C
 updates_warn = 50           # flag when this many updates are pending
 journal_ignore = ["bluetoothd", "kwin_wayland", "sddm-helper"]  # noisy journal sources to skip
+units_ignore = ["systemd-pcr*", "systemd-tpm2-setup*"]  # failed units to ignore (shell-style patterns); TPM is disabled here
 # How often the monitor runs is set by .config/systemd/user/agent-monitor.timer
 
 [calendar]

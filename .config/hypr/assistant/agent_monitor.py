@@ -5,6 +5,7 @@ that hypr_agent.py reads, so the assistant knows what was flagged.
 Usage: agent_monitor.py          run checks, notify about NEW problems
        agent_monitor.py --print  run checks, print the report, no notifications
 """
+import fnmatch
 import json
 import os
 import re
@@ -32,6 +33,7 @@ CFG = usersettings.section("monitor", {
     "temp_crit": 95,
     "updates_warn": 50,
     "journal_ignore": ["bluetoothd", "kwin_wayland", "sddm-helper"],
+    "units_ignore": [],
 })
 RENOTIFY_SECONDS = CFG["renotify_hours"] * 3600
 JOURNAL_WINDOW = CFG["journal_window"]
@@ -41,6 +43,7 @@ SWAP_RAM_PCT = 30  # swap is only flagged while less than this % of RAM is avail
 TEMP_WARN, TEMP_CRIT = CFG["temp_warn"], CFG["temp_crit"]
 UPDATES_WARN = CFG["updates_warn"]
 JOURNAL_IGNORE = set(CFG["journal_ignore"])
+UNITS_IGNORE = CFG["units_ignore"]
 
 def run(cmd, timeout=60):
     try:
@@ -54,7 +57,7 @@ def check_failed_units():
     for scope, cmd in (("system", ["systemctl", "--failed"]), ("user", ["systemctl", "--user", "--failed"])):
         for line in run(cmd + ["--no-legend", "--plain"]).splitlines():
             unit = line.split()[0] if line.split() else ""
-            if unit:
+            if unit and not any(fnmatch.fnmatch(unit, pattern) for pattern in UNITS_IGNORE):
                 findings.append(("warn", f"unit:{scope}:{unit}", f"Failed {scope} unit: {unit}"))
     return findings
 

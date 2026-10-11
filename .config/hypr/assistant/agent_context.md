@@ -21,4 +21,4 @@
 - Do not run full system updates (paru -Syu) on your own initiative; tell the user when updates are pending instead.
 
 ## Known issues
-- None recorded.
+- None recorded. TPM is intentionally disabled, so failed systemd-pcr*/systemd-tpm2-* units are expected; do not suggest enabling it.
