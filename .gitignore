@@ -8,3 +8,5 @@ paru/
 /.config/hypr/workspaces.conf
 /.config/hypr/workspaces.lua
 OrcaSlicer-Linux-flatpak_V2.3.1_x86_64.flatpak
+/.config/hypr/user_settings.local.toml
+__pycache__/

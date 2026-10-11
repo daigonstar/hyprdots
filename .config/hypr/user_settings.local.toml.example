@@ -1,0 +1,15 @@
+# Private settings: copy this file to user_settings.local.toml (the installer does it for you).
+# user_settings.local.toml is git-ignored and overrides user_settings.toml.
+#
+# Calendar links
+# --------------
+# Google Calendar: open calendar.google.com -> Settings (gear) -> pick your calendar
+# in the left list -> "Integrate calendar" -> copy "Secret address in iCal format".
+# Anyone with that link can read your calendar, so keep it only in this file.
+# Add one "Name|URL" entry per calendar; any iCal (.ics) link works.
+
+[calendar]
+sources = [
+    # "Personal|https://calendar.google.com/calendar/ical/.../private-.../basic.ics",
+    # "Holidays|https://calendar.google.com/calendar/ical/en.uk%23holiday%40group.v.calendar.google.com/public/basic.ics",
+]

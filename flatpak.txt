@@ -9,7 +9,6 @@ net.lutris.Lutris
 com.nextcloud.desktopclient.nextcloud
 md.obsidian.Obsidian
 com.pokemmo.PokeMMO
-com.orcaslicer.OrcaSlicer
 com.spotify.Client
 com.github.IsmaelMartinez.teams_for_linux
 io.github.ryubing.Ryujinx

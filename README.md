@@ -43,5 +43,11 @@ cd hyprland-dots/hyprdots
 chmod +x hyprinstall.sh
 ./hyprinstall.sh
 ```
+The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. Everything else is in `required.txt`. It also enables the needed services and optionally downloads the assistant's Ollama models (~14 GB).
+### User settings
+All options for the PC assistant, health monitor and popup calendar live in `~/.config/hypr/user_settings.toml` (the cog in the waybar drawer opens it).
+
+Private values go in `~/.config/hypr/user_settings.local.toml` (git-ignored, created by the installer from `user_settings.local.toml.example`). To show Google Calendar events in the clock popup, copy your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar) into `sources` there, then click the clock.
+
 #### For my SDDM Greeter I use [SDDM Astronaut Theme](https://github.com/Keyitdev/sddm-astronaut-theme)
 Please install that for a better greeter theme

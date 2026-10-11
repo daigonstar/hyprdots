@@ -20,11 +20,9 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$BASE_DIR"
 DOTFILES_DIR="$REPO_DIR/.config"
 REQUIRED_FILE="$BASE_DIR/required.txt"
-NVIDIA_FILE="$BASE_DIR/nvidia.txt"
-OPTIONAL_FILE="$BASE_DIR/optional.txt"
 FLATPAK_FILE="$BASE_DIR/flatpak.txt"
 LOGFILE="$DEFAULT_LOG"
-EXTRA_DEPENDENCIES=(git base-devel flatpak python rust imagemagick rsync)
+EXTRA_DEPENDENCIES=(git base-devel flatpak python rust imagemagick rsync pciutils)
 
 # Parse flags
 
@@ -206,6 +204,16 @@ if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   run_cmd "git -C \"$REPO_DIR\" pull --ff-only origin \"$BRANCH\"" || true
 fi
 
+# Steam and the 32-bit GPU libraries live in the [multilib] repo, which is
+# disabled on a fresh Arch install. Enable it before the first database sync.
+if grep -qE '^\[multilib\]' /etc/pacman.conf; then
+  log "OK" "multilib repository already enabled"
+else
+  run_cmd "sudo sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf" ||
+    die "Failed to enable the multilib repository. See $LOGFILE for details."
+  log "OK" "Enabled the multilib repository (needed for Steam)"
+fi
+
 # Full system sync/upgrade first. On a freshly imaged vanilla Arch install,
 # the package DB/keyring can be stale relative to current repos; installing
 # packages against a stale DB is the classic cause of partial-upgrade and
@@ -231,8 +239,6 @@ done
 # Read package lists
 
 read_packages_to_array "$REQUIRED_FILE" REQUIRED_PKGS
-read_packages_to_array "$NVIDIA_FILE" NVIDIA_PKGS
-read_packages_to_array "$OPTIONAL_FILE" OPTIONAL_PKGS
 read_packages_to_array "$FLATPAK_FILE" FLATPAK_PKGS
 
 # Install paru (AUR helper)
@@ -277,6 +283,65 @@ fi
 done
 }
 
+# GPU drivers: detect the vendor(s) via lspci and let the user confirm or change.
+# Override for unattended installs: HYPR_GPU="amd" (or "nvidia", "intel", "amd nvidia").
+select_gpu_vendors() {
+  GPU_VENDORS=()
+  if [[ -n "${HYPR_GPU:-}" ]]; then
+    read -ra GPU_VENDORS <<<"$HYPR_GPU"
+    return
+  fi
+
+  local gpu_info detected=()
+  gpu_info="$(lspci -nn 2>/dev/null | grep -Ei 'vga|3d controller|display controller' || true)"
+  grep -qi 'nvidia' <<<"$gpu_info" && detected+=(nvidia)
+  grep -qiE 'amd|ati|advanced micro' <<<"$gpu_info" && detected+=(amd)
+  grep -qi 'intel' <<<"$gpu_info" && detected+=(intel)
+
+  if [[ "$DRY_RUN" == "true" || ! -t 0 ]]; then
+    GPU_VENDORS=("${detected[@]}")
+    return
+  fi
+
+  if [[ ${#detected[@]} -gt 0 ]]; then
+    echo "Detected GPU(s): ${detected[*]}"
+    read -rp "Install drivers for these? [Y/n]: " ans
+    if [[ ! "$ans" =~ ^[Nn] ]]; then
+      GPU_VENDORS=("${detected[@]}")
+      return
+    fi
+  else
+    echo "Could not detect a GPU."
+  fi
+
+  echo "Choose the GPU driver set(s) to install:"
+  echo "  1) AMD   2) NVIDIA   3) Intel   4) None (skip)"
+  read -rp "Number(s), e.g. '1' or '1 2' for a hybrid setup: " picks
+  local pick
+  for pick in $picks; do
+    case "$pick" in
+      1) GPU_VENDORS+=(amd) ;;
+      2) GPU_VENDORS+=(nvidia) ;;
+      3) GPU_VENDORS+=(intel) ;;
+    esac
+  done
+}
+
+select_gpu_vendors
+if [[ ${#GPU_VENDORS[@]} -eq 0 ]]; then
+  log "WARN" "No GPU drivers selected; skipping GPU packages (Steam and the assistant will run without GPU acceleration)"
+fi
+for vendor in "${GPU_VENDORS[@]}"; do
+  gpu_file="$BASE_DIR/gpu-$vendor.txt"
+  if [[ ! -f "$gpu_file" ]]; then
+    log "WARN" "No driver list for '$vendor' ($gpu_file); skipping"
+    continue
+  fi
+  log "INFO" "Installing $vendor GPU drivers"
+  read_packages_to_array "$gpu_file" GPU_PKGS
+  install_package_list "${GPU_PKGS[@]}"
+done
+
 install_package_list "${REQUIRED_PKGS[@]}"
 
 # Flatpak installs
@@ -293,20 +358,32 @@ run_cmd "flatpak install -y --noninteractive --or-update flathub \"$f\"" ||
 fi
 done
 
-# NVIDIA packages (optional)
+# Services needed by the installed apps. ollama is restarted so it picks up
+# the GPU backend (ROCm/CUDA/Vulkan) that was installed above.
 
-if [[ ${#NVIDIA_PKGS[@]} -gt 0 ]]; then
-if yesno_prompt "Install NVIDIA packages?"; then
-install_package_list "${NVIDIA_PKGS[@]}"
-fi
+for svc in NetworkManager bluetooth coolercontrold docker ollama; do
+  run_cmd "sudo systemctl enable --now $svc.service" || log "WARN" "Could not enable $svc.service"
+done
+run_cmd "sudo systemctl restart ollama.service" || log "WARN" "Could not restart ollama.service"
+
+# WinBoat runs Windows in a docker container; the user must be in the docker group
+if ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+  run_cmd "sudo usermod -aG docker \"$USER\"" && log "INFO" "Added $USER to the docker group (log out and back in for it to apply)"
 fi
 
-# Optional packages (peripheral/RGB tooling, etc.)
+# PC assistant models (names come from user_settings.toml)
 
-if [[ ${#OPTIONAL_PKGS[@]} -gt 0 ]]; then
-if yesno_prompt "Install optional packages (${OPTIONAL_PKGS[*]})?"; then
-install_package_list "${OPTIONAL_PKGS[@]}"
-fi
+mapfile -t ASSISTANT_MODELS < <(python3 -c "
+import sys
+sys.path.insert(0, '$DOTFILES_DIR/hypr/assistant')
+import usersettings
+s = usersettings.section('assistant', {'model': 'qwen2.5:14b', 'vision_model': 'llava'})
+print(s['model']); print(s['vision_model'])" 2>/dev/null)
+if [[ ${#ASSISTANT_MODELS[@]} -gt 0 ]] && yesno_prompt "Download the PC assistant's AI models (${ASSISTANT_MODELS[*]}, ~14 GB)?" "Y"; then
+  run_cmd "sleep 3"
+  for model in "${ASSISTANT_MODELS[@]}"; do
+    run_cmd "ollama pull \"$model\"" || log "WARN" "Could not download model $model (run 'ollama pull $model' later)"
+  done
 fi
 
 # Home directories
@@ -324,7 +401,7 @@ fi
 
 # Symlink config directories
 
-CONFIG_TARGETS=(hypr fastfetch rofi waybar swaync wallust ghostty hypr-dock)
+CONFIG_TARGETS=(hypr fastfetch rofi waybar swaync wallust ghostty)
 for dir in "${CONFIG_TARGETS[@]}"; do
 target="$HOME/.config/$dir"
 source="$DOTFILES_DIR/$dir"
@@ -361,10 +438,10 @@ wallpaper_dest="$HOME/Pictures/wallpapers"
 
 # Make scripts executable
 
-SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
+SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
 for s in "${SCRIPT_FILES[@]}"; do
 sp="$DOTFILES_DIR/$s"
-[[ -f "$sp" ]] && run_cmd "chmod +x "$sp""
+[[ -f "$sp" ]] && run_cmd "chmod +x \"$sp\""
 done
 
 # Steam shortcut cleanup: periodically remove Steam-generated game launcher
@@ -393,6 +470,29 @@ if [[ -f "$STEAM_CLEANUP_SCRIPT" ]]; then
     log "OK" "Steam shortcut cleanup timer enabled"
 else
     log "WARN" "Steam cleanup script not found: $STEAM_CLEANUP_SCRIPT. Skipping."
+fi
+
+# PC health monitor for the Hyprland agent (flags problems via notifications)
+
+AGENT_MONITOR_SCRIPT="$DOTFILES_DIR/hypr/assistant/agent_monitor.py"
+if [[ -f "$AGENT_MONITOR_SCRIPT" ]]; then
+    echo "🩺 Setting up periodic PC health monitor..."
+    run_cmd "chmod +x \"$AGENT_MONITOR_SCRIPT\""
+    run_cmd "mkdir -p \"$HOME/.config/systemd/user\""
+    # The service runs the script via %h/.config/hypr, so both units can be symlinked as-is.
+    run_cmd "ln -sfn \"$DOTFILES_DIR/systemd/user/agent-monitor.service\" \"$HOME/.config/systemd/user/agent-monitor.service\""
+    run_cmd "ln -sfn \"$DOTFILES_DIR/systemd/user/agent-monitor.timer\" \"$HOME/.config/systemd/user/agent-monitor.timer\""
+    run_cmd "systemctl --user daemon-reload"
+    run_cmd "systemctl --user enable --now agent-monitor.timer"
+    log "OK" "PC health monitor timer enabled"
+fi
+
+# Private user settings (calendar links); never overwrite an existing file
+USER_LOCAL_SETTINGS="$DOTFILES_DIR/hypr/user_settings.local.toml"
+if [[ ! -f "$USER_LOCAL_SETTINGS" && -f "$USER_LOCAL_SETTINGS.example" ]]; then
+    run_cmd "cp \"$USER_LOCAL_SETTINGS.example\" \"$USER_LOCAL_SETTINGS\""
+    run_cmd "chmod 600 \"$USER_LOCAL_SETTINGS\""
+    log "OK" "Created user_settings.local.toml - add your calendar link there (see the file for steps)"
 fi
 
 # Cursor icons + Flatpak overrides

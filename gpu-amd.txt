@@ -1,0 +1,6 @@
+# AMD (Radeon) drivers: OpenGL/Vulkan, 32-bit for Steam, and Ollama with ROCm
+mesa
+vulkan-radeon
+lib32-mesa
+lib32-vulkan-radeon
+ollama-rocm

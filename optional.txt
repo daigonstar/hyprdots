@@ -1,3 +1,0 @@
-coolercontrol
-openrgb
-solaar

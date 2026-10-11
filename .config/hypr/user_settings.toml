@@ -1,0 +1,49 @@
+# User settings for the PC assistant, health monitor and popup calendar.
+#
+# Edit values here. Private values (your calendar links) belong in
+#   ~/.config/hypr/user_settings.local.toml
+# which is git-ignored and overrides anything in this file.
+# Delete a line to fall back to its default. Changes apply the next time the
+# assistant, monitor run or calendar popup opens.
+
+[assistant]
+model = "qwen2.5:14b"       # Ollama model used for chat and tool calling
+vision_model = "llava"      # model used to describe screenshots
+keep_alive = "30s"          # how long a model stays in VRAM after the last request
+num_ctx = 16384             # context window in tokens (bigger = more VRAM, ~3 GB extra at 16384 on 14b)
+vision_num_ctx = 4096       # context window for the vision model
+max_tool_steps = 15         # tool calls allowed per question before it must answer
+history_messages = 100      # messages remembered in a session (cleared when you close it)
+accent = "36"               # ANSI colour code for the prompt/banner: 36 cyan, 35 magenta, 34 blue, 32 green, 33 yellow
+command_timeout = 20        # seconds an auto-run read-only command may take
+confirmed_command_timeout = 180  # seconds an approved command may take (sudo, installs)
+web_timeout = 15            # seconds before a web request gives up
+web_max_chars = 6000        # characters of a fetched page given to the model
+memory_max_chars = 3000     # characters of saved memory notes given to the model
+
+[monitor]
+renotify_hours = 6          # re-send a notification for a still-open problem after this long
+journal_window = "30 minutes ago"  # how far back to look for journal errors
+disk_warn = 85              # disk usage % warning
+disk_crit = 95              # disk usage % critical
+mem_warn_pct = 10           # warn when available RAM falls below this %
+swap_warn_pct = 50          # warn when swap usage is above this %
+temp_warn = 85              # temperature warning in °C
+temp_crit = 95              # temperature critical in °C
+updates_warn = 50           # flag when this many updates are pending
+journal_ignore = ["bluetoothd", "kwin_wayland", "sddm-helper"]  # noisy journal sources to skip
+# How often the monitor runs is set by .config/systemd/user/agent-monitor.timer
+
+[calendar]
+# Calendar links go in ~/.config/hypr/user_settings.local.toml (git-ignored, private),
+# NOT here. Copy user_settings.local.toml.example to that name and follow the steps in it:
+#   sources = ["Personal|https://calendar.google.com/.../basic.ics"]
+# Then click the clock in the bar; press r in the popup to refresh.
+sources = []
+refresh_minutes = 15        # how often feeds are re-downloaded
+max_events_listed = 6       # events shown under the grid before "+N more"
+first_weekday = 0           # 0 = Monday, 6 = Sunday
+time_format = "%H:%M"       # strftime format for the clock and event times, e.g. "%I:%M %p"
+date_format = "%A, %d %B %Y"  # strftime format for the date line
+margin_top = 8              # gap in pixels between the screen top and the popup
+margin_left = 12            # gap in pixels between the screen left and the popup

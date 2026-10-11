@@ -1,0 +1,7 @@
+[Unit]
+Description=Check PC health and flag problems for the Hyprland agent
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.config/hypr/assistant/agent_monitor.py
+Nice=10

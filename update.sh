@@ -15,6 +15,8 @@ set -euo pipefail
   mkdir -p "$HOME/.config/backup"
   [[ -f "$HOME/.config/hypr/monitors.lua" ]] && mv "$HOME/.config/hypr/monitors.lua" "$HOME/.config/backup/monitors.lua"
   [[ -f "$HOME/.config/hypr/workspaces.lua" ]] && mv "$HOME/.config/hypr/workspaces.lua" "$HOME/.config/backup/workspaces.lua"
+  # Private settings (calendar links) are git-ignored, so git clean -fdx below would delete them
+  [[ -f "$HOME/.config/hypr/user_settings.local.toml" ]] && mv "$HOME/.config/hypr/user_settings.local.toml" "$HOME/.config/backup/user_settings.local.toml"
 
 repo_root="$(cd "$(dirname "$0")" && pwd)"
 cd "$repo_root"
@@ -80,7 +82,7 @@ fi
     DOTFILES_DIR="$REPO_DIR/.config"
 
     # Config directories to symlink
-    CONFIG_TARGETS=(hypr fastfetch rofi waybar swaync wallust ghostty hypr-dock)
+    CONFIG_TARGETS=(hypr fastfetch rofi waybar swaync wallust ghostty)
     for dir in "${CONFIG_TARGETS[@]}"; do
       target="$HOME/.config/$dir"
       source="$DOTFILES_DIR/$dir"
@@ -103,10 +105,10 @@ fi
         mkdir -p "$target"
         # Sync files from repo to user config but exclude monitors.lua/workspaces.lua (and legacy .conf variants)
         if command -v rsync >/dev/null 2>&1; then
-          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' "$source/" "$target/"
+          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' "$source/" "$target/"
         else
           # Fallback: use tar to copy excluding those files
-          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' .) | (cd "$target" && tar xpf -)
+          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' .) | (cd "$target" && tar xpf -)
         fi
         echo "Updated $target from $source (excluded: monitors.conf/lua, workspaces.conf/lua). Local copies (if any) were preserved."
         continue
@@ -153,6 +155,7 @@ fi
   echo "Restoring Hyprland monitor and workspace configs from backup folder..."
   [[ -f "$HOME/.config/backup/monitors.lua" ]] && mv "$HOME/.config/backup/monitors.lua" "$HOME/.config/hypr/monitors.lua"
   [[ -f "$HOME/.config/backup/workspaces.lua" ]] && mv "$HOME/.config/backup/workspaces.lua" "$HOME/.config/hypr/workspaces.lua"
+  [[ -f "$HOME/.config/backup/user_settings.local.toml" ]] && mv "$HOME/.config/backup/user_settings.local.toml" "$HOME/.config/hypr/user_settings.local.toml"
   rmdir "$HOME/.config/backup" 2>/dev/null || true
   
   exit 0

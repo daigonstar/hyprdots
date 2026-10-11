@@ -1,58 +1,104 @@
-ark
-bc
-blueman
-cava
-clipvault
-discord
-fastfetch
-ffmpegthumbnailer
-flatpak
-fuse2
-ghostty
-gnome-system-monitor
-gnome-keyring
-gnome-themes-extra
-gvfs
-hypridle
+# Packages installed by hyprinstall.sh (official repos or AUR), in install order.
+# Everything here is used by the current setup; "#" starts a comment.
+# GPU drivers are installed first from gpu-amd.txt / gpu-nvidia.txt / gpu-intel.txt
+# (chosen by the installer), so they are not listed here.
+
+# --- Core desktop ---
 hyprland
+hypridle
 hyprlock
 hyprpolkitagent
 hyprshot-git
-libnotify
-material-black-colors-theme
-nwg-displays
-nwg-look
-papirus-icon-theme-git
-pacman-contrib
-pavucontrol
-playerctl
-python
-plymouth
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+xorg-xwayland
+xorg-xrandr
+wayland-protocols
 qt5-wayland
 qt6-wayland
+waybar-cava
+swaync
+rofi
+awww
+ghostty
+starship
+fastfetch
+# The wallust 3.5.2 AUR release recipe has a stale source checksum.
+wallust-git
+
+# --- Login screen and boot splash ---
+sddm
 qt5-graphicaleffects
 qt5-quickcontrols2
-rofi
-sddm
-sif-git
-sxiv
-starship
-swaync
-awww
+plymouth
+
+# --- Audio, network, bluetooth, brightness, clipboard ---
+pipewire
+pipewire-alsa
+pipewire-pulse
+pipewire-jack
+wireplumber
+pavucontrol
+playerctl
+networkmanager
+bluez
+bluez-utils
+blueman
+brightnessctl
+wl-clipboard
+clipvault
+libnotify
+gnome-keyring
+
+# --- Files and system tools ---
 thunar
 thunar-archive-plugin
+tumbler
+ffmpegthumbnailer
+gvfs
+ark
+sxiv
+gnome-system-monitor
+partitionmanager
+nwg-displays
+nwg-look
+pacman-contrib
+fuse2
+flatpak
+bc
+wget
+vim
+sif-git
+
+# --- Theme, icons, fonts ---
+gnome-themes-extra
+material-black-colors-theme
+papirus-icon-theme-git
 ttf-cascadia-code-nerd
 ttf-cascadia-mono-nerd
 ttf-font-awesome-5
-tumbler
-vim
-# The wallust 3.5.2 AUR release recipe has a stale source checksum.
-wallust-git
-waybar-cava
-wayland-protocols
-xdg-desktop-portal-gtk
-xdg-desktop-portal-hyprland
-xorg-xwayland
-xorg-xrandr
-wget
+cava
+
+# --- Apps (autostarted or bound to keys) ---
 zen-browser-bin
+discord
+zed
+solaar
+openrgb
+coolercontrol
+
+# --- Gaming ---
+steam
+
+# --- PC assistant and popup calendar (the ollama package itself comes from the GPU list) ---
+grim
+gtk-layer-shell
+python
+python-gobject
+python-ollama
+python-recurring-ical-events
+
+# --- WinBoat (Windows apps in a container) ---
+docker
+freerdp
+winboat

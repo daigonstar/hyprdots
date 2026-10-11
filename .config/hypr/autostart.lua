@@ -15,11 +15,9 @@ hl.on("hyprland.start", function()
         "systemctl --user start hyprpolkitagent",
         "systemctl --user enable --now hyprpolkitagent.service",
         "waybar",
-        "nm-applet",
         "swaync",
         "hypridle",
         "wl-paste --watch clipvault store",
-        "arch-update --tray",
         -- Detects games launched from Steam, Lutris, Heroic, or bare
         -- Wine/Proton/gamescope wrappers (no shared window class exists
         -- across launchers) and routes them to workspace 3, fullscreen.

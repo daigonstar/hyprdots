@@ -1,0 +1,8 @@
+# NVIDIA drivers (open kernel modules, Turing and newer), 32-bit for Steam, and Ollama with CUDA
+# linux-headers matches the stock "linux" kernel; install the headers for any other kernel you use.
+linux-headers
+nvidia-open-dkms
+nvidia-utils
+lib32-nvidia-utils
+libva-nvidia-driver
+ollama-cuda

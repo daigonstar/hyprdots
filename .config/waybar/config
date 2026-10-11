@@ -5,7 +5,7 @@
         "position": "top",
         "reload_style_on_change": true,
         "spacing": 10,
-        "modules-left": ["clock","custom/chatgpt","group/expand2"],
+        "modules-left": ["clock","custom/assistant","group/expand2"],
         "modules-center": ["hyprland/window", "hyprland/workspaces","cava"],
         "modules-right": ["group/expand","pulseaudio","bluetooth","custom/updates","battery","network","custom/power","custom/noti"],
 
@@ -31,11 +31,12 @@
             },
             "modules": [
                 "custom/settingsicon",
-                "custom/settings/display",
-                "custom/settings/wallpaper",
+                "custom/display",
+                "custom/wallpaper",
                 "custom/gtk",
                 "custom/drive",
-                "custom/keys"
+                "custom/keys",
+                "custom/userconfig"
             ]
         },
     // Generic Modules
@@ -65,21 +66,9 @@
 	    "interval": 1,
         //"format": " {:%I:%M %p}", // AM PM format
         "format": "  {:%H:%M}", // 24H
-	    "format-alt": " {:%H:%M   %Y, %d %B, %A}",
-	    "tooltip-format": "<tt><small>{calendar}</small></tt>",
-	    "calendar": {
-		    "mode": "year",
-		    "mode-mon-col": 3,
-		    "weeks-pos": "right",
-		    "on-scroll": 1,
-		    "format": {
-			    "months": "<span color='#ffead3'><b>{}</b></span>",
-			    "days": "<span color='#ecc6d9'><b>{}</b></span>",
-			    "weeks": "<span color='#99ffdd'><b>W{:%V}</b></span>",
-			    "weekdays": "<span color='#ffcc66'><b>{}</b></span>",
-			    "today": "<span color='#ff6699'><b><u>{}</u></b></span>"
-		        }
-	        },
+	    "tooltip-format": "{:%A, %d %B %Y}",
+	    "on-click": "~/.config/waybar/scripts/popup_calendar.py",
+	    "on-click-right": "~/.config/waybar/scripts/popup_calendar.py",
         },
 
         "network": {
@@ -207,10 +196,12 @@
             "tooltip":false
 	    },
 
-        "custom/chatgpt": {
-        "format": " ",
-        "on-click": "~/.config/hypr/scripts/ai.sh",
-        "tooltip-format": "AI Support"
+        "custom/assistant": {
+        "format": "󰙴",
+        "on-click": "/usr/bin/ghostty -e ~/.config/hypr/assistant/hypr_agent.py",
+        "exec": "echo '{\"tooltip\": \"PC Assistant (AI): ask about your system, updates and problems\"}'",
+        "return-type": "json",
+        "interval": "once"
         },
 
         "cava": {
@@ -257,36 +248,48 @@
         "on-click-right": "swaync-client -d -sw",
         "escape": true
         },
-        "custom/settings/display": {
-            "format": "🖥️",
-            "tooltip": "Display (hyprmon)",
-            "on-click": "ghostty -e hyprmon"
+        "custom/display": {
+            "format": "󰍹",
+            "exec": "echo '{\"tooltip\": \"Display settings (nwg-displays)\"}'",
+            "return-type": "json",
+            "interval": "once",
+            "on-click": "nwg-displays"
         },
 
-        "custom/settings/wallpaper": {
-            "format": "🖼️",
-            "tooltip": "Wallpaper (rofi)",
+        "custom/wallpaper": {
+            "format": "󰋩",
+            "exec": "echo '{\"tooltip\": \"Wallpaper picker\"}'",
+            "return-type": "json",
+            "interval": "once",
             "on-click": "~/.config/rofi/wallpaper/wallpaper.sh"
         },
         "custom/gtk": {
-            "format": "🖌️",
-            "tooltip": "GTK (rofi)",
+            "format": "󰏘",
+            "exec": "echo '{\"tooltip\": \"GTK theme (nwg-look)\"}'",
+            "return-type": "json",
+            "interval": "once",
             "on-click": "nwg-look"
         },
         "custom/drive": {
-            "format": "💾",
-            "tooltip": "Format/Partition",
+            "format": "󰋊",
+            "exec": "echo '{\"tooltip\": \"Disks: format / partition\"}'",
+            "return-type": "json",
+            "interval": "once",
             "on-click": "partitionmanager"
         },
 
-        "custom/settings/tui": {
-            "format": "⚙",
-            "tooltip": "Open Hypr Settings (TUI)",
-            "on-click": "~/.config/hypr/settings/run_tui.sh"
+        "custom/userconfig": {
+            "format": "󰒓",
+            "exec": "echo '{\"tooltip\": \"Settings: user_settings.toml (shared) and user_settings.local.toml (private, calendar links)\"}'",
+            "return-type": "json",
+            "interval": "once",
+            "on-click": "ghostty -e vim -p ~/.config/hypr/user_settings.toml ~/.config/hypr/user_settings.local.toml"
         },
         "custom/keys": {
-            "format": "🔑",
-            "tooltip": "Open Hyprkeys",
+            "format": "󰌌",
+            "exec": "echo '{\"tooltip\": \"Keybind cheatsheet\"}'",
+            "return-type": "json",
+            "interval": "once",
             "on-click": "~/.config/rofi/cheatsheet/cheatsheet.sh"
         }
 }

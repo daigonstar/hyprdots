@@ -1,0 +1,7 @@
+# Intel graphics drivers: OpenGL/Vulkan, 32-bit for Steam, video acceleration, and Ollama with Vulkan acceleration
+mesa
+vulkan-intel
+lib32-mesa
+lib32-vulkan-intel
+intel-media-driver
+ollama-vulkan
