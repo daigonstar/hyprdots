@@ -13,7 +13,7 @@
 - AUR helper: paru. Update alias: `update` (paru -Syu && flatpak update)
 - Terminal: ghostty. Bar: waybar. Notifications: swaync
 - Dotfiles repo: ~/hyprdots, symlinked into ~/.config. Edit the repo, not copies.
-- Local LLMs: Ollama (gpt-oss:20b for this agent, llava for screenshots)
+- Local LLMs: Ollama (gpt-oss:20b for this agent, qwen2.5vl:7b for images and screenshots)
 
 ## How to help
 - The user wants diagnosis and clear explanations. Gather evidence with read-only commands first.

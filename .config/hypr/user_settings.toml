@@ -8,11 +8,11 @@
 
 [assistant]
 model = "gpt-oss:20b"       # Ollama model used for chat and tool calling
-vision_model = "llava"      # model used to describe screenshots
+vision_model = "qwen2.5vl:7b"  # model used to read screenshots and attached images
 keep_alive = "30s"          # how long a model stays in VRAM after the last request
 num_ctx = 16384             # context window in tokens (bigger = more VRAM, ~3 GB extra at 16384 on 14b)
 vision_num_ctx = 4096       # context window for the vision model
-max_tool_steps = 15         # tool calls allowed per question before it must answer
+max_tool_steps = 30         # tool calls allowed per question before it must answer
 history_messages = 100      # messages remembered in a session (cleared when you close it)
 accent = "36"               # ANSI colour code for the prompt/banner: 36 cyan, 35 magenta, 34 blue, 32 green, 33 yellow
 animated_logo = true       # spin the logo in the startup banner (false = static logo)
@@ -21,6 +21,8 @@ confirmed_command_timeout = 180  # seconds an approved command may take (sudo, i
 web_timeout = 15            # seconds before a web request gives up
 web_max_chars = 6000        # characters of a fetched page given to the model
 memory_max_chars = 6000     # characters of saved memory notes given to the model (notes live in ~/.local/state/hypr_agent/memory.md)
+show_thinking = true        # show the model's live reasoning while it thinks (toggle in chat with /think)
+think_effort = "medium"     # reasoning depth: low, medium or high (change in chat with /effort)
 
 [monitor]
 renotify_hours = 6          # re-send a notification for a still-open problem after this long

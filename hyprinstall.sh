@@ -377,7 +377,7 @@ mapfile -t ASSISTANT_MODELS < <(python3 -c "
 import sys
 sys.path.insert(0, '$DOTFILES_DIR/hypr/assistant')
 import usersettings
-s = usersettings.section('assistant', {'model': 'gpt-oss:20b', 'vision_model': 'llava'})
+s = usersettings.section('assistant', {'model': 'gpt-oss:20b', 'vision_model': 'qwen2.5vl:7b'})
 print(s['model']); print(s['vision_model'])" 2>/dev/null)
 if [[ ${#ASSISTANT_MODELS[@]} -gt 0 ]] && yesno_prompt "Download the PC assistant's AI models (${ASSISTANT_MODELS[*]}, ~19 GB)?" "Y"; then
   run_cmd "sleep 3"

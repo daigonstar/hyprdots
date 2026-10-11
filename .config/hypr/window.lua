@@ -140,6 +140,15 @@ hl.window_rule({
     workspace = "5 silent",
 })
 hl.window_rule({
+    name = "assistant-scratchpad",
+    match = { class = "^com\\.hyprdots\\.assistant$" },
+    workspace = "special:agent",
+    float = true,
+    size = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
+    center = true,
+    animation = "popin 85%",
+})
+hl.window_rule({
     name = "spotify-magic",
     match = { class = "^(spotify)$" },
     workspace = "special:magic silent",

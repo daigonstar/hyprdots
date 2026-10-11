@@ -3,9 +3,11 @@ import ollama
 import base64
 import glob
 import html
+import difflib
 import ipaddress
 import json
 import math
+import random
 import os
 import re
 import select
@@ -39,6 +41,8 @@ SETTINGS = usersettings.section("assistant", {
     "web_timeout": 15,
     "web_max_chars": 6000,
     "memory_max_chars": 6000,
+    "show_thinking": True,
+    "think_effort": "medium",
 })
 MODEL = SETTINGS["model"]
 VISION_MODEL = SETTINGS["vision_model"]
@@ -153,8 +157,8 @@ def _wrap(text, width):
         lines.append(" ".join(current))
     return lines or [""]
 
-def render_reply(text):
-    """Turns the model's light markdown into a wrapped, colored block with a side bar."""
+def _reply_lines(text):
+    """Turns light markdown into wrapped, colored lines (no side bar)."""
     width = max(40, min(shutil.get_terminal_size((80, 24)).columns, 100) - 4)
     out, in_code = [], False
     for raw in text.splitlines():
@@ -182,6 +186,11 @@ def render_reply(text):
                 out.append((prefix if i == 0 else " " * pad) + _c(theme_code(0.75), wrapped))
     while out and not out[-1]:
         out.pop()
+    return out
+
+def render_reply(text):
+    """Turns the model's light markdown into a wrapped, colored block with a side bar."""
+    out = _reply_lines(text)
     last = max(1, len(out) - 1)
     return "\n".join(f"{_c(theme_code(i / last), '│')} {l}".rstrip() for i, l in enumerate(out))
 
@@ -274,28 +283,115 @@ def logo_frame(angle, pulse=1.0):
         rows.append(line)
     return rows
 
+_ANSI_RE = re.compile(r"\033\[[0-9;?]*[A-Za-z]")
+
+def _vlen(text):
+    """Visible width of text once colour codes are removed."""
+    return len(_ANSI_RE.sub("", text))
+
+EXAMPLE_PROMPTS = [
+    "what's eating my RAM right now?",
+    "are there any updates pending?",
+    "what windows do I have open?",
+    "take a screenshot and tell me what's on screen",
+    "how full are my disks?",
+    "look up the latest Hyprland release",
+    "remember that my main monitor is DP-1",
+    "why is my fan so loud?",
+    "move Firefox to workspace 3",
+    "is anything on my system unhealthy?",
+]
+
+def greeting():
+    """Time-of-day hello using the login name."""
+    hour = time.localtime().tm_hour
+    name = os.environ.get("USER") or os.environ.get("LOGNAME") or "there"
+    if 5 <= hour < 12:
+        return f"Good morning, {name}"
+    if 12 <= hour < 18:
+        return f"Good afternoon, {name}"
+    if 18 <= hour < 22:
+        return f"Good evening, {name}"
+    return f"Working late, {name}?"
+
+def model_installed(name):
+    """True/False when Ollama says whether the model is pulled; None if it can't tell."""
+    try:
+        listing = ollama.list()
+        entries = listing["models"] if isinstance(listing, dict) else listing.models
+        names = set()
+        for entry in entries:
+            model = entry.get("model") if isinstance(entry, dict) else getattr(entry, "model", None)
+            if model:
+                names.add(model)
+    except Exception:
+        return None
+    return name in names or (":" not in name and name + ":latest" in names)
+
+def _model_line(role, name):
+    installed = model_installed(name)
+    if installed is False:
+        return f"  {_c('33', '⚠')} {role} {_c('1', name)} {dim('is not installed')} {_c('36', 'ollama pull ' + name)}"
+    mark = _c(theme_code(0.5), "●") if installed else dim("●")
+    return f"  {mark} {dim(role)} {name}"
+
 def _banner_text():
+    """The 14 rows shown beside the logo: greeting and live status."""
+    if AUTO_APPROVE[0]:
+        approvals = f"  {_c('1;33', '⚡')} approvals {_c('1;33', 'OFF')} {dim('· I will not ask first')}"
+    else:
+        approvals = f"  {_c('32', '✓')} approvals {_c('32', 'ON')} {dim('· I ask before changing anything')}"
+    reasoning = (f"  {_c('34', '◔')} reasoning {_c('34', THINK['effort'])} {dim('· you can watch me think')}"
+                 if THINK["show"] else f"  {dim('◔ reasoning hidden · /think on to watch')}")
     return [
-        "", "", "", "",
-        _c('1;' + theme_code(1), '  Hyprland Assistant'),
-        dim(f"  {MODEL} · vision {VISION_MODEL}"),
-        dim(f"  unloads after {KEEP_ALIVE}"),
+        "", "",
+        f"  {_c('1;' + theme_code(1), greeting())} {_c('1;37', '✦')}",
+        dim("  Your Hyprland PC helper. Ask in plain English."),
+        "",
+        _model_line("chat  ", MODEL),
+        _model_line("vision", VISION_MODEL),
+        dim(f"  models unload from memory after {KEEP_ALIVE}"),
+        approvals,
+        reasoning,
         f"  {health_summary()}",
-        dim("  Ask about your PC, updates or problems."),
-        dim("  Type 'exit' to quit."),
-        "", "", "", "",
+        "", "", "",
     ]
+
+def _welcome_extras():
+    """Lines under the logo: example questions, the / commands and key hints."""
+    lines = ["", f"  {_c('1;' + theme_code(0.2), 'Try asking')}"]
+    for prompt in random.sample(EXAMPLE_PROMPTS, 3):
+        lines.append(f"    {_c(theme_code(0.6), '❯')} {prompt}")
+    lines += ["", f"  {_c('1;' + theme_code(0.2), 'Commands')} {dim('(type / to open the menu)')}"]
+    pad = max(len(name) for name in SLASH_COMMANDS)
+    for name, (_, desc, color) in SLASH_COMMANDS.items():
+        lines.append(f"    {_c('1;7;' + color, f' /{name.ljust(pad)} ')} {dim(desc)}")
+    lines += ["", dim("  Tab completes · ↑ recalls earlier questions · Ctrl+C or 'exit' to leave"), ""]
+    return lines
 
 def _draw_banner(angle, text, pulse=1.0):
     rows = logo_frame(angle, pulse)
     return "\n".join("  " + rows[i] + text[i] for i in range(LOGO_HEIGHT))
 
+def _print_extras(animated):
+    for line in _welcome_extras():
+        print(line)
+        if animated:
+            sys.stdout.flush()
+            time.sleep(0.03)
+
 def print_banner():
     text = _banner_text()
     print()
+    columns = shutil.get_terminal_size((80, 24)).columns
+    if columns < LOGO_WIDTH + 4 + max(_vlen(line) for line in text):
+        # Too narrow for the logo beside the text: greeting and status only
+        print("\n".join(line for line in text if line))
+        _print_extras(False)
+        return
     if not (USE_COLOR and SETTINGS["animated_logo"]):
         print(_draw_banner(0, text))
-        print()
+        _print_extras(False)
         return
     frames = 40
     sys.stdout.write("\033[?25l")
@@ -310,8 +406,9 @@ def print_banner():
             sys.stdout.flush()
             time.sleep(0.04)
     finally:
-        sys.stdout.write("\033[?25h\n\n")
+        sys.stdout.write("\033[?25h\n")
         sys.stdout.flush()
+    _print_extras(True)
 
 # --- Thinking indicator ---
 class Spinner:
@@ -333,34 +430,142 @@ class Spinner:
             i += 1
             self._stop.wait(0.1)
 
-    def __enter__(self):
-        if sys.stdout.isatty():
+    def start(self):
+        if sys.stdout.isatty() and not self._thread:
+            self._stop.clear()
             self._thread = threading.Thread(target=self._spin, daemon=True)
             self._thread.start()
-        return self
 
-    def __exit__(self, *exc):
+    def stop(self):
         if self._thread:
             self._stop.set()
             self._thread.join()
+            self._thread = None
             sys.stdout.write("\r\033[K")
             sys.stdout.flush()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop()
 
 SAMPLING = {"temperature": 0.3, "repeat_penalty": 1.1, "num_predict": 4096}
 # Used for one retry when Ollama aborts a response that got stuck repeating itself
 LOOP_RETRY_SAMPLING = {"temperature": 0.8, "repeat_penalty": 1.25, "num_predict": 4096}
 
-def chat(model, messages, label="Thinking", tools=None, num_ctx=None):
-    with Spinner(label):
-        options = {"num_ctx": num_ctx or NUM_CTX}
+# --- Live reasoning display ---
+THINK_EFFORTS = ("low", "medium", "high")
+THINK = {"show": SETTINGS["show_thinking"], "effort": SETTINGS["think_effort"] if SETTINGS["think_effort"] in THINK_EFFORTS else "medium"}
+_think_choice = {}  # model -> the think value it accepted (effort level, True, or None)
+
+class ReasoningView:
+    """Prints the model's reasoning as it arrives: dimmed, word-wrapped, behind a gutter."""
+
+    def __init__(self):
+        self.active, self.started, self.words = False, 0.0, 0
+        self.col, self.blank, self.pending = 0, 0, ""
+        self.width = max(40, min(shutil.get_terminal_size((80, 24)).columns, 100) - 8)
+
+    @staticmethod
+    def _gutter():
+        return "  " + _c(theme_code(0.5), "┊") + " "
+
+    def feed(self, text):
+        if not self.active:
+            self.active, self.started = True, time.time()
+            sys.stdout.write(f"  {_c('1;' + theme_code(0.3), '◔ Reasoning')}\n{self._gutter()}")
+        parts = re.split(r"(\n|[ \t]+)", self.pending + text)
+        self.pending = parts.pop()  # a word may still be arriving token by token
+        self._emit(parts)
+        sys.stdout.flush()
+
+    def _emit(self, parts):
+        for part in parts:
+            if not part:
+                continue
+            if part == "\n":
+                if self.col == 0 and self.blank >= 1:
+                    continue
+                self.blank = self.blank + 1 if self.col == 0 else 0
+                sys.stdout.write("\n" + self._gutter())
+                self.col = 0
+            elif part.isspace():
+                if self.col:
+                    sys.stdout.write(" ")
+                    self.col += 1
+            else:
+                if self.col and self.col + len(part) > self.width:
+                    sys.stdout.write("\n" + self._gutter())
+                    self.col = 0
+                sys.stdout.write(dim(part))
+                self.col += len(part)
+                self.words += 1
+                self.blank = 0
+
+    def finish(self):
+        if not self.active:
+            return
+        self._emit([self.pending])
+        self.pending = ""
+        sys.stdout.write("\n" if self.col else "\r\033[K")
+        sys.stdout.write(dim(f"  ✓ Reasoned for {time.time() - self.started:.1f}s · {self.words} words") + "\n")
+        sys.stdout.flush()
+        self.active = False
+
+def _reasoning_chat(model, messages, tools, options, spinner):
+    """Streams a reply, showing reasoning live; returns the same shape as a non-streaming ollama.chat."""
+    candidates = [_think_choice[model]] if model in _think_choice else [THINK["effort"], True, None]
+    show = THINK["show"] and sys.stdout.isatty()
+    for think in candidates:
+        view, content, thinking, calls, last = ReasoningView(), [], [], [], None
         try:
-            return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE,
-                               tools=tools, options={**options, **SAMPLING})
+            for chunk in ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools,
+                                     options=options, stream=True, think=think):
+                last, piece = chunk, _get(chunk, 'message')
+                if _get(piece, 'thinking'):
+                    thinking.append(_get(piece, 'thinking'))
+                    if show:
+                        spinner.stop()
+                        view.feed(_get(piece, 'thinking'))
+                if _get(piece, 'content'):
+                    content.append(_get(piece, 'content'))
+                if _get(piece, 'tool_calls'):
+                    calls.extend(_get(piece, 'tool_calls'))
+                if view.active and (content or calls):
+                    view.finish()
+                    spinner.label = "Writing the answer" if content else "Calling a tool"
+                    spinner.start()
         except ollama.ResponseError as e:
-            if "repeat limit" not in str(e):
-                raise
-            return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE,
-                               tools=tools, options={**options, **LOOP_RETRY_SAMPLING})
+            view.finish()
+            if think is not None and "think" in str(e).lower():
+                continue  # this model rejects that think value; try a simpler one
+            raise
+        view.finish()
+        _think_choice[model] = think
+        message = {'role': 'assistant', 'content': "".join(content)}
+        if thinking:
+            message['thinking'] = "".join(thinking)
+        if calls:
+            message['tool_calls'] = calls
+        return {'message': message, 'done_reason': _get(last, 'done_reason'),
+                'prompt_eval_count': _get(last, 'prompt_eval_count'), 'eval_count': _get(last, 'eval_count')}
+    raise RuntimeError(f"{model} rejected every thinking mode")
+
+def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=False):
+    """One model call. reason=True streams it and shows the model's reasoning live."""
+    spinner = Spinner(label)
+    with spinner:
+        for sampling in (SAMPLING, LOOP_RETRY_SAMPLING):
+            options = {"num_ctx": num_ctx or NUM_CTX, **sampling}
+            try:
+                if reason:
+                    return _reasoning_chat(model, messages, tools, options, spinner)
+                return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options)
+            except ollama.ResponseError as e:
+                if "repeat limit" not in str(e) or sampling is LOOP_RETRY_SAMPLING:
+                    raise
 
 # --- System Tools (Hyprland Focused) ---
 
@@ -423,17 +628,21 @@ def tool_take_screenshot_and_analyze(question="What is in this image?"):
         return f"Screenshot failed: {grim.stderr.strip()}"
 
     # 2. Ask Vision Model
+    return analyze_image(SCREENSHOT_PATH, question, "Analyzing screen")
+
+def analyze_image(path, question, label="Analyzing image"):
+    """Asks the vision model about an image file."""
     try:
         response = chat(VISION_MODEL, [
             {
                 'role': 'user',
                 'content': question,
-                'images': [SCREENSHOT_PATH]
+                'images': [path]
             }
-        ], "Analyzing screen", num_ctx=VISION_NUM_CTX)
+        ], label, num_ctx=VISION_NUM_CTX)
         return f"Vision Analysis: {response['message']['content']}"
     except Exception as e:
-        return f"Vision Analysis Failed (is llava pulled?): {str(e)}"
+        return f"Vision Analysis Failed (is {VISION_MODEL} pulled?): {str(e)}"
 
 def _run(cmd):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout.strip()
@@ -890,10 +1099,15 @@ def _is_read_only(argv):
         return bool(args) and (args[0].startswith("-Q") or args[0] in ("-Ss", "-Si", "-Sii", "-Sl"))
     return False
 
-def _confirm(question):
+# Set by /allow and cleared by /ask. Sensitive paths (keys/credentials) always still prompt.
+AUTO_APPROVE = [False]
+
+def _confirm(question, sensitive=False):
     """Asks the user on the terminal; with no terminal the answer is always no."""
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return False
+    if AUTO_APPROVE[0] and not sensitive:
+        return True
     return input(f"{_prompt('1;33', '  ⚠')} {question} {_prompt('2', '[y/N]')} ").strip().lower() in ("y", "yes")
 
 def _resolve(path):
@@ -951,7 +1165,7 @@ def tool_write_file(arg):
         reasons.append("a dotfile/config location")
     if os.path.exists(target) and not append:
         reasons.append("overwriting an existing file")
-    if reasons and not _confirm(f"Write {target}? ({'; '.join(reasons)})"):
+    if reasons and not _confirm(f"Write {target}? ({'; '.join(reasons)})", sensitive=any("sensitive" in r for r in reasons)):
         return "Not written (declined, or no terminal available for confirmation)."
 
     if sys.stdout.isatty():
@@ -1011,7 +1225,7 @@ def tool_run_command(command):
     needs_confirm = bool(reasons) or not all(_is_read_only(argv) or _is_safe_home_write(argv) for argv in stages)
     if needs_confirm:
         why = "; ".join(dict.fromkeys(reasons)) or "not on the safe list"
-        if not _confirm(f"Run it? ({why})"):
+        if not _confirm(f"Run it? ({why})", sensitive=any("sensitive" in r for r in reasons)):
             return "Command was not run (declined, or no terminal available for confirmation)."
     timeout = CONFIRMED_COMMAND_TIMEOUT if needs_confirm else COMMAND_TIMEOUT
 
@@ -1326,7 +1540,7 @@ def _process(messages, user_input):
     response = None
     try:
         for _ in range(MAX_TOOL_STEPS):
-            response = chat(MODEL, messages, tools=TOOL_SCHEMAS)
+            response = chat(MODEL, messages, tools=TOOL_SCHEMAS, reason=True)
             message = response['message']
             content = (_get(message, 'content') or "").strip()
 
@@ -1396,6 +1610,143 @@ def ensure_ollama_running():
             continue
     return False
 
+# --- Slash commands (typed by the user, never exposed to the model) ---
+def cmd_help(_=""):
+    return "\n".join(f"- `/{name}` {desc}" for name, (_, desc, _) in SLASH_COMMANDS.items())
+
+def cmd_allow(_=""):
+    AUTO_APPROVE[0] = True
+    return "**Approvals are OFF.** Commands and file writes now run without asking. Key and credential paths still ask. Type `/ask` to turn prompts back on."
+
+def cmd_ask(_=""):
+    AUTO_APPROVE[0] = False
+    return "**Approvals are ON.** You will be asked before anything that changes the system."
+
+def cmd_think(arg=""):
+    arg = arg.strip().lower()
+    if arg not in ("", "on", "off"):
+        return "Usage: `/think on` or `/think off` (no argument toggles)."
+    THINK["show"] = (not THINK["show"]) if not arg else arg == "on"
+    if THINK["show"]:
+        return f"**Reasoning is shown.** You will see the model think, at `{THINK['effort']}` effort."
+    return "**Reasoning is hidden.** The model still thinks; you just see the spinner. Type `/think on` to watch it."
+
+def cmd_effort(arg=""):
+    arg = arg.strip().lower()
+    if not arg:
+        return f"Reasoning effort is `{THINK['effort']}`. Choose with `/effort low`, `/effort medium` or `/effort high`."
+    if arg not in THINK_EFFORTS:
+        return f"Unknown effort `{arg}`. Choose `low`, `medium` or `high`."
+    THINK["effort"] = arg
+    _think_choice.clear()
+    return f"**Reasoning effort set to `{arg}`** for the next question. Higher means more thorough and slower."
+
+def cmd_paste(question=""):
+    """Sends the image currently on the Wayland clipboard to the vision model."""
+    try:
+        types = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return f"Paste failed: {e}"
+    image_types = [t for t in types.stdout.split() if t.startswith("image/")]
+    if not image_types:
+        return "There is no image on the clipboard. Copy or screenshot one first."
+    try:
+        data = subprocess.run(["wl-paste", "--type", image_types[0]], capture_output=True, timeout=10).stdout
+    except subprocess.TimeoutExpired:
+        return "Paste failed: wl-paste timed out."
+    if not data:
+        return "The clipboard image was empty."
+    if len(data) > 20_000_000:
+        return "The clipboard image is larger than 20 MB; shrink it and try again."
+    try:
+        with open(PASTE_PATH, "wb") as f:
+            f.write(data)
+    except OSError as e:
+        return f"Paste failed: could not save the image: {e}"
+    return analyze_image(PASTE_PATH, question.strip() or "Describe this image in detail.", "Reading clipboard image")
+
+PASTE_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hypr_agent_paste")
+
+# name -> (function, description, ANSI colour). The colour tints the menu entry and the result block.
+SLASH_COMMANDS = {
+    "help": (cmd_help, "List slash commands", "36"),
+    "paste": (cmd_paste, "Analyze the image on the clipboard (optional: add a question)", "35"),
+    "allow": (cmd_allow, "Stop asking for approval before commands and file writes", "33"),
+    "ask": (cmd_ask, "Ask for approval again (undo /allow)", "32"),
+    "think": (cmd_think, "Show or hide the model's live reasoning (on/off)", "34"),
+    "effort": (cmd_effort, "How hard the model thinks (low/medium/high)", "34"),
+}
+SLASH_ARGS = {"think": ["on", "off"], "effort": list(THINK_EFFORTS)}
+ANSI_NAMES = {"36": "ansicyan", "35": "ansimagenta", "33": "ansiyellow", "32": "ansigreen", "34": "ansiblue", "31": "ansired"}
+
+def run_slash_command(line):
+    """Runs a /command. Returns (name, text, colour), or None if the line is not a slash command."""
+    if not line.startswith("/"):
+        return None
+    name, _, arg = line[1:].partition(" ")
+    entry = SLASH_COMMANDS.get(name.lower())
+    if not entry:
+        close = difflib.get_close_matches(name.lower(), SLASH_COMMANDS, n=1)
+        hint = f" Did you mean `/{close[0]}`?" if close else ""
+        return name, f"Unknown command `/{name}`.{hint} Type `/help` to see all commands.", "31"
+    return name.lower(), entry[0](arg), entry[2]
+
+def render_command(name, text, color):
+    """A slash-command result: a coloured chip, then the text behind a bar in the same colour."""
+    bar = _c(color, "▎")
+    lines = [f"{bar} {line}".rstrip() for line in _reply_lines(text)]
+    return f"\n  {_c('1;7;' + color, f' /{name} ')}\n" + "\n".join(lines) + "\n"
+
+def status_line():
+    approvals = _c("1;33", "⚡ approvals OFF") if AUTO_APPROVE[0] else _c("32", "✓ approvals ON")
+    reasoning = _c("34", f"◔ reasoning {THINK['effort']}") if THINK["show"] else dim("◔ reasoning hidden")
+    sep = dim("·")
+    return f" {approvals}  {sep}  {reasoning}  {sep}  {dim('type / for commands')}"
+
+def prompt_glyph():
+    if AUTO_APPROVE[0]:
+        return f"{_c('1;33', '⚡')}{_c('1;' + theme_code(0), '❯')} "
+    return f"{_c('1;' + theme_code(0), '❯')} "
+
+def make_prompt_session():
+    """prompt_toolkit input with a live, coloured menu of /commands; (None, None) if prompt_toolkit is unavailable."""
+    try:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.completion import Completer, Completion
+        from prompt_toolkit.formatted_text import ANSI
+        from prompt_toolkit.history import InMemoryHistory
+        from prompt_toolkit.styles import Style
+    except ImportError:
+        return None, None
+
+    class SlashCompleter(Completer):
+        def get_completions(self, document, complete_event):
+            text = document.text_before_cursor
+            if not text.startswith("/"):
+                return
+            if " " not in text:
+                for name, (_, desc, color) in SLASH_COMMANDS.items():
+                    if name.startswith(text[1:].lower()):
+                        shown = [(f"fg:{ANSI_NAMES.get(color, 'ansicyan')} bold", "/" + name)]
+                        yield Completion(name, start_position=-(len(text) - 1), display=shown, display_meta=desc)
+                return
+            command, _, partial = text[1:].partition(" ")
+            for choice in SLASH_ARGS.get(command.lower(), []):
+                if " " not in partial and choice.startswith(partial.lower()):
+                    yield Completion(choice, start_position=-len(partial), display_meta="option")
+
+    style = Style.from_dict({
+        "completion-menu": "bg:#10202e",
+        "completion-menu.completion": "bg:#10202e #9fd3ff",
+        "completion-menu.completion.current": "bg:#0096ff #001018",
+        "completion-menu.meta.completion": "bg:#0b1722 #7f9db8",
+        "completion-menu.meta.completion.current": "bg:#0078cc #001018",
+        "bottom-toolbar": "noreverse bg:default",
+    }) if USE_COLOR else None
+    session = PromptSession(completer=SlashCompleter(), complete_while_typing=True, history=InMemoryHistory(),
+                            style=style, bottom_toolbar=lambda: ANSI(status_line()))
+    return session, ANSI
+
 def interactive_loop():
     """Terminal mode: persistent prompt, results printed and notified."""
     if not ensure_ollama_running():
@@ -1403,12 +1754,20 @@ def interactive_loop():
         input("Press Enter to close...")
         return
     print_banner()
+    session, ANSI = make_prompt_session()
     try:
         while True:
-            user_query = input(f"{_prompt('1;' + theme_code(0), '❯')} ").strip()
+            if session:
+                user_query = session.prompt(ANSI(prompt_glyph())).strip()
+            else:
+                user_query = input(f"{_prompt('1;' + theme_code(0), '❯')} ").strip()
             if user_query.lower() in ['exit', 'quit']:
                 break
             if not user_query:
+                continue
+            slash = run_slash_command(user_query)
+            if slash is not None:
+                print(render_command(*slash))
                 continue
             TOOL_COUNT[0] = 0
             print(divider())

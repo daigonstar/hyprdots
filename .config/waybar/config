@@ -198,7 +198,7 @@
 
         "custom/assistant": {
         "format": "󰙴",
-        "on-click": "/usr/bin/ghostty -e ~/.config/hypr/assistant/hypr_agent.py",
+        "on-click": "~/.config/hypr/scripts/assistant-toggle.sh",
         "exec": "echo '{\"tooltip\": \"PC Assistant (AI): ask about your system, updates and problems\"}'",
         "return-type": "json",
         "interval": "once"

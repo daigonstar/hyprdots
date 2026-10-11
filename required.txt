@@ -93,9 +93,11 @@ steam
 
 # --- PC assistant and popup calendar (the ollama package itself comes from the GPU list) ---
 grim
+slurp
 gtk-layer-shell
 python
 python-gobject
+python-prompt_toolkit
 python-ollama
 python-recurring-ical-events
 
