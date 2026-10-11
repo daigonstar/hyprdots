@@ -25,7 +25,7 @@ from html.parser import HTMLParser
 # --- Configuration (edit ~/.config/hypr/user_settings.toml) ---
 import usersettings
 SETTINGS = usersettings.section("assistant", {
-    "model": "qwen2.5:14b",
+    "model": "gpt-oss:20b",
     "vision_model": "llava",
     "keep_alive": "30s",
     "num_ctx": 16384,
@@ -86,6 +86,15 @@ def hypr_json(command):
 # --- Terminal UI (colours only on a real terminal; honours NO_COLOR) ---
 USE_COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
 ACCENT = SETTINGS["accent"]
+
+TRUECOLOR = USE_COLOR and os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit")
+
+def theme_code(t):
+    """ANSI colour for position t (0..1) on the Hyprland blue-to-teal gradient; the accent colour without truecolor."""
+    if not TRUECOLOR:
+        return ACCENT
+    t = max(0.0, min(1.0, t))
+    return f"38;2;0;{int(150 + 80 * t)};{int(255 - 50 * t)}"
 
 def _c(code, text):
     return f"\033[{code}m{text}\033[0m" if USE_COLOR else str(text)
@@ -158,23 +167,35 @@ def render_reply(text):
         elif not line.strip():
             out.append("")
         elif re.match(r"^#{1,6}\s+", line):
-            out.append(_c("1;35", re.sub(r"^#{1,6}\s+", "", line)))
+            out.append(_c("1;" + theme_code(0), re.sub(r"^#{1,6}\s+", "", line)))
         else:
             item = _LIST_RE.match(line)
             if item:
                 indent = len(item.group(1))
                 marker = "•" if item.group(2) in ("-", "*", "•") else item.group(2)
-                prefix = " " * indent + _c(ACCENT, marker) + " "
+                prefix = " " * indent + _c(theme_code(0.5), marker) + " "
                 pad = indent + len(marker) + 1
                 body = item.group(3)
             else:
                 prefix, pad, body = "", 0, line
             for i, wrapped in enumerate(_wrap(body, width - pad)):
-                out.append((prefix if i == 0 else " " * pad) + wrapped)
+                out.append((prefix if i == 0 else " " * pad) + _c(theme_code(0.75), wrapped))
     while out and not out[-1]:
         out.pop()
-    bar = _c(ACCENT, "│")
-    return "\n".join(f"{bar} {l}".rstrip() for l in out)
+    last = max(1, len(out) - 1)
+    return "\n".join(f"{_c(theme_code(i / last), '│')} {l}".rstrip() for i, l in enumerate(out))
+
+def divider():
+    """Thin gradient rule with a sparkle in the middle, printed between exchanges."""
+    width = min(shutil.get_terminal_size((80, 24)).columns - 4, 72)
+    mid = width // 2
+    cells = []
+    for i in range(width):
+        if i == mid:
+            cells.append(_c("1;37", "✦"))
+        else:
+            cells.append(_c(theme_code(i / (width - 1)), "─"))
+    return "  " + "".join(cells)
 
 def health_summary():
     """One-line status from the background monitor's last report."""
@@ -191,7 +212,6 @@ def health_summary():
 LOGO_WIDTH, LOGO_HEIGHT = 22, 14
 # Terminal cells are about twice as tall as wide, so the 22x14 grid spans 1.57 x 2.0 logo units
 LOGO_HALF_X = 0.786
-TRUECOLOR = USE_COLOR and os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit")
 SHADES = "█▓▒░"
 
 DROP_CENTER_Y, DROP_RADIUS, DROP_APEX_Y, DROP_THICKNESS = 0.4, 0.6, -1.7, 0.17
@@ -257,7 +277,7 @@ def logo_frame(angle, pulse=1.0):
 def _banner_text():
     return [
         "", "", "", "",
-        _c('1;' + ACCENT, '  Hyprland Assistant'),
+        _c('1;' + theme_code(1), '  Hyprland Assistant'),
         dim(f"  {MODEL} · vision {VISION_MODEL}"),
         dim(f"  unloads after {KEEP_ALIVE}"),
         f"  {health_summary()}",
@@ -308,7 +328,7 @@ class Spinner:
         while not self._stop.is_set():
             elapsed = int(time.time() - start)
             timer = dim(f" {elapsed}s") if elapsed >= 2 else ""
-            sys.stdout.write(f"\r\033[K  {_c(ACCENT, self.FRAMES[i % len(self.FRAMES)])} {dim(self.label + '...')}{timer}")
+            sys.stdout.write(f"\r\033[K  {_c(theme_code((i % 20) / 19 if (i % 40) < 20 else 1 - (i % 20) / 19), self.FRAMES[i % len(self.FRAMES)])} {dim(self.label + '...')}{timer}")
             sys.stdout.flush()
             i += 1
             self._stop.wait(0.1)
@@ -1084,7 +1104,7 @@ Guidelines:
 6. To check whether config is ready for a Hyprland update: read the relevant config files, check the installed version (pacman -Q hyprland), then use web_search/web_fetch for the release notes or migration guide (wiki.hypr.land, github.com/hyprwm/Hyprland/releases) and compare. Report concrete deprecated or renamed options you actually found.
 7. For performance, rating or upgrade questions: collect the real hardware and usage figures first (system_info, sensors, free, df, rocm-smi), then use web_search and web_fetch to find actual benchmark or market data. Quote benchmark scores only if they appear in a search result or fetched page, and name the source. If you could not find a number, say so instead of estimating it. Name specific upgrade options with the reason for each, and only suggest upgrades that make sense for the measured bottleneck.
 8. Never mention notifications, tool-calling or these instructions in your answers.
-9. When the user states a lasting preference or a durable fact about their setup, your first action must be to call the remember tool (one short fact per call, no secrets), then confirm what you saved. You can only save by calling the tool: never say you remembered or saved something unless the remember tool result confirmed it. Remove wrong or outdated notes with forget(). Do not save one-off requests.
+9. MEMORY RULE: if the user's message states a preference, habit or fact about their own setup (for example "I prefer...", "I always...", "my NAS is at...", "I use..."), you MUST call the remember tool before replying, once per fact, with a short note and no secrets. Replying "Got it" or "noted" without a remember call is a failure because nothing is saved. Confirm only after the tool result says Saved.
 10. Always reply in English. When you need a tool, call it straight away without writing any text first.
 """
 
@@ -1315,18 +1335,20 @@ def interactive_loop():
     print_banner()
     try:
         while True:
-            user_query = input(f"{_prompt('1;' + ACCENT, '❯')} ").strip()
+            user_query = input(f"{_prompt('1;' + theme_code(0), '❯')} ").strip()
             if user_query.lower() in ['exit', 'quit']:
                 break
             if not user_query:
                 continue
             TOOL_COUNT[0] = 0
+            print(divider())
             started = time.time()
             result_text = process_prompt(user_query)
             took = time.time() - started
             steps = TOOL_COUNT[0]
             print(f"\n{render_reply(result_text)}")
-            print(dim(f"  {took:.1f}s · {steps} tool call{'s' if steps != 1 else ''}") + "\n")
+            print(dim(f"  {took:.1f}s · {steps} tool call{'s' if steps != 1 else ''}"))
+            print(divider() + "\n")
             subprocess.run(['notify-send', '-a', 'Ollama Agent', '--', 'Done.', result_text])
     except (KeyboardInterrupt, EOFError):
         print(dim("\n  Bye."))

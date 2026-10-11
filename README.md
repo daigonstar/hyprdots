@@ -43,7 +43,7 @@ cd hyprland-dots/hyprdots
 chmod +x hyprinstall.sh
 ./hyprinstall.sh
 ```
-The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. Everything else is in `required.txt`. It also enables the needed services and optionally downloads the assistant's Ollama models (~14 GB).
+The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. Everything else is in `required.txt`. It also enables the needed services and optionally downloads the assistant's Ollama models (~19 GB).
 ### User settings
 All options for the PC assistant, health monitor and popup calendar live in `~/.config/hypr/user_settings.toml` (the cog in the waybar drawer opens it).
 
