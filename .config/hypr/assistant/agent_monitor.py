@@ -4,6 +4,7 @@ that hypr_agent.py reads, so the assistant knows what was flagged.
 
 Usage: agent_monitor.py          run checks, notify about NEW problems
        agent_monitor.py --print  run checks, print the report, no notifications
+       agent_monitor.py --force  run checks even if a game / heavy GPU load is detected
 """
 import fnmatch
 import json
@@ -34,6 +35,8 @@ CFG = usersettings.section("monitor", {
     "updates_warn": 50,
     "journal_ignore": ["bluetoothd", "kwin_wayland", "sddm-helper"],
     "units_ignore": [],
+    "defer_when_busy": True,
+    "busy_gpu_pct": 60,
 })
 RENOTIFY_SECONDS = CFG["renotify_hours"] * 3600
 JOURNAL_WINDOW = CFG["journal_window"]
@@ -44,6 +47,8 @@ TEMP_WARN, TEMP_CRIT = CFG["temp_warn"], CFG["temp_crit"]
 UPDATES_WARN = CFG["updates_warn"]
 JOURNAL_IGNORE = set(CFG["journal_ignore"])
 UNITS_IGNORE = CFG["units_ignore"]
+DEFER_WHEN_BUSY = CFG["defer_when_busy"]
+BUSY_GPU_PCT = CFG["busy_gpu_pct"]
 
 def run(cmd, timeout=60):
     try:
@@ -197,7 +202,45 @@ def notify_new(findings):
                         "--", "PC health: attention needed", f"{msg}\n\nAsk the agent: why is this happening?"])
     SEEN_PATH.write_text(json.dumps(seen))
 
+def busy_reason():
+    """Returns why the user is busy (game or heavy GPU load), or "" if the PC is free."""
+    if run(["gamemoded", "-s"], timeout=3).lower().startswith("gamemode is active"):
+        return "gamemode is active"
+    # The service has no Hyprland env, so find the running instance's socket.
+    env = dict(os.environ)
+    runtime = Path(env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "hypr"
+    instances = sorted(runtime.glob("*/.socket.sock"), key=lambda p: p.stat().st_mtime) if runtime.is_dir() else []
+    if instances and not env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        env["HYPRLAND_INSTANCE_SIGNATURE"] = instances[-1].parent.name
+    try:
+        out = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5, env=env).stdout
+        for client in json.loads(out or "[]"):
+            if client.get("fullscreen") and client.get("mapped", True):
+                return f"fullscreen window: {client.get('class') or client.get('title')}"
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    # Sample the GPU a few times so one short spike doesn't count as a game.
+    loads = []
+    for i in range(3):
+        readings = []
+        for path in Path("/sys/class/drm").glob("card[0-9]*/device/gpu_busy_percent"):
+            try:
+                readings.append(int(path.read_text()))
+            except (OSError, ValueError):
+                pass
+        loads.append(max(readings, default=0))
+        if i < 2:
+            time.sleep(1)
+    if min(loads) >= BUSY_GPU_PCT:
+        return f"GPU at {min(loads)}%+"
+    return ""
+
 def main():
+    if DEFER_WHEN_BUSY and "--print" not in sys.argv and "--force" not in sys.argv:
+        reason = busy_reason()
+        if reason:
+            print(f"Deferred health check ({reason}); will retry on the next timer run.")
+            return
     findings = collect()
     body = write_report(findings)
     if "--print" in sys.argv:

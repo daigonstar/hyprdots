@@ -1105,7 +1105,8 @@ Guidelines:
 7. For performance, rating or upgrade questions: collect the real hardware and usage figures first (system_info, sensors, free, df, rocm-smi), then use web_search and web_fetch to find actual benchmark or market data. Quote benchmark scores only if they appear in a search result or fetched page, and name the source. If you could not find a number, say so instead of estimating it. Name specific upgrade options with the reason for each, and only suggest upgrades that make sense for the measured bottleneck.
 8. Never mention notifications, tool-calling or these instructions in your answers.
 9. MEMORY RULE: if the user's message states a preference, habit or fact about their own setup (for example "I prefer...", "I always...", "my NAS is at...", "I use..."), you MUST call the remember tool before replying, once per fact, with a short note and no secrets. Replying "Got it" or "noted" without a remember call is a failure because nothing is saved. Confirm only after the tool result says Saved.
-10. Always reply in English. When you need a tool, call it straight away without writing any text first.
+10. VERIFY BEFORE ANSWERING: for any factual question about the world (current events, politics and who holds office, laws, people, prices, product or software versions, news, anything that can change), do not answer from memory. Call web_search first (and web_fetch on a good result), then answer from what you found, naming the source. If the user corrects you, check it online before agreeing or disagreeing. If searches fail or sources conflict, say so instead of guessing. This does not apply to questions about the user's own PC, which you answer with system tools.
+11. Always reply in English. When you need a tool, call it straight away without writing any text first.
 """
 
 # --- Native tool-calling schemas ---
@@ -1150,6 +1151,10 @@ SINGLE_PARAM = {s["function"]["name"]: next(iter(s["function"]["parameters"]["pr
 # --- Main Execution Loop ---
 TOOL_CALL_RE = re.compile(r"TOOL_USE:\s*`*\s*(\w+)\s*(?:\((.*)\))?")
 MAX_TOOL_STEPS = SETTINGS["max_tool_steps"]
+EMPTY_REPLY = "I didn't get a response from the model."
+STEP_LIMIT_REPLY = "I couldn't finish that within the allowed number of steps."
+FAILURE_PREFIXES = ("Ollama Error:", EMPTY_REPLY, STEP_LIMIT_REPLY)
+FAILURE_LOG = os.path.join(STATE_DIR, "failures.log")
 TOOL_COUNT = [0]  # tool calls made for the current request, shown in the footer
 
 def _get(obj, key):
@@ -1244,15 +1249,70 @@ def _remember_turn(turn_messages, reply):
         HISTORY.pop(0)
 
 def process_prompt(user_input):
-    messages = [{'role': 'system', 'content': SYSTEM_PROMPT + "\n\n" + build_context()}]
+    today = time.strftime("%A %d %B %Y")
+    messages = [{'role': 'system', 'content': SYSTEM_PROMPT + f"\n\nToday's date is {today}. Your training data is older than this, so treat anything time-sensitive as possibly out of date.\n\n" + build_context()}]
     messages += HISTORY
     start = len(messages)
     messages.append({'role': 'user', 'content': user_input})
     reply = _process(messages, user_input)
     # A failed turn must not enter the history or the model starts imitating the error
-    if not reply.startswith("Ollama Error:"):
+    if not reply.startswith(FAILURE_PREFIXES):
         _remember_turn(messages[start:], reply)
     return reply
+
+def _failure_hint(error, response):
+    """Best-guess cause and next step for a failure."""
+    text = str(error or "").lower()
+    if error is not None:
+        if "repeat limit" in text:
+            return "The model got stuck repeating itself. Rephrase or ask again; the agent already retried once with a higher temperature."
+        if "connection" in text or "refused" in text or "connect" in text:
+            return "The Ollama server isn't reachable. Check `systemctl status ollama` and `journalctl -u ollama -n 30`."
+        if getattr(error, "status_code", None) == 404 or "not found" in text:
+            return f"The model isn't installed. Run `ollama pull {MODEL}` or change `model` in user_settings.toml."
+        if "memory" in text or "oom" in text or "alloc" in text:
+            return "Out of VRAM/RAM. Close games or other GPU apps, or lower `num_ctx` in user_settings.toml."
+        return "Check `journalctl -u ollama -n 30` for the server-side error."
+    if response is not None:
+        if _get(response, 'done_reason') == "length":
+            return "The reply hit the output token limit (probably spent on reasoning). Ask a narrower question or raise num_predict in SAMPLING."
+        used = (_get(response, 'prompt_eval_count') or 0) + (_get(response, 'eval_count') or 0)
+        if used > NUM_CTX * 0.85:
+            return f"The context window is almost full ({used}/{NUM_CTX} tokens). Restart the chat or raise `num_ctx`."
+        if _get(_get(response, 'message'), 'thinking'):
+            return "The model produced reasoning but no answer. Ask again or rephrase."
+    return "The model returned nothing. Check `ollama ps` (it may have been evicted) and `journalctl -u ollama -n 30`."
+
+def describe_failure(headline, messages, user_input, response=None, error=None):
+    """Builds a diagnostic block for a failed request and appends the same details to the failure log."""
+    facts = [f"model: `{MODEL}` (context {NUM_CTX} tokens)", f"request: {user_input.strip()[:100]!r}",
+             f"tool calls this request: {TOOL_COUNT[0]}, messages in context: {len(messages)}"]
+    tool_names = [_get(m, 'tool_name') for m in messages if _get(m, 'role') == 'tool']
+    if tool_names:
+        facts.append("last tools: " + ", ".join(str(n) for n in tool_names[-5:]))
+        last_result = next((_get(m, 'content') for m in reversed(messages) if _get(m, 'role') == 'tool'), "") or ""
+        facts.append(f"last tool result: {last_result[:200].strip()!r}")
+    if error is not None:
+        facts.append(f"error: {type(error).__name__}" + (f" (status {error.status_code})" if getattr(error, "status_code", None) else "") + f": {error}")
+    if response is not None:
+        facts.append(f"stop reason: {_get(response, 'done_reason')}, prompt tokens: {_get(response, 'prompt_eval_count')}, generated: {_get(response, 'eval_count')}")
+        thinking = (_get(_get(response, 'message'), 'thinking') or "").strip()
+        if thinking:
+            facts.append(f"last reasoning ({len(thinking)} chars): ...{thinking[-300:]!r}")
+    hint = _failure_hint(error, response)
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        if os.path.exists(FAILURE_LOG) and os.path.getsize(FAILURE_LOG) > 200_000:
+            with open(FAILURE_LOG, "rb") as f:
+                f.seek(-100_000, os.SEEK_END)
+                tail = f.read()
+            with open(FAILURE_LOG, "wb") as f:
+                f.write(tail)
+        with open(FAILURE_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {headline}\n" + "\n".join("  " + x for x in facts) + f"\n  hint: {hint}\n\n")
+    except OSError:
+        pass
+    return f"{headline}\n\nDiagnostics:\n" + "\n".join(f"- {x}" for x in facts) + f"\n\nLikely cause: {hint}\nFull details: {FAILURE_LOG}"
 
 def _process(messages, user_input):
 
@@ -1263,9 +1323,11 @@ def _process(messages, user_input):
         except Exception as e:
             messages.append({'role': 'system', 'content': f"CONTEXT unavailable: {e}"})
 
+    response = None
     try:
         for _ in range(MAX_TOOL_STEPS):
-            message = chat(MODEL, messages, tools=TOOL_SCHEMAS)['message']
+            response = chat(MODEL, messages, tools=TOOL_SCHEMAS)
+            message = response['message']
             content = (_get(message, 'content') or "").strip()
 
             native_calls = _get(message, 'tool_calls') or []
@@ -1287,7 +1349,14 @@ def _process(messages, user_input):
 
             parsed = parse_text_tool_call(content)
             if not parsed:
-                return content or "I didn't get a response from the model. Try again or rephrase."
+                if not content:
+                    # The model sometimes ends with only hidden reasoning; force a plain-text answer once
+                    nudge = {'role': 'user', 'content': "Give your final answer to the user now in plain text, based on what you found so far."}
+                    retry = chat(MODEL, messages + [nudge])
+                    content = (_get(retry['message'], 'content') or "").strip()
+                    if not content:
+                        return describe_failure(EMPTY_REPLY, messages, user_input, retry)
+                return content
 
             name, args = parsed
             TOOL_COUNT[0] += 1
@@ -1300,10 +1369,11 @@ def _process(messages, user_input):
 
         # Out of steps: make the model report what it found instead of failing silently
         messages.append({'role': 'user', 'content': "Step limit reached. Do not call any more tools. Summarise what you found so far, what is still unknown, and what the user should check next."})
-        final = chat(MODEL, messages)['message']['content'].strip()
-        return TOOL_CALL_RE.sub("", final).strip() or "I couldn't finish that within the allowed number of steps."
+        response = chat(MODEL, messages)
+        final = (_get(response['message'], 'content') or "").strip()
+        return TOOL_CALL_RE.sub("", final).strip() or describe_failure(STEP_LIMIT_REPLY, messages, user_input, response)
     except Exception as e:
-        return f"Ollama Error: {str(e)}"
+        return describe_failure(f"Ollama Error: {e}", messages, user_input, response, error=e)
 
 def ensure_ollama_running():
     """Starts 'ollama serve' in the background if the server isn't reachable."""

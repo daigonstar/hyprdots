@@ -34,6 +34,8 @@ temp_crit = 95              # temperature critical in °C
 updates_warn = 50           # flag when this many updates are pending
 journal_ignore = ["bluetoothd", "kwin_wayland", "sddm-helper"]  # noisy journal sources to skip
 units_ignore = ["systemd-pcr*", "systemd-tpm2-setup*"]  # failed units to ignore (shell-style patterns); TPM is disabled here
+defer_when_busy = true      # skip the check (no agent, no notifications) while gaming or the GPU is under heavy load
+busy_gpu_pct = 60           # GPU load % (sustained over 3 s) that counts as busy; fullscreen windows and gamemode also count
 # How often the monitor runs is set by .config/systemd/user/agent-monitor.timer
 
 [calendar]
