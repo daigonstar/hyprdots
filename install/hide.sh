@@ -9,9 +9,9 @@ set -euo pipefail
 #   hide_apps.sh [--file PATH] [--dry-run] [--undo]
 #
 # Defaults:
-#   --file defaults to $HOME/hyprdots/hide.txt
+#   --file defaults to $HOME/hyprdots/install/hide.txt
 
-APPS_FILE="$HOME/hyprdots/hide.txt"
+APPS_FILE="$HOME/hyprdots/install/hide.txt"
 DRY_RUN=false
 UNDO=false
 

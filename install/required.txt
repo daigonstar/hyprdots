@@ -1,6 +1,6 @@
 # Packages installed by hyprinstall.sh (official repos or AUR), in install order.
 # Everything here is used by the current setup; "#" starts a comment.
-# GPU drivers are installed first from gpu-amd.txt / gpu-nvidia.txt / gpu-intel.txt
+# GPU drivers are installed first from install/gpu-<vendor>.txt
 # (chosen by the installer), so they are not listed here.
 
 # --- Core desktop ---
@@ -91,14 +91,14 @@ coolercontrol
 # --- Gaming ---
 steam
 
-# --- PC assistant and popup calendar (the ollama package itself comes from the GPU list) ---
+# --- Popup calendar and the optional PC assistant (ollama and python-ollama are installed by
+#     .config/hypr/assistant/setup.sh only if you choose the assistant) ---
 grim
 slurp
 gtk-layer-shell
 python
 python-gobject
 python-prompt_toolkit
-python-ollama
 python-recurring-ical-events
 
 # --- WinBoat (Windows apps in a container) ---
