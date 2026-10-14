@@ -43,6 +43,9 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm --needed git curl python
+      - name: Enable multilib (the installer does too; Steam and the lib32 drivers live there)
+        run: |
+          printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          pacman -Syu --noconfirm --needed git curl python
       - uses: actions/checkout@v4
       - run: ./install/check-packages.sh
