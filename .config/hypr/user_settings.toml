@@ -1,3 +1,4 @@
+# The assistant is optional: run ~/.config/hypr/assistant/setup.sh to pick models or turn it on/off.
 # User settings for the PC assistant, health monitor and popup calendar.
 #
 # Edit values here. Private values (your calendar links) belong in
@@ -7,8 +8,9 @@
 # assistant, monitor run or calendar popup opens.
 
 [assistant]
-model = "huihui_ai/gpt-oss-abliterated:latest"       # Ollama model used for chat and tool calling
-vision_model = "qwen2.5vl:7b"  # model used to read screenshots and attached images
+# The model names are normally chosen by assistant/setup.sh and stored in user_settings.local.toml.
+model = "gpt-oss:20b"       # Ollama model used for chat and tool calling
+vision_model = "qwen2.5vl:7b"  # reads screenshots and attached images; "" turns image features off
 keep_alive = "30s"          # how long a model stays in VRAM after the last request
 num_ctx = 16384             # context window in tokens (bigger = more VRAM, ~3 GB extra at 16384 on 14b)
 vision_num_ctx = 4096       # context window for the vision model

@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# This script ensures the gpt-oss:7b model is available in Ollama and starts the Ollama
-# server in the background if it isn't already running.
+# Starts the Ollama server in the background if it isn't already running (Super+Ctrl+O).
+# Models are chosen and downloaded by ~/.config/hypr/assistant/setup.sh.
 
-MODEL="gpt-oss:7b"
-
-# Pull the model if it hasn't been pulled yet.
-if ! ollama show "$MODEL" > /dev/null 2>&1; then
-  echo "Pulling model $MODEL..."
-  ollama pull "$MODEL"
+if ! command -v ollama >/dev/null 2>&1; then
+  notify-send -a Ollama "Ollama is not installed" "Run ~/.config/hypr/assistant/setup.sh to set up the assistant."
+  exit 1
 fi
 
-# Start the Ollama server if it isn't already running.
 if ! pgrep -f "ollama serve" > /dev/null; then
   echo "Starting Ollama server..."
   ollama serve > /dev/null 2>&1 &

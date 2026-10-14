@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+#
+# Sets up the PC assistant: choose a model size that suits your hardware, or turn the
+# assistant off. Safe to re-run any time to switch models or enable/disable it.
+#
+# Usage: setup.sh                      interactive menu (recommends a tier for your GPU)
+#        setup.sh --none               turn the assistant off (nothing is deleted)
+#        setup.sh --tier full|balanced|light|auto
+#        setup.sh --model NAME [--vision-model NAME|none]
+# Options: --no-pull  --no-packages  --no-services  --yes  --dry-run
+# Unattended: HYPR_ASSISTANT=none|auto|full|balanced|light
+#
+# The choice is saved in user_settings.local.toml ([assistant] model, vision_model). That
+# file is git-ignored, so it stays per machine.
+set -euo pipefail
+
+ASSIST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+HYPR_DIR="$(dirname "$ASSIST_DIR")"
+LOCAL_SETTINGS="${ASSISTANT_LOCAL_SETTINGS:-$HYPR_DIR/user_settings.local.toml}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hypr_agent"
+DISABLED_MARKER="$STATE_DIR/disabled"
+
+DRY_RUN=false PULL=true PACKAGES=true SERVICES=true ASSUME_YES=false
+TIER="${HYPR_ASSISTANT:-}" MODEL="" VISION="" VISION_SET=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --none) TIER=none ;;
+    --tier) TIER="${2:?--tier needs a value}"; shift ;;
+    --model) MODEL="${2:?--model needs a name}"; TIER=custom; shift ;;
+    --vision-model) VISION="${2:?--vision-model needs a name or 'none'}"; VISION_SET=true; shift ;;
+    --no-pull) PULL=false ;;
+    --no-packages) PACKAGES=false ;;
+    --no-services) SERVICES=false ;;
+    --yes|-y) ASSUME_YES=true ;;
+    --dry-run) DRY_RUN=true ;;
+    -h|--help) sed -n 2,14p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+step() { printf '\n==> %s\n' "$*"; }
+warn() { printf 'WARN: %s\n' "$*" >&2; }
+run() { if $DRY_RUN; then printf '[dry-run] %s\n' "$*"; else "$@"; fi; }
+interactive() { [[ -t 0 && -t 1 ]] && ! $ASSUME_YES; }
+
+# --- Hardware ----------------------------------------------------------------
+gpu_vendor() {
+  local info
+  info="$(lspci -nn 2>/dev/null | grep -Ei 'vga|3d controller|display controller' || true)"
+  if grep -qi nvidia <<<"$info"; then echo nvidia
+  elif grep -qiE 'amd|ati|advanced micro' <<<"$info"; then echo amd
+  elif grep -qi intel <<<"$info"; then echo intel
+  else echo none; fi
+}
+
+vram_mib() {  # largest GPU memory in MiB, 0 when unknown
+  local best=0 value f
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    value="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -1 || true)"
+    [[ "$value" =~ ^[0-9]+$ ]] && best=$value
+  fi
+  for f in /sys/class/drm/card*/device/mem_info_vram_total; do
+    [[ -r "$f" ]] || continue
+    value=$(( $(cat "$f") / 1048576 ))
+    (( value > best )) && best=$value
+  done
+  echo "$best"
+}
+
+ram_mib() { awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo; }
+
+recommend_tier() {
+  local vram="$1"
+  if (( vram >= 14000 )); then echo full
+  elif (( vram >= 7000 )); then echo balanced
+  else echo light; fi
+}
+
+# --- Tiers -------------------------------------------------------------------
+# name | chat model | vision model ("" = none) | download | memory needed
+tier_info() {
+  case "$1" in
+    full)     echo "gpt-oss:20b|qwen2.5vl:7b|~19 GB|16 GB GPU memory" ;;
+    balanced) echo "qwen3:8b|qwen2.5vl:3b|~8 GB|8 GB GPU memory" ;;
+    light)    echo "qwen3:4b||~3 GB|4 GB GPU memory (or CPU only, slowly)" ;;
+    *) return 1 ;;
+  esac
+}
+
+choose_interactively() {
+  local vram ram vendor rec pick
+  vram="$(vram_mib)"; ram="$(ram_mib)"; vendor="$(gpu_vendor)"
+  rec="$(recommend_tier "$vram")"
+  echo "The PC assistant is an optional AI helper that runs locally through Ollama."
+  echo "It needs a decent GPU; skip it if your machine is modest. Nothing is sent to the cloud."
+  echo
+  echo "Detected: GPU $vendor, $(( (vram + 512) / 1024 )) GB GPU memory, $(( (ram + 512) / 1024 )) GB RAM"
+  (( vram == 0 )) && echo "No GPU memory found: models would run on the CPU, which is slow."
+  echo
+  local tier line chat vision size need mark
+  for tier in full balanced light; do
+    line="$(tier_info "$tier")"; IFS='|' read -r chat vision size need <<<"$line"
+    mark=""; [[ "$tier" == "$rec" ]] && mark="  <- recommended"
+    printf '  %-9s chat %-12s vision %-14s %s, needs %s%s\n' "$tier" "$chat" "${vision:-none}" "$size" "$need" "$mark"
+  done
+  echo "  custom    pick your own Ollama models"
+  echo "  none      no assistant (you can enable it later with this script)"
+  echo "The assistant is tuned for gpt-oss (full); smaller models are less reliable with tools."
+  echo
+  read -rp "Choice [$rec]: " pick
+  TIER="${pick:-$rec}"
+}
+
+resolve_choice() {
+  [[ "$TIER" == auto ]] && TIER="$(recommend_tier "$(vram_mib)")"
+  case "$TIER" in
+    none) return 0 ;;
+    full|balanced|light)
+      IFS='|' read -r CHAT_MODEL VISION_MODEL _ _ <<<"$(tier_info "$TIER")"
+      ;;
+    custom)
+      CHAT_MODEL="$MODEL"; VISION_MODEL=""
+      if [[ -z "$CHAT_MODEL" ]]; then
+        read -rp "Chat model (an Ollama name, e.g. qwen3:8b): " CHAT_MODEL
+      fi
+      if ! $VISION_SET && interactive; then
+        read -rp "Vision model for screenshots, or Enter for none (e.g. qwen2.5vl:3b): " VISION
+        VISION_SET=true
+      fi
+      ;;
+    *) echo "Unknown tier '$TIER' (use full, balanced, light, auto, custom or none)." >&2; exit 2 ;;
+  esac
+  if $VISION_SET; then
+    [[ "$VISION" == none ]] && VISION=""
+    VISION_MODEL="$VISION"
+  fi
+  [[ "$TIER" == none || -n "${CHAT_MODEL:-}" ]] || { echo "A chat model is required." >&2; exit 2; }
+}
+
+# --- Settings ----------------------------------------------------------------
+write_settings() {
+  if $DRY_RUN; then
+    echo "[dry-run] would set in $LOCAL_SETTINGS: [assistant] model = \"$CHAT_MODEL\", vision_model = \"$VISION_MODEL\""
+    return
+  fi
+  LOCAL="$LOCAL_SETTINGS" CHAT="$CHAT_MODEL" VISION="$VISION_MODEL" python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+path = Path(os.environ["LOCAL"])
+values = {"model": os.environ["CHAT"], "vision_model": os.environ["VISION"]}
+lines = path.read_text().splitlines() if path.exists() else []
+
+start = next((i for i, l in enumerate(lines) if l.strip() == "[assistant]"), None)
+if start is None:
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.append("[assistant]")
+    start = len(lines) - 1
+end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+for key, value in values.items():
+    entry = f"{key} = {json.dumps(value)}"
+    for i in range(start + 1, end):
+        if lines[i].split("=", 1)[0].strip() == key:
+            lines[i] = entry
+            break
+    else:
+        lines.insert(start + 1, entry)
+        end += 1
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("\n".join(lines) + "\n")
+path.chmod(0o600)
+PY
+  echo "Saved your model choice in $LOCAL_SETTINGS"
+}
+
+# --- Packages and services ---------------------------------------------------
+install_packages() {
+  command -v pacman >/dev/null 2>&1 || { warn "Not an Arch system: install ollama and the python ollama module yourself."; return; }
+  local pkgs=() ollama_pkg
+  if ! command -v ollama >/dev/null 2>&1; then
+    case "$(gpu_vendor)" in
+      nvidia) ollama_pkg=ollama-cuda ;;
+      amd) ollama_pkg=ollama-rocm ;;
+      intel) ollama_pkg=ollama-vulkan ;;
+      *) ollama_pkg=ollama ;;
+    esac
+    pkgs+=("$ollama_pkg")
+  fi
+  local p
+  for p in python-ollama python-prompt_toolkit; do
+    pacman -Qq "$p" >/dev/null 2>&1 || pkgs+=("$p")
+  done
+  if ((${#pkgs[@]})); then
+    echo "Installing: ${pkgs[*]}"
+    run sudo pacman -S --needed --noconfirm "${pkgs[@]}" || warn "Could not install ${pkgs[*]}"
+  else
+    echo "ollama and its Python modules are already installed."
+  fi
+}
+
+start_ollama() {
+  command -v ollama >/dev/null 2>&1 || $DRY_RUN || { warn "ollama is not installed; skipping the service and the model download."; return 1; }
+  if command -v systemctl >/dev/null 2>&1; then
+    run sudo systemctl enable --now ollama.service || warn "Could not enable ollama.service"
+  fi
+  $DRY_RUN && return 0
+  local i
+  for i in $(seq 1 20); do
+    curl -fsS --max-time 2 "${OLLAMA_HOST:-http://127.0.0.1:11434}/api/tags" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  warn "Ollama did not respond; run 'ollama pull <model>' later."
+  return 1
+}
+
+pull_model() {
+  local name="$1"
+  [[ -n "$name" ]] || return 0
+  if ! $DRY_RUN && ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qxF "$name"; then
+    echo "$name is already downloaded."
+  else
+    run ollama pull "$name" || warn "Could not download $name; run 'ollama pull $name' later."
+  fi
+}
+
+reload_waybar() {
+  $DRY_RUN && return
+  pgrep -x waybar >/dev/null 2>&1 && pkill -SIGUSR2 waybar 2>/dev/null || true
+}
+
+# --- Main --------------------------------------------------------------------
+if [[ -z "$TIER" ]]; then
+  if interactive; then choose_interactively; else TIER=auto; fi
+fi
+CHAT_MODEL="${MODEL:-}" VISION_MODEL=""
+resolve_choice
+
+if [[ "$TIER" == none ]]; then
+  step "Turning the PC assistant off"
+  run mkdir -p "$STATE_DIR"
+  run touch "$DISABLED_MARKER"
+  reload_waybar
+  echo "The assistant button and Super+C do nothing now. Models and packages were left alone."
+  echo "Turn it back on with: $ASSIST_DIR/setup.sh"
+  exit 0
+fi
+
+step "Assistant models: chat ${CHAT_MODEL}, vision ${VISION_MODEL:-none}"
+$PACKAGES && install_packages
+write_settings
+run rm -f "$DISABLED_MARKER"
+if $SERVICES && $PULL; then
+  if start_ollama; then
+    pull_model "$CHAT_MODEL"
+    pull_model "$VISION_MODEL"
+  fi
+elif $SERVICES; then
+  start_ollama || true
+fi
+reload_waybar
+step "Done. Press Super+C or click the assistant button in the bar."

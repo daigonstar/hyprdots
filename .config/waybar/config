@@ -197,6 +197,7 @@
 	    },
 
         "custom/assistant": {
+        "exec-if": "test ! -e \"${XDG_STATE_HOME:-$HOME/.local/state}/hypr_agent/disabled\"",
         "format": "󰙴",
         "on-click": "~/.config/hypr/scripts/assistant-toggle.sh",
         "exec": "echo '{\"tooltip\": \"PC Assistant (AI): ask about your system, updates and problems\"}'",

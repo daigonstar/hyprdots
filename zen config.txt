@@ -1,5 +1,0 @@
-if using a returning mozilla account with a custom wallpaper switch: 
-
-zen.urlbar.replace-newtab to false in about:config
-
- this will make it show again on launch

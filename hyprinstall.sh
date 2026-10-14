@@ -19,8 +19,8 @@ FALLBACK_LOG="$HOME/hyprinstall.log"
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$BASE_DIR"
 DOTFILES_DIR="$REPO_DIR/.config"
-REQUIRED_FILE="$BASE_DIR/required.txt"
-FLATPAK_FILE="$BASE_DIR/flatpak.txt"
+REQUIRED_FILE="$BASE_DIR/install/required.txt"
+FLATPAK_FILE="$BASE_DIR/install/flatpak.txt"
 LOGFILE="$DEFAULT_LOG"
 EXTRA_DEPENDENCIES=(git base-devel flatpak python rust imagemagick rsync pciutils)
 
@@ -37,18 +37,16 @@ done
 # Logging helpers
 
 init_logging() {
-if [[ "$DRY_RUN" == "true" ]]; then
-echo "[DRY RUN] Would initialize logging to $LOGFILE"
-return
-fi
-if touch "$DEFAULT_LOG" >/dev/null 2>&1; then
-LOGFILE="$DEFAULT_LOG"
-else
-LOGFILE="$FALLBACK_LOG"
-mkdir -p "$(dirname "$LOGFILE")"
-touch "$LOGFILE"
-echo "Note: couldn't write to $DEFAULT_LOG; using $LOGFILE"
-fi
+  if [[ "$DRY_RUN" == "true" ]]; then
+    mkdir -p "$(dirname "$DEFAULT_LOG")"
+  fi
+  if touch "$DEFAULT_LOG" >/dev/null 2>&1; then
+    LOGFILE="$DEFAULT_LOG"
+  else
+    LOGFILE="$FALLBACK_LOG"
+    touch "$LOGFILE"
+    echo "Note: couldn't write to $DEFAULT_LOG; using $LOGFILE"
+  fi
 }
 
 log() {
@@ -332,7 +330,7 @@ if [[ ${#GPU_VENDORS[@]} -eq 0 ]]; then
   log "WARN" "No GPU drivers selected; skipping GPU packages (Steam and the assistant will run without GPU acceleration)"
 fi
 for vendor in "${GPU_VENDORS[@]}"; do
-  gpu_file="$BASE_DIR/gpu-$vendor.txt"
+  gpu_file="$BASE_DIR/install/gpu-$vendor.txt"
   if [[ ! -f "$gpu_file" ]]; then
     log "WARN" "No driver list for '$vendor' ($gpu_file); skipping"
     continue
@@ -358,32 +356,29 @@ run_cmd "flatpak install -y --noninteractive --or-update flathub \"$f\"" ||
 fi
 done
 
-# Services needed by the installed apps. ollama is restarted so it picks up
-# the GPU backend (ROCm/CUDA/Vulkan) that was installed above.
+# Services needed by the installed apps. (ollama is enabled by the assistant setup below,
+# only if you choose the assistant.)
 
-for svc in NetworkManager bluetooth coolercontrold docker ollama; do
+for svc in NetworkManager bluetooth coolercontrold docker; do
   run_cmd "sudo systemctl enable --now $svc.service" || log "WARN" "Could not enable $svc.service"
 done
-run_cmd "sudo systemctl restart ollama.service" || log "WARN" "Could not restart ollama.service"
 
 # WinBoat runs Windows in a docker container; the user must be in the docker group
 if ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
   run_cmd "sudo usermod -aG docker \"$USER\"" && log "INFO" "Added $USER to the docker group (log out and back in for it to apply)"
 fi
 
-# PC assistant models (names come from user_settings.toml)
-
-mapfile -t ASSISTANT_MODELS < <(python3 -c "
-import sys
-sys.path.insert(0, '$DOTFILES_DIR/hypr/assistant')
-import usersettings
-s = usersettings.section('assistant', {'model': 'gpt-oss:20b', 'vision_model': 'qwen2.5vl:7b'})
-print(s['model']); print(s['vision_model'])" 2>/dev/null)
-if [[ ${#ASSISTANT_MODELS[@]} -gt 0 ]] && yesno_prompt "Download the PC assistant's AI models (${ASSISTANT_MODELS[*]}, ~19 GB)?" "Y"; then
-  run_cmd "sleep 3"
-  for model in "${ASSISTANT_MODELS[@]}"; do
-    run_cmd "ollama pull \"$model\"" || log "WARN" "Could not download model $model (run 'ollama pull $model' later)"
-  done
+# PC assistant (optional): choose a model size for your hardware, or skip it.
+# Unattended: HYPR_ASSISTANT=none|auto|full|balanced|light. It can be changed later with
+# ~/.config/hypr/assistant/setup.sh
+ASSISTANT_SETUP="$DOTFILES_DIR/hypr/assistant/setup.sh"
+if [[ -x "$ASSISTANT_SETUP" ]]; then
+  ASSISTANT_ARGS=()
+  [[ "$DRY_RUN" == "true" ]] && ASSISTANT_ARGS+=(--dry-run --yes)
+  # Run directly (not through run_cmd) so its menu and download progress stay visible.
+  "$ASSISTANT_SETUP" "${ASSISTANT_ARGS[@]}" || log "WARN" "Assistant setup failed (run $ASSISTANT_SETUP later)"
+else
+  log "WARN" "Assistant setup script not found: $ASSISTANT_SETUP. Skipping."
 fi
 
 # Home directories
@@ -438,7 +433,7 @@ wallpaper_dest="$HOME/Pictures/wallpapers"
 
 # Make scripts executable
 
-SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
+SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py hypr/assistant/setup.sh waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
 for s in "${SCRIPT_FILES[@]}"; do
 sp="$DOTFILES_DIR/$s"
 [[ -f "$sp" ]] && run_cmd "chmod +x \"$sp\""
@@ -475,7 +470,7 @@ fi
 # PC health monitor for the Hyprland agent (flags problems via notifications)
 
 AGENT_MONITOR_SCRIPT="$DOTFILES_DIR/hypr/assistant/agent_monitor.py"
-if [[ -f "$AGENT_MONITOR_SCRIPT" ]]; then
+if [[ -f "$AGENT_MONITOR_SCRIPT" ]] && yesno_prompt "Enable the background health monitor (desktop notifications about failed services, full disks, heat)? It needs no AI model." "Y"; then
     echo "🩺 Setting up periodic PC health monitor..."
     run_cmd "chmod +x \"$AGENT_MONITOR_SCRIPT\""
     run_cmd "mkdir -p \"$HOME/.config/systemd/user\""
@@ -591,7 +586,7 @@ fi
 # Hide unwanted apps from launcher
 
 echo "🔧 Hiding unwanted apps from launcher..."
-APPS_FILE="$REPO_DIR/hide.txt"
+APPS_FILE="$REPO_DIR/install/hide.txt"
 
 if [[ ! -f "$APPS_FILE" ]]; then
     echo "❌ App list file not found: $APPS_FILE. Skipping app hiding."
