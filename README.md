@@ -13,13 +13,14 @@ I have added some wallpapers I've collected (will probably add more as I go)
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + Space = Launcher  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + Q = Quit app  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + T = Terminal (Ghostty as default)  
-<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + C = Open clipboard  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + C = PC assistant (optional, see below)  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + CTRL + C = Clipboard history  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + E = File Manager (Thunar is default)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + B = Browser (Zen is default)  
-<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + A = App Store (Cosmic is default)   
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + A = App Store (Bazaar is default)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + N = Refresh waybar  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> SHIFT + N = Launch waybar (used if waybar crashes)  
-<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> SHIFT + W = Launch wallpaper selecter  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + W = Launch wallpaper selecter  
 
 ### Default Desktop
 ![image](screens/desktop.png)
@@ -37,14 +38,16 @@ I have added some wallpapers I've collected (will probably add more as I go)
 ![image](screens/power.png)
 
 ### Install:
+
+The installer is for **Arch Linux** (it uses `pacman` and `paru`) and expects a Hyprland 0.55+ session with the Lua config. Run it as your normal user; it asks for `sudo` when needed. Try `./hyprinstall.sh --dry-run` first to see exactly what it would do.
+
 ```bash
 git clone https://github.com/daigonstar/hyprdots.git
-cd hyprland-dots/hyprdots
+cd hyprdots
 chmod +x hyprinstall.sh
 ./hyprinstall.sh
 ```
 The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `install/gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. Everything else is in `install/required.txt` (Flatpaks in `install/flatpak.txt`). `install/hide.sh` hides unwanted app launcher entries listed in `install/hide.txt`. It also enables the needed services. The PC assistant is optional (see below).
-### User settings
 ### PC assistant (optional)
 
 A local AI helper (Super+C or the bar button) that answers questions about your PC, calendar and the web. It runs through Ollama, so nothing leaves your machine, but it needs a reasonably strong GPU. The installer asks, shows what it detected and recommends a size:
@@ -69,6 +72,8 @@ Your choice is stored in `~/.config/hypr/user_settings.local.toml` (git-ignored)
 
 Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_context.md` (hardware, distribution, package manager, things that are deliberately odd). `setup.sh` creates it from the tracked template `agent_context.example.md` the first time and never overwrites it; it is git-ignored, and `update.sh` preserves it.
 
+### User settings
+
 All options for the PC assistant, health monitor and popup calendar live in `~/.config/hypr/user_settings.toml` (the cog in the waybar drawer opens it).
 
 Private values go in `~/.config/hypr/user_settings.local.toml` (git-ignored, created by the installer from `user_settings.local.toml.example`). To show Google Calendar events in the clock popup, copy your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar) into `sources` there, then click the clock.
@@ -79,3 +84,7 @@ Please install that for a better greeter theme
 ### Notes
 
 - Zen browser: if you sign in with a returning Mozilla account that has a custom wallpaper, set `zen.urlbar.replace-newtab` to `false` in `about:config`, otherwise the new-tab page will not show again on launch.
+
+### License
+
+MIT, see [LICENSE](LICENSE). The rEFInd theme (`.config/refind`) and the SDDM theme (`SDDM/sugar-dark`) keep their own licenses. Wallpapers are collected from around the web and belong to their respective creators.
