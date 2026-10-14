@@ -72,9 +72,23 @@ Your choice is stored in `~/.config/hypr/user_settings.local.toml` (git-ignored)
 
 Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_context.md` (hardware, distribution, package manager, things that are deliberately odd). `setup.sh` creates it from the tracked template `agent_context.example.md` the first time and never overwrites it; it is git-ignored, and `update.sh` preserves it.
 
+### Settings app
+
+Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`) for a menu where you can change things without editing files:
+
+| Page | What you can change |
+| --- | --- |
+| Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
+| Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
+| Calendar | Add, rename or remove calendars (links stay private) |
+| Hyprland | Gaps, borders, rounding, blur, animations, layout, keyboard layout and mouse |
+| Hyprdots | Default terminal, file manager, browser and store, and which apps start with the desktop |
+
+Every option has a short explanation and says when it takes effect. Changes are not applied until you save: the title bar and a yellow bar at the bottom say how many are pending, and Ctrl+S, `s` or the **[ Save changes ]** button (mouse works too) keeps them. Your choices are saved to `~/.config/hypr/user_settings.local.toml` (and `user_overrides.lua` for the Hyprland look and apps); both are git-ignored, so updating the dotfiles never undoes them. The shared `user_settings.toml` only holds the defaults. Use `r` to go back to a default.
+
 ### User settings
 
-All options for the PC assistant, health monitor and popup calendar live in `~/.config/hypr/user_settings.toml` (the cog in the waybar drawer opens it).
+The settings app edits these files for you; you can also edit `~/.config/hypr/user_settings.toml` (shared defaults) and `~/.config/hypr/user_settings.local.toml` (yours, and it wins) by hand.
 
 Private values go in `~/.config/hypr/user_settings.local.toml` (git-ignored, created by the installer from `user_settings.local.toml.example`). To show Google Calendar events in the clock popup, copy your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar) into `sources` there, then click the clock.
 

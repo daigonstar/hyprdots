@@ -11,6 +11,7 @@ jobs:
   shell:
     name: Shell scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Syntax check, then shellcheck (errors only)
@@ -28,6 +29,7 @@ jobs:
   tests:
     name: Assistant tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,9 +40,25 @@ jobs:
         working-directory: .config/hypr/assistant
         run: python -m unittest discover -s tests -v
 
+  settings:
+    name: Settings app tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install prompt_toolkit
+      - run: sudo apt-get update && sudo apt-get install -y lua5.4   # tests run the real Lua config files against a stub
+      - name: Unit tests
+        working-directory: .config/hypr/settings
+        run: python -m unittest discover -s tests -v
+
   packages:
     name: Install lists still exist
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container: archlinux:latest
     steps:
       - name: Enable multilib (the installer does too; Steam and the lib32 drivers live there)

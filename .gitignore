@@ -10,5 +10,6 @@ paru/
 OrcaSlicer-Linux-flatpak_V2.3.1_x86_64.flatpak
 /.config/hypr/user_settings.local.toml
 /.config/hypr/assistant/agent_context.md
+/.config/hypr/user_overrides.lua
 __pycache__/
 /.claude/

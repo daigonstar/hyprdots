@@ -281,10 +281,10 @@
 
         "custom/userconfig": {
             "format": "󰒓",
-            "exec": "echo '{\"tooltip\": \"Settings: user_settings.toml (shared) and user_settings.local.toml (private, calendar links)\"}'",
+            "exec": "echo '{\"tooltip\": \"Settings: assistant models and health monitor, calendars, Hyprland look and default apps\"}'",
             "return-type": "json",
             "interval": "once",
-            "on-click": "ghostty -e vim -p ~/.config/hypr/user_settings.toml ~/.config/hypr/user_settings.local.toml"
+            "on-click": "ghostty -e ~/.config/hypr/scripts/settings.sh"
         },
         "custom/keys": {
             "format": "󰌌",

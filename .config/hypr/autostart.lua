@@ -1,15 +1,26 @@
+-- Optional apps that start with the desktop. hypr-settings lists the entries between the markers
+-- (one per line, in this exact shape) and can switch each one off; the rest of this file is always run.
+local ok, overrides = pcall(require, "user_overrides")
+local disabled = (ok and type(overrides) == "table" and overrides.startup_disabled) or {}
+
+-- STARTUP-APPS-BEGIN
+local optional_apps = {
+    { id = "discord", label = "Discord", cmd = "discord" },
+    { id = "nextcloud", label = "Nextcloud sync", cmd = "com.nextcloud.desktopclient.nextcloud --background" },
+    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "openrgb --startminimized -p Ice.orp" },
+    { id = "coolercontrol", label = "CoolerControl (fans and cooling)", cmd = "coolercontrol" },
+    { id = "solaar", label = "Solaar (Logitech devices)", cmd = "solaar --w hide" },
+    { id = "bitwarden", label = "Bitwarden", cmd = "com.bitwarden.desktop --hidden" },
+    { id = "localsend", label = "LocalSend (file sharing)", cmd = "org.localsend.localsend_app --hidden" },
+}
+-- STARTUP-APPS-END
+
 hl.on("hyprland.start", function()
     local commands = {
         "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP",
         "systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP",
         "systemctl --user start graphical-session.target",
-        "discord",
-        "com.nextcloud.desktopclient.nextcloud --background",
-        "openrgb --startminimized -p Ice.orp",
-        "coolercontrol",
-        "solaar --w hide",
-        "com.bitwarden.desktop --hidden",
-        "org.localsend.localsend_app --hidden",
+        -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
         "systemctl --user start hyprpolkitagent",
@@ -29,5 +40,11 @@ hl.on("hyprland.start", function()
 
     for _, command in ipairs(commands) do
         hl.exec_cmd(command)
+    end
+
+    for _, app in ipairs(optional_apps) do
+        if not disabled[app.id] then
+            hl.exec_cmd(app.cmd)
+        end
     end
 end)

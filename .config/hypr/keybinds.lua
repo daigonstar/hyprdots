@@ -1,9 +1,12 @@
-local terminal = "ghostty"
-local file_manager = "thunar"
+-- Default apps can be changed in hypr-settings (it writes user_overrides.lua); these are the fallbacks.
+local ok, overrides = pcall(require, "user_overrides")
+local apps = (ok and type(overrides) == "table" and overrides.apps) or {}
+local terminal = apps.terminal or "ghostty"
+local file_manager = apps.file_manager or "thunar"
 local menu = "~/.config/rofi/launchers/categorized/launcher.sh"
 local wallpaper_menu = "~/.config/rofi/wallpaper/wallpaper.sh"
-local browser = "zen-browser"
-local store = "flatpak run io.github.kolunmi.Bazaar"
+local browser = apps.browser or "zen-browser"
+local store = apps.store or "flatpak run io.github.kolunmi.Bazaar"
 local main_mod = "SUPER"
 
 hl.bind(main_mod .. " + T", hl.dsp.exec_cmd(terminal))
