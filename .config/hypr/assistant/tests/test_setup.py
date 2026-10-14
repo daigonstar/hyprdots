@@ -21,10 +21,15 @@ class SetupScript(unittest.TestCase):
                     "ASSISTANT_LOCAL_SETTINGS": str(self.local)}
         self.env.pop("HYPR_ASSISTANT", None)
         self.marker = self.home / "state" / "hypr_agent" / "disabled"
+        # Run a copy so the machine's own agent_context.md is never touched
+        self.assistant = self.home / "assistant"
+        self.assistant.mkdir()
+        for name in ("setup.sh", "agent_context.example.md"):
+            shutil.copy(ASSISTANT / name, self.assistant / name)
 
     def setup(self, *args, env=None):
         return subprocess.run(
-            ["bash", str(ASSISTANT / "setup.sh"), "--no-pull", "--no-packages", "--no-services", *args],
+            ["bash", str(self.assistant / "setup.sh"), "--no-pull", "--no-packages", "--no-services", *args],
             env={**self.env, **(env or {})}, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60,
         )
 
@@ -67,9 +72,46 @@ class SetupScript(unittest.TestCase):
         self.assertFalse(self.local.exists())
         self.assertFalse(self.marker.exists())
 
+    def test_context_template_is_installed_once_and_never_overwritten(self):
+        mine = self.assistant / "agent_context.md"
+        self.assertEqual(self.setup("--tier", "light").returncode, 0)
+        self.assertEqual(mine.read_text(), (self.assistant / "agent_context.example.md").read_text())
+        mine.write_text("my own machine details\n")
+        self.assertEqual(self.setup("--tier", "balanced").returncode, 0)
+        self.assertEqual(mine.read_text(), "my own machine details\n")
+
+    def test_no_context_when_assistant_is_off(self):
+        self.assertEqual(self.setup("--none").returncode, 0)
+        self.assertFalse((self.assistant / "agent_context.md").exists())
+
     def test_bad_input_is_rejected(self):
         self.assertNotEqual(self.setup("--tier", "huge").returncode, 0)
         self.assertNotEqual(self.setup("--bogus").returncode, 0)
+
+
+class ContextFile(unittest.TestCase):
+    def profile(self, with_own):
+        root = Path(tempfile.mkdtemp(prefix="agent-context-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        assistant = root / "assistant"
+        assistant.mkdir()
+        for name in ("hypr_agent.py", "usersettings.py"):
+            shutil.copy(ASSISTANT / name, assistant / name)
+        (assistant / "agent_context.example.md").write_text("TEMPLATE TEXT")
+        if with_own:
+            (assistant / "agent_context.md").write_text("MY OWN TEXT")
+        code = "import hypr_agent as a;print(a.build_context())"
+        result = subprocess.run([sys.executable, "-I", "-c", f"import sys;sys.path.insert(0,{str(assistant)!r});" + code],
+                                capture_output=True, text=True, timeout=60,
+                                env={**os.environ, "HOME": str(root), "XDG_STATE_HOME": str(root / "state")})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_own_file_wins_and_template_is_the_fallback(self):
+        own = self.profile(True)
+        self.assertIn("MY OWN TEXT", own)
+        self.assertNotIn("TEMPLATE TEXT", own)
+        self.assertIn("TEMPLATE TEXT", self.profile(False))
 
 
 class AgentWithoutVision(unittest.TestCase):

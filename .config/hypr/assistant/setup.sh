@@ -225,6 +225,13 @@ pull_model() {
   fi
 }
 
+install_context() {  # your machine context: copied from the template once, never overwritten
+  local example="$ASSIST_DIR/agent_context.example.md" mine="$ASSIST_DIR/agent_context.md"
+  [[ -f "$example" && ! -e "$mine" ]] || return 0
+  run cp "$example" "$mine"
+  echo "Created $mine from the template. Edit it to describe your hardware and setup (git-ignored)."
+}
+
 reload_waybar() {
   $DRY_RUN && return
   pgrep -x waybar >/dev/null 2>&1 && pkill -SIGUSR2 waybar 2>/dev/null || true
@@ -250,6 +257,7 @@ fi
 step "Assistant models: chat ${CHAT_MODEL}, vision ${VISION_MODEL:-none}"
 $PACKAGES && install_packages
 write_settings
+install_context
 run rm -f "$DISABLED_MARKER"
 if $SERVICES && $PULL; then
   if start_ollama; then

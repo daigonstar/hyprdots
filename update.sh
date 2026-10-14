@@ -17,6 +17,8 @@ set -euo pipefail
   [[ -f "$HOME/.config/hypr/workspaces.lua" ]] && mv "$HOME/.config/hypr/workspaces.lua" "$HOME/.config/backup/workspaces.lua"
   # Private settings (calendar links) are git-ignored, so git clean -fdx below would delete them
   [[ -f "$HOME/.config/hypr/user_settings.local.toml" ]] && mv "$HOME/.config/hypr/user_settings.local.toml" "$HOME/.config/backup/user_settings.local.toml"
+  # Your machine context for the assistant is git-ignored too (the tracked file is agent_context.example.md)
+  [[ -f "$HOME/.config/hypr/assistant/agent_context.md" ]] && mv "$HOME/.config/hypr/assistant/agent_context.md" "$HOME/.config/backup/agent_context.md"
 
 repo_root="$(cd "$(dirname "$0")" && pwd)"
 cd "$repo_root"
@@ -105,10 +107,10 @@ fi
         mkdir -p "$target"
         # Sync files from repo to user config but exclude monitors.lua/workspaces.lua (and legacy .conf variants)
         if command -v rsync >/dev/null 2>&1; then
-          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' "$source/" "$target/"
+          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' "$source/" "$target/"
         else
           # Fallback: use tar to copy excluding those files
-          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' .) | (cd "$target" && tar xpf -)
+          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' .) | (cd "$target" && tar xpf -)
         fi
         echo "Updated $target from $source (excluded: monitors.conf/lua, workspaces.conf/lua). Local copies (if any) were preserved."
         continue
@@ -156,6 +158,7 @@ fi
   [[ -f "$HOME/.config/backup/monitors.lua" ]] && mv "$HOME/.config/backup/monitors.lua" "$HOME/.config/hypr/monitors.lua"
   [[ -f "$HOME/.config/backup/workspaces.lua" ]] && mv "$HOME/.config/backup/workspaces.lua" "$HOME/.config/hypr/workspaces.lua"
   [[ -f "$HOME/.config/backup/user_settings.local.toml" ]] && mv "$HOME/.config/backup/user_settings.local.toml" "$HOME/.config/hypr/user_settings.local.toml"
+  [[ -f "$HOME/.config/backup/agent_context.md" ]] && mv "$HOME/.config/backup/agent_context.md" "$HOME/.config/hypr/assistant/agent_context.md"
   rmdir "$HOME/.config/backup" 2>/dev/null || true
   
   exit 0
