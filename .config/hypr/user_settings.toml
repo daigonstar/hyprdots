@@ -7,7 +7,7 @@
 # assistant, monitor run or calendar popup opens.
 
 [assistant]
-model = "gpt-oss:20b"       # Ollama model used for chat and tool calling
+model = "huihui_ai/gpt-oss-abliterated:latest"       # Ollama model used for chat and tool calling
 vision_model = "qwen2.5vl:7b"  # model used to read screenshots and attached images
 keep_alive = "30s"          # how long a model stays in VRAM after the last request
 num_ctx = 16384             # context window in tokens (bigger = more VRAM, ~3 GB extra at 16384 on 14b)

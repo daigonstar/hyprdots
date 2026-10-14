@@ -8,7 +8,7 @@ local main_mod = "SUPER"
 
 hl.bind(main_mod .. " + T", hl.dsp.exec_cmd(terminal))
 hl.bind(main_mod .. " + A", hl.dsp.exec_cmd(store))
-hl.bind(main_mod .. " + I", hl.dsp.exec_cmd("/home/robb/hyprdots/.config/hypr/scripts/assistant-toggle.sh"))
+hl.bind(main_mod .. " + C", hl.dsp.exec_cmd("/home/robb/hyprdots/.config/hypr/scripts/assistant-toggle.sh"))
 hl.bind(main_mod .. " + Q", hl.dsp.window.close())
 hl.bind(main_mod .. " + B", hl.dsp.exec_cmd(browser))
 hl.bind(main_mod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
