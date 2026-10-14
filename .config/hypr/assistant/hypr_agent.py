@@ -14,6 +14,7 @@ import datetime
 import email.utils
 import glob
 import html
+import http.client
 import difflib
 import fnmatch
 import ipaddress
@@ -42,7 +43,7 @@ from html.parser import HTMLParser
 import usersettings
 SETTINGS = usersettings.section("assistant", {
     "model": "gpt-oss:20b",
-    "vision_model": "llava",
+    "vision_model": "qwen2.5vl:7b",
     "keep_alive": "30s",
     "num_ctx": 16384,
     "vision_num_ctx": 4096,
@@ -629,45 +630,82 @@ def tool_list_windows():
         "visible_windows": clients
     }, indent=2)
 
+ASSISTANT_CLASS = "com.hyprdots.assistant"  # the scratchpad terminal this agent runs in (see assistant-toggle.sh)
+_ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]+")
+
+def _dispatch(lua):
+    """Runs a Hyprland 0.55+ Lua dispatcher (the old 'focuswindow address:..' syntax no longer parses)."""
+    return hyprctl(f"dispatch {lua}")
+
+def _candidate_windows(clients):
+    """Mapped windows other than the assistant's own terminal, most recently focused first."""
+    wins = [c for c in clients if c.get("mapped", True) and c.get("class") != ASSISTANT_CLASS
+            and _ADDRESS_RE.fullmatch(str(c.get("address", "")))]
+    return sorted(wins, key=lambda c: c.get("focusHistoryID", 99))
+
+def _find_window(clients, query):
+    """Windows matching query by class (best), then by title, best first. Never the assistant's own window."""
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    ranked = []
+    for order, c in enumerate(_candidate_windows(clients)):
+        classes = [str(c.get("class") or "").lower(), str(c.get("initialClass") or "").lower()]
+        titles = [str(c.get("title") or "").lower(), str(c.get("initialTitle") or "").lower()]
+        if q in classes:
+            score = 0
+        elif any(x.startswith(q) for x in classes):
+            score = 1
+        elif any(q in x for x in classes):
+            score = 2
+        elif any(q in x for x in titles):
+            score = 3
+        else:
+            continue
+        ranked.append((score, order, c))
+    return [c for _, _, c in sorted(ranked, key=lambda t: t[:2])]
+
+def _window_label(c):
+    return f"{c.get('class') or '?'} - {str(c.get('title') or '')[:60]} (workspace {c.get('workspace', {}).get('id', '?')})"
+
 def tool_focus_window(window_title_query):
-    """Finds a window by partial title and focuses it."""
-    clients = hypr_json("j/clients")
-    target_address = None
-
-    # Simple fuzzy search for window title
-    for client in clients:
-        if window_title_query.lower() in client['title'].lower():
-            target_address = client['address']
-            break
-
-    if target_address:
-        MUTATED[0] = True
-        result = hyprctl(f"dispatch focuswindow address:{target_address}")
-        if result != "ok":
-            return f"Failed to focus window: {result}"
-        return f"Focused window containing: {window_title_query}"
-    else:
-        return f"Could not find window containing: {window_title_query}"
+    """Finds a window by class or title and focuses it."""
+    matches = _find_window(hypr_json("j/clients"), window_title_query)
+    if not matches:
+        return f"Could not find a window matching: {window_title_query}"
+    target = matches[0]
+    MUTATED[0] = True
+    result = _dispatch(f'hl.dsp.focus({{ window = "address:{target["address"]}" }})')
+    if result != "ok":
+        return f"Failed to focus window: {result}"
+    others = f" Other matches: {'; '.join(_window_label(c) for c in matches[1:4])}." if len(matches) > 1 else ""
+    return f"Focused {_window_label(target)}.{others}"
 
 def tool_move_to_workspace(workspace_id):
-    """Moves active window to a specific workspace."""
+    """Moves the window the user was last using (never the assistant's own terminal) to a workspace."""
     try:
         workspace_id = int(workspace_id)
     except (TypeError, ValueError):
         return f"Invalid workspace id: {workspace_id}"
+    if not 1 <= workspace_id <= 99:
+        return f"Invalid workspace id: {workspace_id} (use 1 to 99)"
+    windows = _candidate_windows(hypr_json("j/clients"))
+    if not windows:
+        return "No window to move."
+    target = windows[0]
     MUTATED[0] = True
-    result = hyprctl(f"dispatch movetoworkspace {workspace_id}")
+    result = _dispatch(f'hl.dsp.window.move({{ workspace = {workspace_id}, window = "address:{target["address"]}" }})')
     if result != "ok":
         return f"Failed to move window: {result}"
-    return f"Moved active window to workspace {workspace_id}"
+    return f"Moved {_window_label(target)} to workspace {workspace_id}"
 
 def tool_toggle_special_workspace():
-    """Opens/Closes the special workspace (scratchpad)."""
+    """Opens/Closes the user's scratchpad (the 'magic' special workspace bound to Super+Ctrl+S)."""
     MUTATED[0] = True
-    result = hyprctl("dispatch togglespecialworkspace")
+    result = _dispatch('hl.dsp.workspace.toggle_special("magic")')
     if result != "ok":
         return f"Failed to toggle special workspace: {result}"
-    return "Toggled special workspace."
+    return "Toggled the scratchpad."
 
 def tool_take_screenshot_and_analyze(question="What is in this image?"):
     """Takes screenshot using 'grim' and asks the vision model about it."""
@@ -868,7 +906,45 @@ class _PublicRedirects(urllib.request.HTTPRedirectHandler):
         _check_public_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
-_web_opener = urllib.request.build_opener(_PublicRedirects)
+def _public_connect(host, port, timeout):
+    """Connects to host:port, checking the addresses at connect time. The address that was checked is the one
+    used, so a DNS answer that changes between the check and the connection (DNS rebinding) cannot reach the LAN."""
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    for info in infos:
+        if not ipaddress.ip_address(info[4][0]).is_global:
+            raise ValueError(f"{host} resolves to a non-public address; blocked")
+    last_error = OSError(f"cannot connect to {host}")
+    for family, kind, proto, _, address in infos:
+        sock = socket.socket(family, kind, proto)
+        sock.settimeout(timeout)
+        try:
+            sock.connect(address)
+            return sock
+        except OSError as e:
+            sock.close()
+            last_error = e
+    raise last_error
+
+class _PublicHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = _public_connect(self.host, self.port, self.timeout)
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        sock = _public_connect(self.host, self.port, self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+class _PublicHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_PublicHTTPConnection, req)
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PublicHTTPSConnection, req, context=self._context)
+
+# With a proxy configured the proxy resolves the name, so the connection cannot be pinned here.
+_web_opener = (urllib.request.build_opener(_PublicRedirects) if urllib.request.getproxies()
+               else urllib.request.build_opener(_PublicRedirects, _PublicHTTPHandler, _PublicHTTPSHandler))
 
 class WebSkip(Exception):
     """A page that was reached but cannot be read (unsupported type, empty PDF, ...)."""
@@ -2790,9 +2866,9 @@ TOOL_SCHEMAS = [
     _tool("forget", "Deletes saved notes containing the given text. Use when the user says a note is wrong, outdated or should be forgotten.",
           {"text": _str("Distinctive words from the note(s) to delete")}, ["text"]),
     _tool("list_windows", "Returns JSON of open windows and the active workspace."),
-    _tool("focus_window", "Finds a window by title and focuses it.",
-          {"window_title_query": _str("Part of the window title or class")}, ["window_title_query"]),
-    _tool("move_to_workspace", "Moves the active window to a workspace.",
+    _tool("focus_window", "Finds a window by app class or title (class matches win) and focuses it. Never picks the assistant's own terminal.",
+          {"window_title_query": _str("App class or part of the window title, e.g. firefox or Steam")}, ["window_title_query"]),
+    _tool("move_to_workspace", "Moves the window the user was last using (not the assistant's own terminal) to a workspace. Use focus_window first to pick a different window.",
           {"workspace_id": {"type": "integer", "description": "Workspace number"}}, ["workspace_id"]),
     _tool("toggle_special_workspace", "Toggles the scratchpad workspace."),
     _tool("screenshot_analysis", "Takes a screenshot and asks a vision model about it. Use when the user asks what is on screen.",
