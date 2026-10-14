@@ -69,7 +69,8 @@ SETTINGS: list[Setting] = [
             "The model that answers you and calls tools. It must support tool calling. gpt-oss is what the assistant was tuned for; "
             "bigger models are smarter but need more GPU memory.", group="Models"),
     Setting(ASSISTANT, "assistant", "vision_model", "Vision model", "vision_model", "qwen2.5vl:7b",
-            "Reads screenshots and pasted images. Choose None to switch image features off (no screenshot tool, no /paste).", group="Models"),
+            "Reads screenshots and pasted images. 'Same as chat model' works when your chat model can see images (qwen3.5 can) and saves "
+            "loading a second model. Choose None to switch image features off (no screenshot tool, no /paste).", group="Models"),
     Setting(ASSISTANT, "assistant", "think_effort", "Thinking effort", "choice", "medium",
             "How hard the model thinks before answering. Higher is slower but better on hard problems.",
             choices=_c(("low", "Low - quick answers"), ("medium", "Medium"), ("high", "High - slowest, most careful")), group="Behaviour"),

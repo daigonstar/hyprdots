@@ -11,7 +11,7 @@
 [assistant]
 # The model names are normally chosen by assistant/setup.sh and stored in user_settings.local.toml.
 model = "qwen3:14b"       # Ollama model used for chat and tool calling
-vision_model = "qwen2.5vl:7b"  # reads screenshots and attached images; "" turns image features off
+vision_model = "qwen2.5vl:7b"  # reads screenshots and images: a model name, "same" (the chat model reads images itself, e.g. qwen3.5), or "" for none
 keep_alive = "30s"          # how long a model stays in VRAM after the last request
 num_ctx = 16384             # context window in tokens (bigger = more VRAM, ~3 GB extra at 16384 on 14b)
 vision_num_ctx = 4096       # context window for the vision model

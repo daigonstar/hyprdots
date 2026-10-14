@@ -6,7 +6,7 @@
 # Usage: setup.sh                      interactive menu (recommends a tier for your GPU)
 #        setup.sh --none               turn the assistant off (nothing is deleted)
 #        setup.sh --tier full|balanced|light|auto
-#        setup.sh --model NAME [--vision-model NAME|none]
+#        setup.sh --model NAME [--vision-model NAME|same|none]
 # Options: --no-pull  --no-packages  --no-services  --yes  --dry-run
 # Unattended: HYPR_ASSISTANT=none|auto|full|balanced|light
 #
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
     --none) TIER=none ;;
     --tier) TIER="${2:?--tier needs a value}"; shift ;;
     --model) MODEL="${2:?--model needs a name}"; TIER=custom; shift ;;
-    --vision-model) VISION="${2:?--vision-model needs a name or 'none'}"; VISION_SET=true; shift ;;
+    --vision-model) VISION="${2:?--vision-model needs a name, 'same' or 'none'}"; VISION_SET=true; shift ;;
     --no-pull) PULL=false ;;
     --no-packages) PACKAGES=false ;;
     --no-services) SERVICES=false ;;
@@ -125,7 +125,7 @@ resolve_choice() {
         read -rp "Chat model (an Ollama name, e.g. qwen3:8b): " CHAT_MODEL
       fi
       if ! $VISION_SET && interactive; then
-        read -rp "Vision model for screenshots, or Enter for none (e.g. qwen2.5vl:3b): " VISION
+        read -rp "Vision model for screenshots: a model name, 'same' if the chat model can see images (e.g. qwen3.5), or Enter for none: " VISION
         VISION_SET=true
       fi
       ;;

@@ -153,6 +153,8 @@ class StoreTests(unittest.TestCase):
             self.store.stage(self.s("hyprland.sensitivity"), "5")
         self.store.stage(ctx, "12000")                       # custom values are allowed for context
         self.assertEqual(self.store.get(ctx)[0], 12000)
+        self.store.stage(self.s("assistant.vision_model"), " SAME ")
+        self.assertEqual(self.store.get(self.s("assistant.vision_model"))[0], "same")
         self.store.stage(self.s("assistant.vision_model"), "none")
         self.assertEqual(self.store.get(self.s("assistant.vision_model"))[0], "")
         self.store.stage(self.s("monitor.units_ignore"), "a*, b ,, c")

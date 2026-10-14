@@ -68,7 +68,7 @@ The assistant is tuned for gpt-oss; smaller models are less reliable with tools.
     ~/.config/hypr/assistant/setup.sh --model qwen3:14b --vision-model none
     HYPR_ASSISTANT=none ./hyprinstall.sh              # unattended install choice
 
-Your choice is stored in `~/.config/hypr/user_settings.local.toml` (git-ignored). Without a vision model the screenshot and `/paste` features switch themselves off. The background health monitor is separate and needs no model.
+Your choice is stored in `~/.config/hypr/user_settings.local.toml` (git-ignored). Without a vision model the screenshot and `/paste` features switch themselves off. If your chat model can see images (qwen3.5 can), set the vision model to **Same as chat model** in the settings app (or `vision_model = "same"`): one model does both, so there is no second download and nothing extra to load. The background health monitor is separate and needs no model.
 
 Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_context.md` (hardware, distribution, package manager, things that are deliberately odd). `setup.sh` creates it from the tracked template `agent_context.example.md` the first time and never overwrites it; it is git-ignored, and `update.sh` preserves it.
 

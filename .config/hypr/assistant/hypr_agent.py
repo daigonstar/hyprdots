@@ -66,10 +66,19 @@ MODEL = SETTINGS["model"]
 VISION_MODEL = (SETTINGS["vision_model"] or "").strip()
 if VISION_MODEL.lower() in ("none", "off", "false"):
     VISION_MODEL = ""
+# "same" means the chat model reads images itself (qwen3.5 and other multimodal models do), so no second model is loaded
+VISION_SAME = VISION_MODEL.lower() == "same"
 VISION_ENABLED = bool(VISION_MODEL)  # no vision model: screenshot and image features are switched off
 KEEP_ALIVE = SETTINGS["keep_alive"]
 NUM_CTX = SETTINGS["num_ctx"]
 VISION_NUM_CTX = SETTINGS["vision_num_ctx"]
+
+def vision_model():
+    return MODEL if VISION_SAME else VISION_MODEL
+
+def vision_num_ctx():
+    """Image calls to the chat model use the chat context size: a different one makes Ollama reload the model."""
+    return NUM_CTX if (VISION_SAME or vision_model() == MODEL) else VISION_NUM_CTX
 # Path to save screenshots before sending to vision model
 SCREENSHOT_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hypr_agent_screen.png")
 
@@ -399,7 +408,8 @@ def _banner_text():
         dim("  Your Hyprland PC helper. Ask in plain English."),
         "",
         _model_line("chat  ", MODEL),
-        _model_line("vision", VISION_MODEL) if VISION_ENABLED else dim("  ○ vision off · no image model set up"),
+        (dim("  ● vision same model as chat") if VISION_SAME else _model_line("vision", VISION_MODEL)) if VISION_ENABLED
+        else dim("  ○ vision off · no image model set up"),
         dim(f"  models unload from memory after {KEEP_ALIVE}"),
         approvals,
         reasoning,
@@ -603,8 +613,9 @@ def _reasoning_chat(model, messages, tools, options, spinner):
                 'prompt_eval_count': _get(last, 'prompt_eval_count'), 'eval_count': _get(last, 'eval_count')}
     raise RuntimeError(f"{model} rejected every thinking mode")
 
-def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=False):
-    """One model call. reason=True streams it and shows the model's reasoning live."""
+def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=False, think=None):
+    """One model call. reason=True streams it and shows the model's reasoning live.
+    think=False asks a thinking model to answer straight away (used for image reading, where it only adds delay)."""
     spinner = Spinner(label)
     with spinner:
         for sampling in (SAMPLING, LOOP_RETRY_SAMPLING):
@@ -612,7 +623,13 @@ def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=Fal
             try:
                 if reason:
                     return _reasoning_chat(model, messages, tools, options, spinner)
-                return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options)
+                extra = {} if think is None else {"think": think}
+                try:
+                    return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options, **extra)
+                except ollama.ResponseError as e:
+                    if extra and "think" in str(e).lower():  # a model that rejects the option: ask again without it
+                        return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options)
+                    raise
             except ollama.ResponseError as e:
                 if "repeat limit" not in str(e) or sampling is LOOP_RETRY_SAMPLING:
                     raise
@@ -733,18 +750,18 @@ VISION_SUFFIX = ("\n\nAnswer the question first. Then describe the image thoroug
 def analyze_image(path, question, label="Analyzing image", source="image"):
     """Asks the vision model about an image file and remembers its answer for the text model."""
     try:
-        response = chat(VISION_MODEL, [
+        response = chat(vision_model(), [
             {
                 'role': 'user',
                 'content': question + VISION_SUFFIX,
                 'images': [path]
             }
-        ], label, num_ctx=VISION_NUM_CTX)
+        ], label, num_ctx=vision_num_ctx(), think=False)
         text = (response['message']['content'] or "").strip()
     except Exception as e:
-        return f"Vision Analysis Failed (is {VISION_MODEL} pulled?): {str(e)}"
+        return f"Vision Analysis Failed (is {vision_model()} pulled, and can it read images?): {str(e)}"
     if not text:
-        return f"Vision Analysis Failed: {VISION_MODEL} returned no description."
+        return f"Vision Analysis Failed: {vision_model()} returned no description."
     LAST_IMAGE[0] = path
     kept = text if len(text) <= IMAGE_NOTE_CHARS else text[:IMAGE_NOTE_CHARS] + "\n...[description truncated]"
     IMAGE_NOTES.append({"when": time.strftime("%H:%M"), "source": source, "question": question, "text": kept})
@@ -1648,7 +1665,7 @@ def build_context():
         parts.append(f"LATEST BACKGROUND HEALTH CHECK (mention relevant items if the user asks about problems or how the PC is doing):\n{health}")
     if IMAGE_NOTES:
         shown = "\n\n".join(f"[{n['when']}, {n['source']}, asked: {n['question']}]\n{n['text']}" for n in IMAGE_NOTES)
-        parts.append(f"IMAGES SHARED THIS SESSION, newest last. You cannot see images yourself; this is what the vision model ({VISION_MODEL}) reported. "
+        parts.append(f"IMAGES SHARED THIS SESSION, newest last. You cannot see images yourself; this is what the vision model ({vision_model()}) reported. "
                      f"Treat it as what you saw and use it to answer follow-up questions. If you need a detail it does not cover, call ask_about_image.\n{shown}")
     return "\n\n".join(parts)
 

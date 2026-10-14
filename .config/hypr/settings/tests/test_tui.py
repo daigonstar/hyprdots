@@ -386,6 +386,28 @@ class Models(TuiBase):
         self.assertEqual(self.store.get(schema.BY_ID["assistant.vision_model"]), ("", "changed"))
         self.assertIn("None (image features off)", self.screen())
 
+    def test_same_as_chat_model_is_offered_first_when_the_chat_model_can_see(self):
+        models.capabilities.side_effect = lambda n: {"tools", "vision", "thinking"} if n == "qwen3:14b" else {"tools"}
+        self.select("Vision model")
+        self.app.handle_key("enter")
+        self.assertEqual([v for v, _, _ in self.app.popup.items][:2], ["same", "none"])
+        self.assertIn("Same as chat model (qwen3:14b)", self.screen())
+        self.assertIn("one model does both", self.screen())
+        self.app.handle_key("enter")
+        self.assertEqual(self.store.get(schema.BY_ID["assistant.vision_model"]), ("same", "changed"))
+        self.assertIn("Same as chat model", self.screen())
+        self.app.handle_key("c-s")
+        self.assertIn('vision_model = "same"', (self.dir / "user_settings.local.toml").read_text())
+
+    def test_same_as_chat_model_warns_when_the_chat_model_cannot_see(self):
+        models.capabilities.side_effect = lambda n: {"tools", "thinking"}
+        self.select("Vision model")
+        self.app.handle_key("enter")
+        items = [v for v, _, _ in self.app.popup.items]
+        self.assertEqual(items[:2], ["none", "same"])                       # not the first choice
+        self.app.popup.index = items.index("same")
+        self.assertIn("WARNING: qwen3:14b does not report vision support", self.screen())
+
     def test_unreachable_ollama_is_explained_in_the_picker(self):
         models.installed.return_value = ([], "Ollama is not reachable at http://x. Start it with: systemctl start ollama")
         self.select("Chat model")

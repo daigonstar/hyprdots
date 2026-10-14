@@ -111,7 +111,7 @@ class Store:
         if k in ("model", "vision_model"):
             if not text and k == "model":
                 raise ValueError("a chat model is required")
-            return "" if text.lower() == "none" else text
+            return "" if text.lower() == "none" else ("same" if text.lower() == "same" else text)
         if k == "choice" and not s.allow_custom and s.choices and text not in {str(v) for v, _ in s.choices}:
             raise ValueError("pick one of the listed options")
         if k == "text" and s.key in {"terminal", "file_manager", "browser", "store"} and not text:

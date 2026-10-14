@@ -206,6 +206,62 @@ class Timeouts(unittest.TestCase):
         self.assertIn("timed out", result)
 
 
+class VisionSettings(unittest.TestCase):
+    def setUp(self):
+        for name, value in (("VISION_SAME", False), ("VISION_MODEL", "qwen2.5vl:7b"), ("MODEL", "qwen3.5:9b"),
+                            ("NUM_CTX", 16384), ("VISION_NUM_CTX", 4096), ("VISION_ENABLED", True)):
+            patcher = mock.patch.object(a, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_separate_model_keeps_its_own_small_context(self):
+        self.assertEqual((a.vision_model(), a.vision_num_ctx()), ("qwen2.5vl:7b", 4096))
+
+    def test_same_uses_the_chat_model_and_its_context(self):
+        with mock.patch.object(a, "VISION_SAME", True):
+            self.assertEqual((a.vision_model(), a.vision_num_ctx()), ("qwen3.5:9b", 16384))
+            with mock.patch.object(a, "MODEL", "other:1b"):                  # follows a change of chat model
+                self.assertEqual(a.vision_model(), "other:1b")
+
+    def test_naming_the_chat_model_explicitly_also_avoids_a_reload(self):
+        with mock.patch.object(a, "VISION_MODEL", "qwen3.5:9b"):
+            self.assertEqual(a.vision_num_ctx(), 16384)
+
+    def test_image_calls_skip_thinking_and_use_the_right_context(self):
+        seen = {}
+
+        def fake_chat(model, messages, label="x", **kwargs):
+            seen.update(model=model, **kwargs)
+            return {"message": {"content": "A dark window with an error."}}
+        with mock.patch.object(a, "chat", fake_chat), mock.patch.object(a, "VISION_SAME", True):
+            out = a.analyze_image("/tmp/x.png", "what is this?")
+        self.assertTrue(out.startswith("Vision Analysis: A dark window"))
+        self.assertEqual((seen["model"], seen["num_ctx"], seen["think"]), ("qwen3.5:9b", 16384, False))
+
+    def test_chat_retries_without_think_when_a_model_rejects_it(self):
+        calls = []
+
+        def fake_ollama_chat(**kwargs):
+            calls.append(kwargs)
+            if "think" in kwargs:
+                raise a.ollama.ResponseError("this model does not support thinking", 400)
+            return {"message": {"content": "ok"}}
+        with mock.patch.object(a.ollama, "chat", fake_ollama_chat):
+            result = a.chat("m", [{"role": "user", "content": "hi"}], think=False)
+        self.assertEqual(result["message"]["content"], "ok")
+        self.assertEqual(["think" in c for c in calls], [True, False])
+
+    def test_other_errors_are_not_swallowed(self):
+        with mock.patch.object(a.ollama, "chat", side_effect=a.ollama.ResponseError("model not found", 404)):
+            with self.assertRaises(a.ollama.ResponseError):
+                a.chat("m", [], think=False)
+
+    def test_chat_without_think_does_not_send_the_option(self):
+        with mock.patch.object(a.ollama, "chat", return_value={"message": {"content": "x"}}) as call:
+            a.chat("m", [])
+        self.assertNotIn("think", call.call_args.kwargs)
+
+
 CLIENTS = [
     {"address": "0x1", "class": "com.hyprdots.assistant", "title": "Hyprland Assistant", "focusHistoryID": 0,
      "workspace": {"id": -98}},
