@@ -16,12 +16,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# The agent reads $HOME at import time, so point it at a scratch directory first.
-FAKE_HOME = tempfile.mkdtemp(prefix="hypr-agent-home-")
-atexit.register(shutil.rmtree, FAKE_HOME, ignore_errors=True)
-os.environ["HOME"] = FAKE_HOME
-os.environ["XDG_STATE_HOME"] = os.path.join(FAKE_HOME, "state")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _sandbox  # noqa: E402,F401  (must come before hypr_agent)
 import hypr_agent as a  # noqa: E402
 
 HOME = a.HOME
@@ -29,6 +25,7 @@ HOME = a.HOME
 
 def write(rel, text=""):
     path = Path(HOME) / rel
+    assert str(path).startswith(tempfile.gettempdir()), f"refusing to write outside the sandbox: {path}"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return str(path)

@@ -776,7 +776,7 @@ def tool_system_info(category="all"):
         if category in ("disk", "storage", "all"):
             sections["Disk"] = _run(["df", "-h", "-x", "tmpfs", "-x", "devtmpfs", "-x", "efivarfs"])
         if category in ("os", "kernel", "all"):
-            pretty = next((l.split("=", 1)[1].strip('"') for l in open("/etc/os-release") if l.startswith("PRETTY_NAME=")), "unknown")
+            pretty = _os_name()
             sections["OS"] = f"{pretty}\nKernel: {_run(['uname', '-r'])}"
         if category in ("uptime", "all"):
             sections["Uptime"] = _run(["uptime", "-p"])
@@ -2189,9 +2189,9 @@ def _short_error(e):
     if isinstance(e, urllib.error.HTTPError):
         return f"HTTP {e.code}"
     if isinstance(e, urllib.error.URLError):
-        return f"connection problem: {str(e.reason)[:80]}"
+        return f"connection problem: {URL_RE.sub('[link]', str(e.reason))[:80]}"
     if isinstance(e, ValueError):
-        return str(e)[:140]
+        return URL_RE.sub("[link]", str(e))[:140]
     return type(e).__name__  # never include the URL: private feed links are secrets
 
 def _source_events(src, notes):

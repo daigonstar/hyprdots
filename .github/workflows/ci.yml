@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"   # weekly: catches packages that were renamed or removed from the AUR
+
+jobs:
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check, then shellcheck (errors only)
+        run: |
+          # Every tracked script that starts with a shell shebang
+          files=$(git ls-files | grep -E '\.sh$|^bash/' | while read -r f; do
+            head -1 "$f" | grep -qE '^#!.*(bash|sh)' && echo "$f"
+          done)
+          fail=0
+          for f in $files; do bash -n "$f" || fail=1; done
+          # category-mode.sh uses coproc, which shellcheck cannot parse (bash -n above still checks it)
+          shellcheck -S error $(echo "$files" | grep -v category-mode.sh) || fail=1
+          exit $fail
+
+  tests:
+    name: Assistant tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ollama prompt_toolkit
+      - name: Unit tests
+        working-directory: .config/hypr/assistant
+        run: python -m unittest discover -s tests -v
+
+  packages:
+    name: Install lists still exist
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed git curl python
+      - uses: actions/checkout@v4
+      - run: ./install/check-packages.sh
