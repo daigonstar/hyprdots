@@ -17,7 +17,7 @@
             "drawer": {
                 "transition-duration": 600,
                 "transition-to-left": true,
-                "click-to-reveal": true
+                "click-to-reveal": false
             },
             "modules": ["custom/trayicon","tray","cpu","memory","temperature"]
         },
@@ -27,13 +27,11 @@
             "drawer": {
                 "transition-duration": 600,
                 "transition-to-left": false,
-                "click-to-reveal": true
+                "click-to-reveal": false
             },
             "modules": [
                 "custom/settingsicon",
-                "custom/display",
                 "custom/wallpaper",
-                "custom/gtk",
                 "custom/drive",
                 "custom/keys",
                 "custom/userconfig"
@@ -164,11 +162,11 @@
             "escape": true
         },
         "custom/trayicon": {
-            "format": "󱊔",
+            "format": "󰅁",
             "tooltip": false
         },
         "custom/settingsicon": {
-            "format": "",
+            "format": "󰅂",
             "tooltip": false
         },
         "custom/endpoint":{
@@ -249,27 +247,12 @@
         "on-click-right": "swaync-client -d -sw",
         "escape": true
         },
-        "custom/display": {
-            "format": "󰍹",
-            "exec": "echo '{\"tooltip\": \"Display settings (nwg-displays)\"}'",
-            "return-type": "json",
-            "interval": "once",
-            "on-click": "nwg-displays"
-        },
-
         "custom/wallpaper": {
             "format": "󰋩",
             "exec": "echo '{\"tooltip\": \"Wallpaper picker\"}'",
             "return-type": "json",
             "interval": "once",
             "on-click": "~/.config/rofi/wallpaper/wallpaper.sh"
-        },
-        "custom/gtk": {
-            "format": "󰏘",
-            "exec": "echo '{\"tooltip\": \"GTK theme (nwg-look)\"}'",
-            "return-type": "json",
-            "interval": "once",
-            "on-click": "nwg-look"
         },
         "custom/drive": {
             "format": "󰋊",
@@ -281,7 +264,7 @@
 
         "custom/userconfig": {
             "format": "󰒓",
-            "exec": "echo '{\"tooltip\": \"Settings: assistant models and health monitor, calendars, Hyprland look and default apps\"}'",
+            "exec": "echo '{\"tooltip\": \"Settings: assistant, calendars, cloud drives, displays, GTK look, Hyprland, keybinds and default apps\"}'",
             "return-type": "json",
             "interval": "once",
             "on-click": "ghostty -e ~/.config/hypr/scripts/settings.sh"

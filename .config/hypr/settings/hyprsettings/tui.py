@@ -17,7 +17,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import models
+import copy
+
+from . import cloud, displays, gtktheme, mimeapps, models
 from .schema import BY_ID, PAGE_INTRO, PAGES, Setting, for_page
 from .store import RESET, STARTUP_ID, Store
 
@@ -41,10 +43,10 @@ def assistant_disabled() -> bool:
 
 @dataclass
 class Row:
-    kind: str                     # header | setting | startup | source | action
+    kind: str                     # header | note | setting | startup | source | keybind | cloud | action
     label: str = ""
     value: str = ""
-    tag: str = ""                 # default | yours | changed
+    tag: str = ""                 # default | yours | changed | connected | failed | off
     setting: Setting | None = None
     ref: Any = None
     help: str = ""
@@ -72,6 +74,7 @@ class Popup:
     progress: float | None = None
     status: str = ""
     cancel: threading.Event | None = None
+    secret: bool = False         # input: show dots instead of what is typed (passwords)
 
 
 class App:
@@ -89,6 +92,10 @@ class App:
         self.invalidate: Callable[[], None] = lambda: None
         self.exit_hook: Callable[[str], None] | None = None
         self.notice_error = False
+        self._mons: list[dict] | None = None
+        self._gtk: dict | None = None
+        self._apps: dict | None = None
+        self._revert: threading.Timer | None = None
 
     # ---- rows -----------------------------------------------------------------------------------------------
     def rows(self) -> list[Row]:
@@ -109,6 +116,16 @@ class App:
                            help="Paste the private iCal link (Google Calendar: Settings > your calendar > Integrate calendar > "
                                 "Secret address in iCal format), or a path to a .ics file or folder."))
             return out
+        if page == "Cloud drives":
+            return self._cloud_rows(out)
+        if page == "Displays":
+            return self._display_rows(out)
+        if page == "Appearance":
+            return self._gtk_rows(out)
+        if page == "File types":
+            return self._mime_rows(out)
+        if page == "Keybinds":
+            return self._keybind_rows(out)
         last_group = None
         for s in for_page(page):
             if s.group and s.group != last_group:
@@ -135,6 +152,315 @@ class App:
             out.append(Row("header", "Files"))
             out.append(Row("action", "Open the raw settings files...", ref="edit_files",
                            help="Opens user_settings.toml (shared defaults) and user_settings.local.toml (yours) in your editor."))
+        return out
+
+    def _keybind_rows(self, out: list[Row]) -> list[Row]:
+        binds = self.store.keybind_rows()
+        out.append(Row("action", "? How to edit or add keys", ref="keybind_help",
+                       help="Press Enter for a short guide: changing a key here, and adding a brand new keybind."))
+        out.append(Row("note", ""))
+        if not binds:
+            out.append(Row("note", f"No keybinds found. keybinds.lua needs its KEYBINDS-BEGIN list in {self.store.dir}."))
+            return out
+        last = None
+        for b in binds:
+            if b["group"] and b["group"] != last:
+                out.append(Row("header", b["group"]))
+                last = b["group"]
+            keys, source = self.store.get_keybind(b)
+            out.append(Row("keybind", b["label"], "(unbound)" if keys == "none" else keys, source, ref=b["id"],
+                           help=f"Enter to change. Default: {b['keys']}. r puts the default back. Takes effect when Hyprland reloads."))
+        return out
+
+    # ---- displays (applied live, like the cloud drives) -----------------------------------------------------
+    def monitors(self) -> list[dict]:
+        if self._mons is None:
+            self._mons = displays.read()
+        return self._mons
+
+    @staticmethod
+    def _describe_display(m: dict) -> str:
+        if m["disabled"]:
+            return "turned off"
+        turn = dict(displays.TRANSFORMS).get(m["transform"], "")
+        extra = f", {turn.split(' (')[0].lower()}" if m["transform"] else ""
+        return f"{m['width']}x{m['height']} @ {m['refresh']:.0f} Hz, scale {m['scale']:g}, at {m['x']},{m['y']}{extra}"
+
+    def _display_rows(self, out: list[Row]) -> list[Row]:
+        mons = self.monitors()
+        if not mons:
+            out.append(Row("note", "No screens found. Hyprland has to be running to change them here."))
+        else:
+            out.append(Row("header", "Your screens (Enter to change one)"))
+        for m in mons:
+            label = m["name"] + (f"  {m['description']}" if m["description"] else "")
+            out.append(Row("display", label if len(label) <= 27 else label[:26] + "…",self._describe_display(m), "off" if m["disabled"] else "default", ref=m["name"],
+                           help="Enter to change the resolution, refresh rate, scale, rotation or position. Changes apply at once and ask you to confirm."))
+        out.append(Row("action", "Refresh", ref="displays_refresh", help="Reads the screens from Hyprland again."))
+        return out
+
+    def display_menu(self, name: str) -> None:
+        m = next((x for x in self.monitors() if x["name"] == name), None)
+        if not m:
+            return
+        if m["disabled"]:
+            items = [("enable", "Turn this screen on", "")]
+        else:
+            items = [("mode", "Resolution and refresh rate", f"{m['width']}x{m['height']} @ {m['refresh']:.0f} Hz"),
+                     ("scale", "Scale (size of text and windows)", f"{m['scale']:g}"),
+                     ("position", "Position", f"{m['x']},{m['y']}"),
+                     ("rotate", "Rotation", dict(displays.TRANSFORMS).get(m["transform"], "").split(" (")[0]),
+                     ("vrr", "Variable refresh rate (FreeSync / G-Sync)", "on" if m["vrr"] else "off")]
+            if len([x for x in self.monitors() if not x["disabled"]]) > 1:
+                items.append(("disable", "Turn this screen off", ""))
+        self.popup = Popup("choose", m["name"], [m["description"] or "Screen"], items, 0, on_select=lambda v: self._display_step(name, v))
+
+    def _display_step(self, name: str, what: str) -> None:
+        m = next(x for x in self.monitors() if x["name"] == name)
+        if what == "mode":
+            res = displays.resolutions(m["modes"])
+            items = [((w, h), f"{w}x{h}", "current" if (w, h) == (m["width"], m["height"]) else "") for w, h in res]
+            index = next((i for i, it in enumerate(items) if it[0] == (m["width"], m["height"])), 0)
+
+            def picked(r):
+                rates = displays.refresh_rates(m["modes"], r)
+                cur = m["refresh"] if r == (m["width"], m["height"]) else None
+                rows = [(x, f"{x:.2f} Hz".replace(".00 Hz", " Hz"), "current" if cur is not None and abs(x - cur) < 0.05 else "") for x in rates]
+                self.popup = Popup("choose", f"Refresh rate at {r[0]}x{r[1]}", ["Higher is smoother. Your screen and cable decide what is offered."],
+                                   rows, 0, on_select=lambda x: self._display_change(name, width=r[0], height=r[1], refresh=x))
+            self.popup = Popup("choose", "Resolution", ["Only modes your screen supports are listed."], items, index, on_select=picked)
+        elif what == "scale":
+            items = [(s, f"{s:g}", "current" if abs(s - m["scale"]) < 0.01 else "") for s in displays.SCALES]
+            index = next((i for i, it in enumerate(items) if it[2]), 0)
+            self.popup = Popup("choose", "Scale", ["1 is normal size. 1.5 or 2 makes everything bigger on a high-resolution screen."], items, index,
+                               on_select=lambda s: self._display_change(name, scale=s))
+        elif what == "rotate":
+            items = [(v, label, "current" if v == m["transform"] else "") for v, label in displays.TRANSFORMS]
+            self.popup = Popup("choose", "Rotation", [], items, m["transform"] if m["transform"] < 4 else 0,
+                               on_select=lambda v: self._display_change(name, transform=v))
+        elif what == "vrr":
+            self._display_change(name, vrr=not m["vrr"])
+        elif what == "disable":
+            self.confirm("Turn off this screen?", [f"{name} goes dark and its windows move to the other screen."], "yn",
+                         lambda k: k == "y" and self._display_change(name, disabled=True))
+        elif what == "enable":
+            self._display_change(name, disabled=False)
+        elif what == "position":
+            others = [x for x in self.monitors() if x["name"] != name and not x["disabled"]]
+            items = [((x["name"], side), f"{side.capitalize()} of {x['name']}", "") for x in others for side in ("right", "left", "above", "below")]
+            items.append(("__type__", "Type an exact position...", f"now {m['x']},{m['y']}"))
+
+            def picked(v):
+                if v == "__type__":
+                    def got(text):
+                        try:
+                            xs, ys = (int(p) for p in text.replace("x", ",").split(","))
+                        except ValueError:
+                            raise ValueError("enter two numbers like 2560,0") from None
+                        self._display_change(name, x=xs, y=ys)
+                    return self.ask("Position (x,y in pixels)", f"{m['x']},{m['y']}", got,
+                                    ["Top-left corner of this screen on the shared desktop. 0,0 is the top-left of the first screen."])
+                other = next(x for x in others if x["name"] == v[0])
+                x, y = displays.place_beside(m, other, v[1])
+                self._display_change(name, x=x, y=y)
+            self.popup = Popup("choose", "Position", ["Place this screen next to another one."], items, 0, on_select=picked)
+
+    def _display_change(self, name: str, **edits) -> None:
+        before = copy.deepcopy(self.monitors())
+        after = copy.deepcopy(before)
+        m = next(x for x in after if x["name"] == name)
+        if "width" in edits:
+            m.update(width=edits["width"], height=edits["height"], refresh=edits["refresh"])
+        for key in ("scale", "transform", "vrr", "x", "y"):
+            if key in edits:
+                m[key] = edits[key]
+        if "disabled" in edits:
+            m["disabled"] = edits["disabled"]
+            if not edits["disabled"]:
+                if not m["width"] and m["modes"]:
+                    m["width"], m["height"], m["refresh"] = displays.parse_mode(m["modes"][0])
+                live = [x for x in after if not x["disabled"] and x is not m]
+                if live:
+                    right = max(live, key=lambda x: x["x"])
+                    m["x"], m["y"] = displays.place_beside(m, right, "right")
+        if "x" not in edits:
+            displays.resolve_overlaps(after, name)
+        problem = displays.overlaps(after)
+        if problem:
+            return self.message("Screens would overlap", [problem])
+        displays.normalize_positions(after)
+        ok, why = displays.apply(after)
+        if not ok:
+            displays.apply(before)
+            self._mons = None
+            return self.message("Hyprland did not accept that", [why])
+        self._mons = None
+        fresh = self.monitors()
+        popup = Popup("confirm", "Keep these screen settings?", ["Press y to keep them. Anything else, or waiting 10 seconds, puts them back."],
+                      options="yn")
+
+        def revert(message: str) -> None:
+            displays.apply(before)
+            self._mons = None
+            self.notice, self.notice_error = message, False
+
+        def timed_out() -> None:
+            if self.popup is popup:
+                self.popup = None
+                revert("No answer, so the previous screen settings were restored.")
+                self.invalidate()
+
+        def answer(k: str) -> None:
+            if self._revert:
+                self._revert.cancel()
+            if k == "y":
+                try:
+                    displays.write(self.store.dir / "monitors.lua", fresh)
+                    self.notice, self.notice_error = "Screen settings applied and saved.", False
+                except OSError as e:
+                    self.notice, self.notice_error = f"Applied, but could not save monitors.lua: {e}", True
+            else:
+                revert("Screen settings put back.")
+        popup.on_confirm = answer
+        self.popup = popup
+        self._revert = threading.Timer(10, timed_out)
+        self._revert.daemon = True
+        self._revert.start()
+
+    # ---- GTK look (applied live) ----------------------------------------------------------------------------
+    GTK_ROWS = [("theme", "Theme", "Window and button style for GTK apps."),
+                ("icons", "Icons", "Icon set used in file managers and dialogs."),
+                ("cursor", "Mouse cursor", "Pointer theme."),
+                ("cursor_size", "Cursor size", "Pointer size in pixels (24 is normal)."),
+                ("font", "Font", "Font family for GTK apps."),
+                ("font_size", "Font size", "Text size in points (11 is normal)."),
+                ("dark", "Prefer dark mode", "Asks apps that support it to use their dark style.")]
+
+    def gtk_now(self) -> dict:
+        if self._gtk is None:
+            self._gtk = gtktheme.current()
+        return self._gtk
+
+    def _gtk_rows(self, out: list[Row]) -> list[Row]:
+        now = self.gtk_now()
+        font, size = gtktheme.font_parts(now["font"])
+        shown = {**now, "font": font, "font_size": size, "dark": "on" if now["dark"] else "off"}
+        out.append(Row("header", "GTK look (Enter to change)"))
+        for key, label, help_ in self.GTK_ROWS:
+            out.append(Row("gtk", label, str(shown[key]), "default", ref=key, help=help_ + " Applies at once."))
+        out.append(Row("action", "Refresh", ref="gtk_refresh", help="Reads the current look again."))
+        return out
+
+    def gtk_edit(self, key: str) -> None:
+        now = self.gtk_now()
+        font, size = gtktheme.font_parts(now["font"])
+        if key == "dark":
+            return self._gtk_apply(dark=not now["dark"])
+        if key == "font_size":
+            def got(text):
+                try:
+                    value = float(text)
+                except ValueError:
+                    raise ValueError("enter a number like 11") from None
+                if not 6 <= value <= 40:
+                    raise ValueError("choose between 6 and 40")
+                self._gtk_apply(font=f"{font} {value:g}")
+            return self.ask("Font size (points)", size, got)
+        if key == "cursor_size":
+            def got(text):
+                try:
+                    value = int(text)
+                except ValueError:
+                    raise ValueError("enter a whole number like 24") from None
+                if not 8 <= value <= 128:
+                    raise ValueError("choose between 8 and 128")
+                self._gtk_apply(cursor_size=value)
+            return self.ask("Cursor size (pixels)", str(now["cursor_size"]), got)
+        names = {"theme": gtktheme.themes, "icons": gtktheme.icon_themes, "cursor": gtktheme.cursor_themes, "font": gtktheme.fonts}[key]()
+        current = font if key == "font" else now[key]
+        if current not in names:
+            names.insert(0, current)
+        items = [(n, n, "current" if n == current else "") for n in names]
+        title = {"theme": "Theme", "icons": "Icon theme", "cursor": "Mouse cursor", "font": "Font"}[key]
+        value = (lambda n: f"{n} {size}") if key == "font" else (lambda n: n)
+        self.popup = Popup("choose", title, [f"{len(names)} installed."], items, names.index(current),
+                           on_select=lambda n: self._gtk_apply(**{key: value(n)}))
+
+    def _gtk_apply(self, **changes) -> None:
+        ok, msg = gtktheme.apply(**changes)
+        self._gtk = None
+        self.notice, self.notice_error = msg, not ok
+
+    # ---- file types: which app opens what (applied live) ------------------------------------------------------
+    def apps(self) -> dict:
+        if self._apps is None:
+            self._apps = mimeapps.installed_apps()
+        return self._apps
+
+    def _mime_rows(self, out: list[Row]) -> list[Row]:
+        apps = self.apps()
+        out.append(Row("header", "Opens with (Enter to change)"))
+        for i, (label, what, mimes) in enumerate(mimeapps.CATEGORIES):
+            main, mixed = mimeapps.category_state(mimes, apps)
+            shown = apps[main]["name"] if main in apps else "(nothing chosen)"
+            out.append(Row("mime", label, shown + ("  (some types differ)" if mixed else ""), "off" if main is None else "default", ref=i,
+                           help=f"{what}. Pick the app that should open it; this sets all {len(mimes)} related file types together."))
+        out.append(Row("action", "Other file type...", ref="mime_other",
+                       help="Set the app for one specific kind of file: type its ending (.mkv) or its type (video/mp4)."))
+        out.append(Row("action", "Refresh", ref="mime_refresh", help="Looks for newly installed apps and reads the current choices again."))
+        return out
+
+    def mime_menu(self, title: str, what: str, mimes: list[str]) -> None:
+        apps = self.apps()
+        options = mimeapps.candidates(mimes, apps)
+        if not options:
+            return self.message("No app found", [f"No installed app says it can open {title.lower()}.",
+                                                   "Install one, then choose Refresh on this page."])
+        current = mimeapps.default_for(mimes[0], apps)
+        items = [(i, name, "current" if i == current else "") for i, name in options]
+        index = next((n for n, it in enumerate(items) if it[0] == current), 0)
+
+        def chosen(app_id):
+            ok, why = mimeapps.set_default(app_id, mimes)
+            self.notice, self.notice_error = (f"{title} now open with {apps[app_id]['name']}.", False) if ok else (why, True)
+        lines = [what] if what else []
+        self.popup = Popup("choose", f"Open {title.lower()} with", lines, items, index, on_select=chosen)
+
+    def mime_other(self) -> None:
+        def got(text):
+            mime = mimeapps.resolve_type(text)
+            self.mime_menu(mime, "", [mime])
+        self.ask("File ending or type", "", got, ["For example .mkv, .epub or application/pdf."])
+
+    # ---- cloud drives --------------------------------------------------------------------------------------
+    CLOUD_TAGS = {"active": "connected", "activating": "starting", "reloading": "starting", "failed": "failed"}
+
+    def _cloud_rows(self, out: list[Row]) -> list[Row]:
+        if not cloud.rclone():
+            out.append(Row("header", "rclone is not installed"))
+            out.append(Row("note", "  rclone does the talking to Google Drive, Nextcloud and the rest. Install it, plus FUSE so drives"))
+            out.append(Row("note", "  can be shown as folders, then choose Check again:"))
+            out.append(Row("note", "    Arch:  sudo pacman -S rclone fuse3"))
+            out.append(Row("note", "    Debian / Ubuntu:  sudo apt install rclone fuse3"))
+            out.append(Row("note", "    Fedora:  sudo dnf install rclone fuse3"))
+            out.append(Row("action", "Check again", ref="cloud_refresh", help="Looks for rclone again."))
+            return out
+        accounts = cloud.accounts()
+        out.append(Row("header", "Your accounts (Enter for options, Space to connect or disconnect)"))
+        if not accounts:
+            out.append(Row("note", "  None yet. Choose '+ Add an account...' below."))
+        for a in accounts:
+            tag = self.CLOUD_TAGS.get(a["state"], "off")
+            when = "Reconnects at every login." if a["enabled"] else "Not connected at login."
+            out.append(Row("cloud", a["name"], cloud.type_label(a["type"]), tag, ref=a["name"],
+                           help=f"Folder: {cloud.mount_path(a['name'])}. {when} Enter for options."))
+        out.append(Row("header", "Add or open"))
+        out.append(Row("action", "+ Add an account...", ref="add_cloud",
+                       help="Google Drive, OneDrive and Dropbox sign in through your browser. Nextcloud, ownCloud and other "
+                            "WebDAV servers need the address, your username and a password."))
+        out.append(Row("action", "Open the Cloud folder", ref="open_cloud",
+                       help=f"Opens {cloud.mount_root()} in your file manager. Connected drives are listed inside it."))
+        out.append(Row("action", "Refresh", ref="cloud_refresh", help="Checks which drives are connected right now."))
         return out
 
     @staticmethod
@@ -186,10 +512,12 @@ class App:
         if key == "?":
             return self.message("Keys", [
                 "Up / Down      move", "Tab, Left, Right   switch between the menu and the list", "Enter          change the selected setting",
-                "Space          switch an on/off setting", "- and +        adjust a number", "r              reset to the default",
+                "Space          switch an on/off setting (or connect / disconnect a cloud drive)", "- and +        adjust a number",
+                "r              reset to the default",
                 "Ctrl+S or s    save (or click [ Save changes ])", "q or Esc       quit", "Mouse: click a page, a setting, or Save", "",
                 "Your changes are saved to user_settings.local.toml (private, never committed).",
-                "The shared user_settings.toml holds the defaults and is left alone."])
+                "The shared user_settings.toml holds the defaults and is left alone.",
+                "Cloud drives apply immediately; they do not wait for Save."])
         if key in ("tab",) or (key == "right" and self.focus == "menu") or (key == "left" and self.focus == "list"):
             self.focus = "list" if self.focus == "menu" else "menu"
             return
@@ -210,6 +538,10 @@ class App:
             if key == " ":
                 if row and row.kind in ("setting", "startup"):
                     self.toggle(row)
+                elif row and row.kind == "cloud":
+                    self.cloud_toggle(row.ref)
+                elif row and row.kind == "gtk" and row.ref == "dark":
+                    self.gtk_edit("dark")
             elif key in ("r", "R"):
                 self.reset(row)
             elif key in ("-", "+", "="):
@@ -253,6 +585,8 @@ class App:
             self.store.reset(row.setting)
         elif row.kind == "startup":
             self.store.staged[STARTUP_ID] = RESET
+        elif row.kind == "keybind":
+            self.store.reset_keybind(self.store_keybind(row.ref))
 
     def edit(self) -> None:
         row = self.current_row()
@@ -264,6 +598,17 @@ class App:
             return self.action(row.ref)
         if row.kind == "source":
             return self.source_menu(row.ref)
+        if row.kind == "keybind":
+            return self.rebind(row.ref)
+        if row.kind == "cloud":
+            return self.cloud_menu(row.ref)
+        if row.kind == "display":
+            return self.display_menu(row.ref)
+        if row.kind == "gtk":
+            return self.gtk_edit(row.ref)
+        if row.kind == "mime":
+            label, what, mimes = mimeapps.CATEGORIES[row.ref]
+            return self.mime_menu(label, what, mimes)
         s = row.setting
         if s.kind == "bool":
             return self.toggle(row)
@@ -377,8 +722,8 @@ class App:
             self.invalidate()
         threading.Thread(target=work, daemon=True).start()
 
-    def ask(self, title: str, text: str, on_submit: Callable[[str], None], lines: list[str] | None = None) -> None:
-        self.popup = Popup("input", title, lines or [], text=text, cursor=len(text), on_submit=on_submit)
+    def ask(self, title: str, text: str, on_submit: Callable[[str], None], lines: list[str] | None = None, secret: bool = False) -> None:
+        self.popup = Popup("input", title, lines or [], text=text, cursor=len(text), on_submit=on_submit, secret=secret)
 
     def message(self, title: str, lines: list[str]) -> None:
         self.popup = Popup("message", title, lines)
@@ -386,10 +731,191 @@ class App:
     def confirm(self, title: str, lines: list[str], options: str, on_confirm: Callable[[str], None]) -> None:
         self.popup = Popup("confirm", title, lines, options=options, on_confirm=on_confirm)
 
+    # ---- keybinds ----------------------------------------------------------------------------------------
+    # A terminal cannot see the Super key (Hyprland takes the combo first), so the combo is built in two
+    # steps: choose the modifiers, then type the key name.
+    MODIFIER_CHOICES = [("SUPER", "Super"), ("SUPER + SHIFT", "Super + Shift"), ("SUPER + CTRL", "Super + Ctrl"),
+                        ("SUPER + ALT", "Super + Alt"), ("SUPER + CTRL + SHIFT", "Super + Ctrl + Shift"),
+                        ("CTRL + ALT", "Ctrl + Alt"), ("CTRL + SHIFT", "Ctrl + Shift"), ("ALT", "Alt"),
+                        ("", "No modifier (the key on its own)")]
+
+    def store_keybind(self, bind_id: str) -> dict:
+        return next(b for b in self.store.keybind_rows() if b["id"] == bind_id)
+
+    def rebind(self, bind_id: str) -> None:
+        b = self.store_keybind(bind_id)
+        current = self.store.get_keybind(b)[0]
+        items = [(m, label, "") for m, label in self.MODIFIER_CHOICES] + [("__type__", "Type the whole combo...", ""), ("none", "Leave unbound", "")]
+
+        def chosen(v):
+            if v == "none":
+                self.store.stage_keybind(b, "none")
+            elif v == "__type__":
+                self.ask(b["label"], "" if current == "none" else current, lambda t: self.store.stage_keybind(b, t),
+                         ["Write it like SUPER + SHIFT + T. Modifiers: Super, Ctrl, Alt, Shift."])
+            else:
+                def got_key(t):
+                    t = t.strip()
+                    if not t:
+                        raise ValueError("type a key, for example T, F5, left or SPACE")
+                    self.store.stage_keybind(b, f"{v} + {t}" if v else t)
+                self.ask(f"{b['label']}: key to use with {v or 'no modifier'}", "", got_key,
+                         ["One letter or digit, or a name such as F5, left, right, SPACE, RETURN, TAB, PRINT."])
+        self.popup = Popup("choose", b["label"], [f"Now: {'(unbound)' if current == 'none' else current}. Pick the modifiers first, then type the key."],
+                           items, 0, on_select=chosen)
+
+    # ---- cloud drives: actions -------------------------------------------------------------------------------
+    def run_task(self, title: str, fn: Callable[[Callable[[str], None], threading.Event], tuple[bool, str]],
+                 lines: list[str] | None = None) -> None:
+        """Runs slow work (signing in, mounting) off the screen thread and shows its progress."""
+        cancel = threading.Event()
+        popup = Popup("pull", title, lines or ["Esc stops waiting."], status="working...", cancel=cancel)
+        self.popup = popup
+
+        def status(text: str) -> None:
+            popup.status = text
+            self.invalidate()
+
+        def work():
+            try:
+                ok, msg = fn(status, cancel)
+            except Exception as e:  # a crash must show up as a message, never as a frozen popup
+                ok, msg = False, f"{title} failed: {e}"
+            cloud.invalidate()
+            if self.popup is popup:
+                self.popup = None
+            self.notice, self.notice_error = msg, not ok
+            if not ok:
+                self.popup = Popup("message", "That did not work", [msg])
+            self.invalidate()
+        threading.Thread(target=work, daemon=True).start()
+
+    def _file_manager(self) -> str:
+        return str(self.store.get(BY_ID["hyprdots.file_manager"])[0])
+
+    def _cloud_account(self, name: str) -> dict | None:
+        return next((a for a in cloud.accounts() if a["name"] == name), None)
+
+    def cloud_toggle(self, name: str) -> None:
+        acct = self._cloud_account(name)
+        if not acct:
+            return
+        if acct["state"] in ("active", "activating", "reloading"):
+            self.run_task(f"Disconnecting {name}", lambda st, c: cloud.disconnect(name))
+        else:
+            self.run_task(f"Connecting {name}", lambda st, c: cloud.connect(name))
+
+    def cloud_open(self, name: str | None) -> None:
+        ok, msg = cloud.open_folder(name, self._file_manager())
+        self.notice, self.notice_error = msg, not ok
+
+    def cloud_menu(self, name: str) -> None:
+        acct = self._cloud_account(name)
+        if not acct:
+            return
+        connected = acct["state"] in ("active", "activating", "reloading")
+        items = [("toggle", "Disconnect" if connected else "Connect", "also stops it starting at login" if connected else "and reconnect at every login"),
+                 ("open", "Open in the file manager", ""), ("remove", "Remove this account...", "")]
+
+        def chosen(v):
+            if v == "toggle":
+                self.cloud_toggle(name)
+            elif v == "open":
+                self.cloud_open(name)
+            elif v == "remove":
+                self.confirm("Remove this account?", [f"Forget '{name}' on this computer? Your files in the cloud are not touched; "
+                                                      "you would sign in again to bring it back."], "yn",
+                             lambda k: k == "y" and self.run_task(f"Removing {name}", lambda st, c: cloud.remove(name)))
+        self.popup = Popup("choose", name, [f"{cloud.type_label(acct['type'])}. Folder: {cloud.mount_path(name)}"], items, 0, on_select=chosen)
+
+    def add_cloud(self) -> None:
+        items = [(k, label, "sign in with your browser" if how == "oauth" else "address, username, password") for k, label, how in cloud.PROVIDERS]
+
+        def chosen(kind):
+            label = next(l for k, l, _ in cloud.PROVIDERS if k == kind)
+            how = next(h for k, _, h in cloud.PROVIDERS if k == kind)
+
+            def got_name(n):
+                n = n.strip()
+                cloud.check_name(n)   # ValueError keeps the box open
+                if how == "oauth":
+                    self.run_task(f"Adding {label}", lambda st, c: cloud.setup_oauth(n, kind, st, c),
+                                  ["A browser window opens for you to sign in. Esc stops waiting."])
+                else:
+                    self._ask_dav(n, kind, label)
+            self.ask(f"Name for this {label} drive", cloud.suggest_name(kind), got_name,
+                     ["Used as the folder name, for example gdrive. Letters, numbers, - and _ only."])
+        self.popup = Popup("choose", "Add an account", ["Which service?"], items, 0, on_select=chosen)
+
+    @staticmethod
+    def _plain_http_ok(address: str) -> bool:
+        host = address.split("//", 1)[1].split("/", 1)[0].split(":")[0]
+        return host == "localhost" or host.startswith(("127.", "10.", "192.168.")) or host.endswith(".local")
+
+    def _ask_dav(self, name: str, kind: str, label: str) -> None:
+        example = {"nextcloud": "https://cloud.example.com", "owncloud": "https://owncloud.example.com",
+                   "webdav": "https://dav.example.com/files/me/"}[kind]
+        hint = "The full address of the WebDAV folder." if kind == "webdav" else "Just the address you open in your browser."
+
+        def got_server(s):
+            s = s.strip()
+            if not s.startswith(("http://", "https://")) or len(s) < 9:
+                raise ValueError(f"start with https://, for example {example}")
+            if s.startswith("http://") and not self._plain_http_ok(s):
+                raise ValueError("use https:// so your password is not sent in the clear")
+
+            def got_user(u):
+                u = u.strip()
+                if not u:
+                    raise ValueError("enter your username")
+
+                def got_pass(p):
+                    if not p:
+                        raise ValueError("enter your password")
+                    self.run_task(f"Adding {label}", lambda st, c: cloud.setup_dav(name, kind, s, u, p, st, c))
+                self.ask(f"Password for {u}", "", got_pass,
+                         ["With two-factor sign-in, create an app password (Settings > Security) and use that instead."], secret=True)
+            self.ask("Username", "", got_user)
+        self.ask(f"{label} address", "https://", got_server, [f"{hint} For example {example}"])
+
     # ---- calendars -----------------------------------------------------------------------------------------
     def action(self, name: str) -> None:
         if name == "toggle_assistant":
             return self.toggle_assistant()
+        if name == "add_cloud":
+            return self.add_cloud()
+        if name == "open_cloud":
+            return self.cloud_open(None)
+        if name == "cloud_refresh":
+            cloud.invalidate()
+            self.notice, self.notice_error = "Refreshed.", False
+            return
+        if name == "displays_refresh":
+            self._mons = None
+            self.notice, self.notice_error = "Refreshed.", False
+            return
+        if name == "mime_other":
+            return self.mime_other()
+        if name == "mime_refresh":
+            self._apps = None
+            self.notice, self.notice_error = "Refreshed.", False
+            return
+        if name == "gtk_refresh":
+            self._gtk = None
+            self.notice, self.notice_error = "Refreshed.", False
+            return
+        if name == "keybind_help":
+            return self.message("Keybinds: change and add", [
+                "CHANGE a key: pick an action in the list, press Enter, choose the modifiers (Super is the Windows key), then type the key.",
+                "Choose 'Leave unbound' to switch an action off, or press r to put its default back.",
+                "Save with Ctrl+S, then reload Hyprland when asked.",
+                "",
+                "ADD a new keybind: open keybinds.lua and add one line inside the KEYBINDS-BEGIN / KEYBINDS-END list, for example:",
+                '{ id = "calc", label = "Open calculator", keys = "SUPER + equal", action = hl.dsp.exec_cmd("gnome-calculator") },',
+                "Keep id unique, and put '-- group: Name' above a section to start a new heading.",
+                "Reload Hyprland and the new action appears here, ready to rebind.",
+                "",
+                f"File: {self.store.keybinds_path}"])
         if name == "edit_files":
             self.exit_action = "edit"
             return
@@ -656,7 +1182,8 @@ class App:
         if len(value) > room - 1:
             value = value[:max(1, room - 2)] + "…"
         base = "class:row.sel" if selected_row else ""
-        tag_style = {"yours": "class:yours", "changed": "class:changed"}.get(r.tag, "class:dim")
+        tag_style = {"yours": "class:yours", "changed": "class:changed", "connected": "class:yours",
+                     "failed": "class:err", "starting": "class:changed"}.get(r.tag, "class:dim")
         pointer = "›" if marked else " "
         parts = [(base, f" {pointer} {r.label}".ljust(label_w)[:label_w]), (base, value.ljust(room)[:room])]
         if tag_w:
@@ -682,7 +1209,8 @@ class App:
                 lines.append(("class:dim", (" " + p.note(p.items[p.index][0]))[:pw - 2].ljust(pw - 2)))
             hint = "Enter select · Esc cancel"
         elif p.mode == "input":
-            text = p.text[:p.cursor] + "▏" + p.text[p.cursor:]
+            shown_text = "•" * len(p.text) if p.secret else p.text
+            text = shown_text[:p.cursor] + "▏" + shown_text[p.cursor:]
             lines.append(("class:key", (" > " + text)[:pw - 2].ljust(pw - 2)))
             if p.error:
                 lines.append(("class:err", (" " + p.error)[:pw - 2].ljust(pw - 2)))

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Stand-in for xfce4-settings' xfce4-mime-helper, which exo-open (Thunar's "Open Terminal Here",
+# "Run in Terminal" and friends) calls to find your preferred terminal, browser and file manager.
+# Without it those menu items do nothing or show: Failed to launch preferred application for category ...
+# exo-open runs it inside the folder you asked for, so a terminal started here opens in that folder.
+# Installed into ~/.local/bin by exo-terminal.sh. The terminal is chosen in hypr-settings.
+[[ "$1" == "--launch" && -n "$2" ]] || exit 1
+kind="$2"; shift 2
+
+case "$kind" in
+    TerminalEmulator)
+        term="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/hypr-settings/terminal" 2>/dev/null)"
+        term="${term:-ghostty --gtk-single-instance=false}"
+        # shellcheck disable=SC2086   # $term is a command with its own flags
+        if (($# == 1)); then
+            setsid -f $term -e sh -c "$1" >/dev/null 2>&1
+        elif (($#)); then
+            setsid -f $term -e "$@" >/dev/null 2>&1
+        else
+            setsid -f $term >/dev/null 2>&1
+        fi
+        ;;
+    FileManager)
+        setsid -f xdg-open "${1:-$PWD}" >/dev/null 2>&1 ;;
+    MailReader)
+        setsid -f xdg-open "${1:-mailto:}" >/dev/null 2>&1 ;;
+    WebBrowser)
+        if (($#)); then
+            setsid -f xdg-open "$@" >/dev/null 2>&1
+        else
+            setsid -f gtk-launch "$(xdg-settings get default-web-browser)" >/dev/null 2>&1
+        fi
+        ;;
+    *) exit 1 ;;
+esac

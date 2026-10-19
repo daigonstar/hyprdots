@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import overrides, tomledit
+from . import keyspec, overrides, tomledit
 from .schema import APP_CANDIDATES, BY_ID, SETTINGS, Setting
 
 RESET = object()  # staged marker: remove the key from the local file
 STARTUP_ID = "hyprdots.startup_disabled"
+KB_PREFIX = "keybinds."  # staged id for one keybind: keybinds.<id>
 
 
 def default_hypr_dir() -> Path:
@@ -27,6 +29,7 @@ class Store:
         self.local_path = self.dir / "user_settings.local.toml"
         self.overrides_path = self.dir / "user_overrides.lua"
         self.autostart_path = self.dir / "autostart.lua"
+        self.keybinds_path = self.dir / "keybinds.lua"
         self.staged: dict[str, Any] = {}
         self.warnings: list[str] = []
         self.reload()
@@ -143,6 +146,35 @@ class Store:
     def set_calendar_sources(self, sources: list[str]) -> None:
         self.staged["calendar.sources"] = list(sources) if sources else RESET
 
+    # ---- keybinds (listed in keybinds.lua, your choices saved under [keybinds] in the local file) ---------
+    def keybind_rows(self) -> list[dict]:
+        return overrides.keybind_rows(self.keybinds_path)
+
+    def get_keybind(self, row: dict) -> tuple[str, str]:
+        """(keys, source) where source is 'changed' (unsaved), 'yours' or 'default'."""
+        sid = KB_PREFIX + row["id"]
+        if sid in self.staged:
+            staged = self.staged[sid]
+            return (row["keys"], "default") if staged is RESET else (staged, "changed")
+        mine = self.local.get("keybinds", {}).get(row["id"])
+        if isinstance(mine, str) and mine.strip():
+            return mine, "yours"
+        return row["keys"], "default"
+
+    def stage_keybind(self, row: dict, text: str) -> None:
+        keys = keyspec.normalize(text)  # raises ValueError for the input box to show
+        if keys != "none":
+            if keyspec.is_reserved(keys):
+                raise ValueError(f"{keys} is used for workspaces, the mouse or the media keys and cannot be reused. Pick another.")
+            for other in self.keybind_rows():
+                if other["id"] != row["id"] and keyspec.canon(self.get_keybind(other)[0]) == keyspec.canon(keys):
+                    raise ValueError(f"{keys} is already used for '{other['label']}'. Change or unbind that one first.")
+        same = keyspec.canon(keys) == keyspec.canon(row["keys"])
+        self.staged[KB_PREFIX + row["id"]] = RESET if same else keys
+
+    def reset_keybind(self, row: dict) -> None:
+        self.staged[KB_PREFIX + row["id"]] = RESET
+
     # ---- app suggestions -------------------------------------------------------------------------------------
     def app_choices(self, s: Setting) -> list[tuple[str, str]]:
         seen, out = set(), []
@@ -161,6 +193,9 @@ class Store:
             if sid in ("calendar.sources", STARTUP_ID):
                 section, key = sid.split(".", 1)
                 touched_lua |= sid == STARTUP_ID
+            elif sid.startswith(KB_PREFIX):
+                section, key = "keybinds", sid[len(KB_PREFIX):]
+                touched_lua = True
             else:
                 s = BY_ID[sid]
                 section, key = s.section, s.key
@@ -172,7 +207,10 @@ class Store:
         self.local = self._safe_read(self.local_path)
         if touched_lua or not self.overrides_path.exists():
             self.write_overrides()
-        effects = sorted({BY_ID[sid].effect for sid in self.staged if sid in BY_ID})
+        effects = {BY_ID[sid].effect for sid in self.staged if sid in BY_ID}
+        if any(sid.startswith(KB_PREFIX) for sid in self.staged):
+            effects.add("when Hyprland reloads")
+        effects = sorted(effects)
         self.staged = {}
         return effects
 
@@ -187,4 +225,25 @@ class Store:
                 value = self._from(self.local, s)
                 if value is not None and value != self.default(s):
                     apps[s.key] = value
-        overrides.write(self.overrides_path, overrides.render(config, apps, self.disabled_startup()))
+        keybinds = {}
+        for row in self.keybind_rows():
+            value = self.local.get("keybinds", {}).get(row["id"])
+            if isinstance(value, str) and value.strip():
+                try:
+                    value = keyspec.normalize(value)
+                except ValueError:
+                    self.warnings.append(f"Keybind '{row['id']}' has an invalid value ({value!r}); using the default.")
+                    continue
+                if keyspec.canon(value) != keyspec.canon(row["keys"]):
+                    keybinds[row["id"]] = value
+        overrides.write(self.overrides_path, overrides.render(config, apps, self.disabled_startup(), keybinds))
+        self.sync_terminal(apps.get("terminal") or self.default(BY_ID["hyprdots.terminal"]))
+
+    def sync_terminal(self, terminal: str) -> None:
+        """Thunar and other Xfce-style apps need to be told the terminal (see scripts/exo-terminal.sh)."""
+        script = self.dir / "scripts" / "exo-terminal.sh"
+        if script.exists():
+            try:
+                subprocess.run([str(script), terminal], capture_output=True, timeout=10)
+            except (OSError, subprocess.SubprocessError):
+                pass

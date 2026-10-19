@@ -1,69 +1,104 @@
-/* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-/* Main Config (wallpaper) */
+/* Wallpaper picker: full screen like the app launcher, with each wallpaper shown in its own aspect ratio.
+   Colours come from wallust (../colors.rasi). The thumbnail size is set by wallpaper.sh to fit the screen. */
 
-@import "~/.config/rofi/config.rasi"  
+@import "colors.rasi"
+@import "shared/fonts.rasi"
 
-/* ---- Configuration ---- */ 
 configuration {
-  modi: "drun";
+  modi: "dmenu";
+  show-icons: true;
 }
 
 window {
-  width: 75%;
-  height: inherit;
+  transparency: "real";
+  location: center;
+  anchor: center;
+  fullscreen: true;
+  width: 100%;
+  height: 100%;
+  margin: 0px;
+  padding: 0px;
+  border: 0px;
+  border-radius: 0px;
+  background-color: black / 50%;
 }
 
-/* ---- Mainbox ---- */
 mainbox {
-  children:
-    [ "inputbar", "listview"];
+  spacing: 60px;
+  padding: 80px 150px;
+  background-color: transparent;
+  children: [ "inputbar", "listview" ];
+}
+
+inputbar {
+  spacing: 10px;
+  margin: 0% 25%;
+  padding: 18px;
+  border-radius: 10px;
+  background-color: white / 70%;
+  text-color: @foreground;
+  children: [ "entry" ];
 }
 
 entry {
-  expand: true;
-  placeholder: " 🎞️ Search / Choose Wallpaper";
-  horizontal-align: 0.5;
+  background-color: transparent;
+  text-color: inherit;
+  cursor: text;
+  placeholder: "Search wallpapers";
+  placeholder-color: inherit;
   horizontal-align: 0.5;
 }
 
-/* ---- Listview ---- */
 listview {
-  columns: 6;
-  lines: 2;
-  spacing: 20px;
-  padding: 10px;
-  columns: 6;
-  lines: 2;
-  flow: horizontal;
-  fixed-width: true;
-  fixed-height: true;
+  columns: 5;
+  lines: 3;
   cycle: true;
-}
-
-/* ---- Element ---- */
-element {
-  orientation: vertical;
-  padding: 0px;
+  dynamic: true;
+  scrollbar: false;
+  layout: vertical;
+  fixed-height: true;
+  fixed-columns: true;
   spacing: 0px;
-  border-radius: 10px;
-  padding: 0px;
   margin: 0px;
-}
-
-element selected.normal {
+  padding: 0px;
+  border: 0px;
   background-color: transparent;
 }
 
-element-icon {
-    text-color:                  inherit;
-    size:                        10%;
-    margin:                      -30px;
-    cursor:                      inherit;
+element {
+  spacing: 12px;
+  margin: 0px;
+  padding: 18px 10px;
+  border: 0px;
+  border-radius: 15px;
+  orientation: vertical;
+  background-color: transparent;
+  text-color: @foreground;
+  cursor: pointer;
 }
 
-element-text {
+element normal.normal, element alternate.normal, element normal.active, element alternate.active,
+element normal.urgent, element alternate.urgent {
+  background-color: transparent;
+  text-color: @foreground;
+}
+
+element selected.normal, element selected.active, element selected.urgent {
+  background-color: @color5;
+  text-color: @foreground;
+}
+
+element-icon {
+  size: 220px;
+  background-color: transparent;
+  horizontal-align: 0.5;
+  cursor: inherit;
+}
+
+element-text, element-text selected, element-text normal, element-text alternate {
+  background-color: transparent;
+  text-color: inherit;
   vertical-align: 0.5;
   horizontal-align: 0.5;
-  padding: 6px;
-  margin: 6px;
+  cursor: inherit;
 }

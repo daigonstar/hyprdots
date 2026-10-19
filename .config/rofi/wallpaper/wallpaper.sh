@@ -19,28 +19,10 @@ DURATION=2
 BEZIER=".43,1.19,1,.4"
 AWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration $DURATION --transition-bezier $BEZIER"
 
-# Check if package bc exists
-if ! command -v bc &>/dev/null; then
-  notify-send -i "$iDIR/error.png" "bc missing" "Install package bc first"
-  exit 1
-fi
-
 # Variables
 rofi_theme="$HOME/.config/rofi/wallpaper/wallpaper.rasi"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
-
-# Ensure focused_monitor is detected
-if [[ -z "$focused_monitor" ]]; then
-  focused_monitor=$(hyprctl monitors -j | jq -r '.[0].name')
-fi
-
-# Monitor details for Rofi scaling
-scale_factor=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .scale')
-monitor_height=$(hyprctl monitors -j | jq -r --arg mon "$focused_monitor" '.[] | select(.name == $mon) | .height')
-
-icon_size=$(echo "scale=1; ($monitor_height * 3) / ($scale_factor * 150)" | bc)
-adjusted_icon_size=$(echo "$icon_size" | awk '{if ($1 < 15) $1 = 20; if ($1 > 25) $1 = 25; print $1}')
-rofi_override="element-icon{size:${adjusted_icon_size}%;}"
+thumbDIR="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper-thumbs-fit"
+mkdir -p "$thumbDIR"
 
 # Kill existing wallpaper daemons
 kill_wallpaper_for_video() {
@@ -56,30 +38,73 @@ kill_wallpaper_for_image() {
   pkill hyprpaper 2>/dev/null
 }
 
-# Retrieve wallpapers
-mapfile -d '' PICS < <(find -L "${wallDIR}" -type f \( \
+# Retrieve wallpapers (sorted, so the menu index maps straight back to a file)
+mapfile -d '' -t PICS < <(find -L "${wallDIR}" -type f \( \
   -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o \
   -iname "*.bmp" -o -iname "*.tiff" -o -iname "*.webp" -o \
-  -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm" \) -print0)
+  -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.webm" \) -print0 | sort -z)
 
-RANDOM_PIC="${PICS[$((RANDOM % ${#PICS[@]}))]}"
-RANDOM_PIC_NAME=". random"
+if [[ ${#PICS[@]} -eq 0 ]]; then
+  notify-send "No wallpapers" "Add images or videos to $wallDIR"
+  exit 1
+fi
 
-# Rofi command
-rofi_command="rofi -i -show -dmenu -config $rofi_theme -theme-str $rofi_override"
+# Thumbnails keep each picture's shape (fitted inside a transparent 480px square), cached by path + modification time, so the picker opens instantly
+thumb_for() {
+  local f="$1" key
+  key=$(printf '%s%s' "$f" "$(stat -c %Y "$f")" | cksum | cut -d' ' -f1)
+  echo "$thumbDIR/$key.png"
+}
 
-# Sorting Wallpapers
+make_thumb() {
+  local f="$1" out="$2"
+  [[ -s "$out" ]] && return
+  if [[ "$f" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then
+    ffmpeg -loglevel quiet -y -ss 1 -i "$f" -frames:v 1 \
+      -vf "scale=480:480:force_original_aspect_ratio=decrease,pad=480:480:-1:-1:color=black@0,format=rgba" "$out" 2>/dev/null
+  else
+    magick "${f}[0]" -thumbnail 480x480 -background none -gravity center -extent 480x480 "$out" 2>/dev/null
+  fi
+}
+export -f make_thumb
+export thumbDIR
+
+build_thumbs() {
+  local f
+  for f in "${PICS[@]}"; do
+    printf '%s\0%s\0' "$f" "$(thumb_for "$f")"
+  done | xargs -0 -n 2 -P 4 bash -c 'make_thumb "$0" "$1"'
+}
+
+# Rofi command (-format i prints the row number, so names never need to be matched back to files)
+rofi_command="rofi -i -dmenu -format i -config $rofi_theme"
+
+# Thumbnail size that fits a 5 x 3 grid on the focused screen (the theme is full screen)
+screen_icon_size() {
+  hyprctl monitors -j | jq -r '(map(select(.focused))[0] // .[0]) | "\(.width) \(.height) \(.scale)"' |
+    awk '{ w = $1 / $3; h = $2 / $3
+           row = (h - 160 - 60 - 64) / 3 - 80; col = (w - 300) / 5 - 40
+           s = (row < col ? row : col); if (s < 120) s = 120; if (s > 480) s = 480; printf "%d", s }'
+}
+
+# Row 0 is a random pick, then every wallpaper with its thumbnail
 menu() {
-  IFS=$'\n' sorted_options=($(sort <<<"${PICS[*]}"))
-  printf "%s\x00icon\x1f%s\n" "$RANDOM_PIC_NAME" "$RANDOM_PIC"
-  for pic_path in "${sorted_options[@]}"; do
-    pic_name=$(basename "$pic_path")
-    if [[ "$pic_name" =~ \.gif$ ]]; then
-      printf "%s\x00icon\x1f%s\n" "$pic_name" "$pic_path"
-    else
-      printf "%s\x00icon\x1f%s\n" "$(echo "$pic_name" | cut -d. -f1)" "$pic_path"
-    fi
+  printf "Random\x00icon\x1f%s\n" "$(thumb_for "${PICS[$((RANDOM % ${#PICS[@]}))]}")"
+  local f name
+  for f in "${PICS[@]}"; do
+    name=$(basename "$f"); name="${name%.*}"
+    printf "%s\x00icon\x1f%s\n" "$name" "$(thumb_for "$f")"
   done
+}
+
+# Start on the wallpaper that is showing now
+current_row() {
+  local cur i
+  cur=$(awww query 2>/dev/null | grep -o 'image: .*' | head -n1 | sed 's/^image: //')
+  for i in "${!PICS[@]}"; do
+    [[ "${PICS[$i]}" == "$cur" ]] && { echo $((i + 1)); return; }
+  done
+  echo 0
 }
 
 # Apply Image Wallpaper (Syncs All Monitors)
@@ -117,21 +142,14 @@ apply_video_wallpaper() {
 
 # Main function
 main() {
-  choice=$(menu | $rofi_command)
-  if [[ -z "$choice" ]]; then
-    exit 0
-  fi
+  build_thumbs
+  choice=$(menu | $rofi_command -theme-str "element-icon { size: $(screen_icon_size)px; }" -selected-row "$(current_row)")
+  [[ -z "$choice" ]] && exit 0
 
-  if [[ "$choice" == "$RANDOM_PIC_NAME" ]]; then
-    selected_file="$RANDOM_PIC"
+  if [[ "$choice" == 0 ]]; then
+    selected_file="${PICS[$((RANDOM % ${#PICS[@]}))]}"
   else
-    # Find the full path of the selected file
-    choice_basename=$(basename "$choice")
-    selected_file=$(find "$wallDIR" -iname "$choice_basename*" -print -quit)
-  fi
-
-  if [[ -z "$selected_file" ]]; then
-    exit 1
+    selected_file="${PICS[$((choice - 1))]}"
   fi
 
   if [[ "$selected_file" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then

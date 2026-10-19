@@ -109,10 +109,10 @@ fi
         mkdir -p "$target"
         # Sync files from repo to user config but exclude monitors.lua/workspaces.lua (and legacy .conf variants)
         if command -v rsync >/dev/null 2>&1; then
-          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' --exclude='user_overrides.lua' "$source/" "$target/"
+          rsync -a --delete --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='monitors.lua.bak' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' --exclude='user_overrides.lua' "$source/" "$target/"
         else
           # Fallback: use tar to copy excluding those files
-          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' --exclude='user_overrides.lua' .) | (cd "$target" && tar xpf -)
+          (cd "$source" && tar cf - --exclude='monitors.conf' --exclude='workspaces.conf' --exclude='monitors.lua' --exclude='monitors.lua.bak' --exclude='workspaces.lua' --exclude='user_settings.local.toml' --exclude='agent_context.md' --exclude='user_overrides.lua' .) | (cd "$target" && tar xpf -)
         fi
         echo "Updated $target from $source (excluded: monitors.conf/lua, workspaces.conf/lua). Local copies (if any) were preserved."
         continue
@@ -145,11 +145,14 @@ fi
     fi
 
     # Make key scripts executable (best-effort)
-    SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/wallpaper/wallpaper.sh)
+    SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/scripts/exo-terminal.sh hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.sh rofi/powermenu/powermenu.py rofi/launchers/launcher.sh rofi/wallpaper/wallpaper.sh)
     for s in "${SCRIPT_FILES[@]}"; do
       sp="$DOTFILES_DIR/$s"
       [[ -f "$sp" ]] && chmod +x "$sp" && echo "Chmod +x $sp"
     done
+
+    # Keep Thunar's "Open Terminal Here" working (stand-in helper in ~/.local/bin, keeps your chosen terminal)
+    [[ -x "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" ]] && "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" || true
 
     echo "Symlink and dotfile tasks complete."
   }

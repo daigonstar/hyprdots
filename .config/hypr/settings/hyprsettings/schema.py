@@ -8,16 +8,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Hyprland", "Hyprdots"]
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Appearance", "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
     "Assistant": "The local AI helper you open with Super+C: which models it uses and how it behaves.",
     "Assistant Monitor": "This is NOT about your screens. It is the assistant's background health monitor: every few minutes it checks "
                          "your PC (failed services, full disks, heat, pending updates) and sends a desktop notification when something is "
-                         "wrong. For screen layout use the display icon in the bar's drawer.",
+                         "wrong. For screen layout see the Displays page.",
     "Calendar": "Calendars shown in the clock popup and readable by the assistant. Links stay private on this computer.",
+    "Cloud drives": "Your online accounts (Google Drive, OneDrive, Dropbox, Nextcloud, ownCloud, WebDAV) shown as normal folders in "
+                    "Thunar. Each one appears in the Thunar sidebar and under ~/Cloud, and reconnects by itself when you log in. "
+                    "Passwords and tokens are kept by rclone, never in these settings files.",
+    "Displays": "Your screens: resolution, refresh rate, scale, rotation and where each one sits. Changes apply straight away and you "
+                "get a few seconds to confirm, so a bad choice undoes itself. Remembered in monitors.lua.",
+    "Appearance": "The look of GTK apps (Thunar, settings dialogs and so on): theme, icons, mouse cursor and font. "
+                  "Applies straight away; apps that are already open may need a restart.",
     "Hyprland": "How the desktop looks and how your keyboard and mouse behave. After saving you are offered a reload.",
+    "Keybinds": "Select an action and press Enter to give it a new key combo. Open the first item for how to add your own. "
+                "Super is the Windows key. Applied when Hyprland reloads.",
+    "File types": "Which app opens each kind of file: links, pictures, video, PDFs and so on. Changes apply straight away and are "
+                  "kept in ~/.config/mimeapps.list, which every desktop app reads.",
     "Hyprdots": "Default apps for the keybinds, and what starts when you log in.",
 }
 
@@ -61,7 +72,7 @@ KB_LAYOUTS = _c(("gb", "gb - United Kingdom"), ("us", "us - United States"), ("d
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, HYPRLAND, HYPRDOTS = PAGES
+ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [
     # ---- Assistant -------------------------------------------------------------------------------------
@@ -170,7 +181,7 @@ SETTINGS: list[Setting] = [
     # ---- Hyprdots (default apps are read by keybinds.lua through user_overrides.lua) ---------------------------
     Setting(HYPRDOTS, "hyprdots", "terminal", "Terminal", "text", "ghostty", "Opened by Super+T.", allow_custom=True,
             effect="when Hyprland reloads", group="Default apps"),
-    Setting(HYPRDOTS, "hyprdots", "file_manager", "File manager", "text", "thunar", "Opened by Super+E.", allow_custom=True,
+    Setting(HYPRDOTS, "hyprdots", "file_manager", "File manager", "text", "thunar", "Opened by Super+E and Super+Shift+E (cloud drives).", allow_custom=True,
             effect="when Hyprland reloads", group="Default apps"),
     Setting(HYPRDOTS, "hyprdots", "browser", "Web browser", "text", "zen-browser", "Opened by Super+B.", allow_custom=True,
             effect="when Hyprland reloads", group="Default apps"),

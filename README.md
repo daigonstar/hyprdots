@@ -34,7 +34,8 @@ I have added some wallpapers I've collected (will probably add more as I go)
 ### Applauncher (rofi)
 ![image](screens/appl.png)
 
-### Powermenu (JaKoolIt)
+### Powermenu
+Full screen, with a PC (a laptop when a battery is found) in the middle and the options in a ring around it. Arrow keys, the first letter of an option, or the mouse.
 ![image](screens/power.png)
 
 ### Install:
@@ -83,10 +84,15 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
 | Calendar | Add, rename or remove calendars (links stay private) |
+| Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar |
+| Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays); changes apply at once and undo themselves if you do not confirm |
+| Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
 | Hyprland | Gaps, borders, rounding, blur, animations, layout, keyboard layout and mouse |
+| Keybinds | Change the key combo for any action |
+| File types | Which app opens links, pictures, video, PDFs, archives and other kinds of file |
 | Hyprdots | Default terminal, file manager, browser and store, and which apps start with the desktop |
 
-Every option has a short explanation and says when it takes effect. Changes are not applied until you save: the title bar and a yellow bar at the bottom say how many are pending, and Ctrl+S, `s` or the **[ Save changes ]** button (mouse works too) keeps them. Your choices are saved to `~/.config/hypr/user_settings.local.toml` (and `user_overrides.lua` for the Hyprland look and apps); both are git-ignored, so updating the dotfiles never undoes them. The shared `user_settings.toml` only holds the defaults. Use `r` to go back to a default.
+Every option has a short explanation and says when it takes effect. The Displays, Appearance, File types and Cloud drives pages apply straight away. On the other pages changes are not applied until you save: the title bar and a yellow bar at the bottom say how many are pending, and Ctrl+S, `s` or the **[ Save changes ]** button (mouse works too) keeps them. Your choices are saved to `~/.config/hypr/user_settings.local.toml` (and `user_overrides.lua` for the Hyprland look and apps); both are git-ignored, so updating the dotfiles never undoes them. The shared `user_settings.toml` only holds the defaults. Use `r` to go back to a default.
 
 ### User settings
 

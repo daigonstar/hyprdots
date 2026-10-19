@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens hypr-settings: one place to change the PC assistant, health monitor, calendars,
+# Opens hypr-settings: one place to change the PC assistant, health monitor, calendars, displays, GTK look,
 # Hyprland look and default apps. Run it from a terminal, the bar's cog, or: settings.sh
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if ! python3 -c "import prompt_toolkit" 2>/dev/null; then

@@ -2,6 +2,7 @@
 -- (one per line, in this exact shape) and can switch each one off; the rest of this file is always run.
 local ok, overrides = pcall(require, "user_overrides")
 local disabled = (ok and type(overrides) == "table" and overrides.startup_disabled) or {}
+local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == "table" and overrides.apps.terminal) or "ghostty"
 
 -- STARTUP-APPS-BEGIN
 local optional_apps = {
@@ -27,6 +28,8 @@ hl.on("hyprland.start", function()
         "systemctl --user enable --now hyprpolkitagent.service",
         "waybar",
         "swaync",
+        -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
+        "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
         "hypridle",
         "wl-paste --watch clipvault store",
         -- Detects games launched from Steam, Lutris, Heroic, or bare

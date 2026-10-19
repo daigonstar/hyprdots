@@ -433,11 +433,15 @@ wallpaper_dest="$HOME/Pictures/wallpapers"
 
 # Make scripts executable
 
-SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py hypr/assistant/setup.sh hypr/scripts/settings.sh waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
+SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py hypr/assistant/setup.sh hypr/scripts/settings.sh hypr/scripts/exo-terminal.sh hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.py waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh rofi/cheatsheet/cheatsheet.sh rofi/cheatsheet/generate.sh rofi/wallpaper/wallpaper.sh)
 for s in "${SCRIPT_FILES[@]}"; do
 sp="$DOTFILES_DIR/$s"
 [[ -f "$sp" ]] && run_cmd "chmod +x \"$sp\""
 done
+
+# Thunar's "Open Terminal Here" needs a stand-in for xfce4-mime-helper (installed into ~/.local/bin)
+# and to know which terminal to open; hypr-settings re-runs this when the terminal is changed
+run_cmd "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh"
 
 # Steam shortcut cleanup: periodically remove Steam-generated game launcher
 # entries via a systemd --user timer

@@ -60,10 +60,10 @@ ark
 sxiv
 gnome-system-monitor
 partitionmanager
-nwg-displays
-nwg-look
 pacman-contrib
 fuse2
+fuse3
+rclone
 flatpak
 bc
 wget
@@ -96,8 +96,16 @@ steam
 grim
 slurp
 gtk-layer-shell
+gtk4
+gtk4-layer-shell
 python
 python-gobject
+python-cairo
+jq
+ffmpeg
+xdg-utils
+glib2
+fontconfig
 python-prompt_toolkit
 python-recurring-ical-events
 
