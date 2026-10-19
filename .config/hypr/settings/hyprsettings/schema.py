@@ -76,6 +76,12 @@ SETTINGS: list[Setting] = [
             choices=_c(("low", "Low - quick answers"), ("medium", "Medium"), ("high", "High - slowest, most careful")), group="Behaviour"),
     Setting(ASSISTANT, "assistant", "show_thinking", "Show live reasoning", "bool", True,
             "Watch the model think while it works. You can toggle this inside the chat with /think.", group="Behaviour"),
+    Setting(ASSISTANT, "assistant", "fact_check", "Fact-check answers", "bool", True,
+            "Before replying, check the answer against what was actually looked up, and send the assistant back to verify "
+            "anything it took from memory. Slower, but far fewer made-up specs.", group="Behaviour"),
+    Setting(ASSISTANT, "assistant", "searxng_url", "SearXNG address", "text", "",
+            "Your own SearXNG search service, for example http://127.0.0.1:8888. Gives the assistant far better web searches "
+            "than the public engines, which often block it. Leave empty if you do not run one.", group="Behaviour"),
     Setting(ASSISTANT, "assistant", "max_tool_steps", "Tool steps per question", "int", 30,
             "How many tool calls the assistant may make for one question before it has to answer.", lo=5, hi=60, group="Behaviour"),
     Setting(ASSISTANT, "assistant", "keep_alive", "Keep model loaded", "choice", "30s",

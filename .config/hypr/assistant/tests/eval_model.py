@@ -106,7 +106,7 @@ CASES = [
     ("web", "What is the latest release version of Hyprland? Check online and name your source.", {
         "searched the web": lambda c, r: bool(tools(c, "web_search", "web_fetch")),
         "gave a version number": lambda c, r: bool(re.search(r"\b0\.\d{2}(\.\d+)?\b", r)),
-        "within the search budget": lambda c, r: len(tools(c, "web_search")) <= 3,
+        "within the search budget": lambda c, r: len(tools(c, "web_search")) <= a.TOOL_CAPS["web_search"],
     }),
 ]
 

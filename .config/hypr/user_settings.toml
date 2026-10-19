@@ -26,6 +26,8 @@ web_max_chars = 6000        # characters of a fetched page given to the model
 memory_max_chars = 6000     # characters of saved memory notes given to the model (notes live in ~/.local/state/hypr_agent/memory.md)
 show_thinking = true        # show the model's live reasoning while it thinks (toggle in chat with /think)
 think_effort = "medium"     # reasoning depth: low, medium or high (change in chat with /effort)
+fact_check = true           # check every answer against what the tools found and verify unsupported claims (slower, more accurate)
+searxng_url = ""            # your own SearXNG search (e.g. "http://127.0.0.1:8888"), searched first when set; empty = public engines only
 
 [monitor]
 renotify_hours = 6          # re-send a notification for a still-open problem after this long

@@ -68,6 +68,8 @@ The assistant is tuned for gpt-oss; smaller models are less reliable with tools.
     ~/.config/hypr/assistant/setup.sh --model qwen3:14b --vision-model none
     HYPR_ASSISTANT=none ./hyprinstall.sh              # unattended install choice
 
+For web research, `setup.sh` also starts a private [SearXNG](https://docs.searxng.org/) search service in Docker or Podman when either is available (about 150 MB of RAM, idle CPU, 400 MB of disk). It listens on `127.0.0.1:8888`, so only this PC can reach it, and restarts on boot. Public search engines block or throttle scripts, so without it the assistant's searches are much narrower. Skip it with `--no-search`, or remove it later with `docker rm -f searxng`; its config lives in `~/.config/searxng/settings.yml` and is never overwritten.
+
 Your choice is stored in `~/.config/hypr/user_settings.local.toml` (git-ignored). Without a vision model the screenshot and `/paste` features switch themselves off. If your chat model can see images (qwen3.5 can), set the vision model to **Same as chat model** in the settings app (or `vision_model = "same"`): one model does both, so there is no second download and nothing extra to load. The background health monitor is separate and needs no model.
 
 Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_context.md` (hardware, distribution, package manager, things that are deliberately odd). `setup.sh` creates it from the tracked template `agent_context.example.md` the first time and never overwrites it; it is git-ignored, and `update.sh` preserves it.

@@ -7,11 +7,15 @@
 #        setup.sh --none               turn the assistant off (nothing is deleted)
 #        setup.sh --tier full|balanced|light|auto
 #        setup.sh --model NAME [--vision-model NAME|same|none]
-# Options: --no-pull  --no-packages  --no-services  --yes  --dry-run
+# Options: --no-pull  --no-packages  --no-services  --no-search  --yes  --dry-run
 # Unattended: HYPR_ASSISTANT=none|auto|full|balanced|light
 #
 # The choice is saved in user_settings.local.toml ([assistant] model, vision_model). That
 # file is git-ignored, so it stays per machine.
+#
+# Web search: when Docker or Podman is available, a private SearXNG search service is started on
+# 127.0.0.1:8888 (only this PC can reach it; about 150 MB RAM, idle CPU). Public search engines block
+# the assistant, so this makes its research far better. Skip it with --no-search.
 set -euo pipefail
 
 ASSIST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -20,7 +24,9 @@ LOCAL_SETTINGS="${ASSISTANT_LOCAL_SETTINGS:-$HYPR_DIR/user_settings.local.toml}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hypr_agent"
 DISABLED_MARKER="$STATE_DIR/disabled"
 
-DRY_RUN=false PULL=true PACKAGES=true SERVICES=true ASSUME_YES=false
+DRY_RUN=false PULL=true PACKAGES=true SERVICES=true SEARCH=true ASSUME_YES=false
+SEARXNG_PORT="${SEARXNG_PORT:-8888}"
+SEARXNG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/searxng"
 TIER="${HYPR_ASSISTANT:-}" MODEL="" VISION="" VISION_SET=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,9 +37,10 @@ while [[ $# -gt 0 ]]; do
     --no-pull) PULL=false ;;
     --no-packages) PACKAGES=false ;;
     --no-services) SERVICES=false ;;
+    --no-search) SEARCH=false ;;
     --yes|-y) ASSUME_YES=true ;;
     --dry-run) DRY_RUN=true ;;
-    -h|--help) sed -n 2,14p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n 2,18p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -139,17 +146,18 @@ resolve_choice() {
 }
 
 # --- Settings ----------------------------------------------------------------
-write_settings() {
+set_local() {  # set_local key value [key value...]: writes [assistant] entries, keeping everything else
   if $DRY_RUN; then
-    echo "[dry-run] would set in $LOCAL_SETTINGS: [assistant] model = \"$CHAT_MODEL\", vision_model = \"$VISION_MODEL\""
+    echo "[dry-run] would set in $LOCAL_SETTINGS: [assistant] $*"
     return
   fi
-  LOCAL="$LOCAL_SETTINGS" CHAT="$CHAT_MODEL" VISION="$VISION_MODEL" python3 - <<'PY'
-import json, os
+  LOCAL="$LOCAL_SETTINGS" python3 - "$@" <<'PY'
+import json, os, sys
 from pathlib import Path
 
 path = Path(os.environ["LOCAL"])
-values = {"model": os.environ["CHAT"], "vision_model": os.environ["VISION"]}
+pairs = sys.argv[1:]
+values = dict(zip(pairs[::2], pairs[1::2]))
 lines = path.read_text().splitlines() if path.exists() else []
 
 start = next((i for i, l in enumerate(lines) if l.strip() == "[assistant]"), None)
@@ -172,7 +180,11 @@ path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text("\n".join(lines) + "\n")
 path.chmod(0o600)
 PY
-  echo "Saved your model choice in $LOCAL_SETTINGS"
+}
+
+write_settings() {
+  set_local model "$CHAT_MODEL" vision_model "$VISION_MODEL"
+  $DRY_RUN || echo "Saved your model choice in $LOCAL_SETTINGS"
 }
 
 # --- Packages and services ---------------------------------------------------
@@ -194,7 +206,7 @@ install_packages() {
   done
   if ((${#pkgs[@]})); then
     echo "Installing: ${pkgs[*]}"
-    run sudo pacman -S --needed --noconfirm "${pkgs[@]}" || warn "Could not install ${pkgs[*]}"
+    run paru -S --needed --noconfirm "${pkgs[@]}" || warn "Could not install ${pkgs[*]}"
   else
     echo "ollama and its Python modules are already installed."
   fi
@@ -223,6 +235,71 @@ pull_model() {
   else
     run ollama pull "$name" || warn "Could not download $name; run 'ollama pull $name' later."
   fi
+}
+
+# --- Web search (SearXNG) ---------------------------------------------------
+container_tool() {  # docker or podman that this user can actually run, else nothing
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then echo docker
+  elif command -v podman >/dev/null 2>&1; then echo podman
+  fi
+}
+
+searxng_config() {
+  cat <<EOF
+# SearXNG for the Hyprland assistant: private, only reachable from this PC.
+use_default_settings: true
+general:
+  instance_name: "hyprdots search"
+server:
+  secret_key: "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  limiter: false        # only this PC uses it, so no rate limiting
+  image_proxy: false
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json              # the assistant reads results as JSON
+EOF
+}
+
+setup_search() {
+  local tool url="http://127.0.0.1:$SEARXNG_PORT"
+  tool="$(container_tool)"
+  if [[ -z "$tool" ]]; then
+    if command -v docker >/dev/null 2>&1; then
+      warn "Docker is installed but you cannot use it (add yourself to the docker group, log out and in, then re-run this script)."
+    else
+      echo "Skipping private web search: install docker or podman and re-run this script to add it."
+    fi
+    return 0
+  fi
+  step "Private web search: SearXNG with $tool on $url"
+  if [[ ! -e "$SEARXNG_DIR/settings.yml" ]]; then  # never overwrite your own SearXNG config
+    run mkdir -p "$SEARXNG_DIR"
+    $DRY_RUN || (umask 077; searxng_config > "$SEARXNG_DIR/settings.yml")
+  fi
+  if $DRY_RUN; then
+    echo "[dry-run] would start the searxng container on 127.0.0.1:$SEARXNG_PORT"
+  elif "$tool" container inspect searxng >/dev/null 2>&1; then
+    "$tool" start searxng >/dev/null || { warn "Could not start the existing searxng container."; return 0; }
+  else
+    "$tool" pull -q docker.io/searxng/searxng:latest >/dev/null || { warn "Could not download SearXNG; web search stays on the public engines."; return 0; }
+    "$tool" run -d --name searxng --restart unless-stopped -p "127.0.0.1:$SEARXNG_PORT:8080" \
+      -v "$SEARXNG_DIR:/etc/searxng:rw" docker.io/searxng/searxng:latest >/dev/null \
+      || { warn "Could not start SearXNG (is port $SEARXNG_PORT in use?)."; return 0; }
+    # Podman only honours --restart after a reboot when its restart service is enabled
+    if [[ "$tool" == podman ]]; then systemctl --user enable --now podman-restart.service >/dev/null 2>&1 || true; fi
+  fi
+  if ! $DRY_RUN; then
+    local i ready=false
+    for i in $(seq 1 30); do
+      if curl -fsS --max-time 3 "$url/search?q=test&format=json" >/dev/null 2>&1; then ready=true; break; fi
+      sleep 1
+    done
+    $ready || { warn "SearXNG did not answer on $url; check '$tool logs searxng'."; return 0; }
+  fi
+  set_local searxng_url "$url"
+  echo "Web search runs through your own SearXNG. Remove it any time with: $tool rm -f searxng"
 }
 
 install_context() {  # your machine context: copied from the template once, never overwritten
@@ -267,5 +344,6 @@ if $SERVICES && $PULL; then
 elif $SERVICES; then
   start_ollama || true
 fi
+$SERVICES && $SEARCH && setup_search
 reload_waybar
 step "Done. Press Super+C or click the assistant button in the bar."

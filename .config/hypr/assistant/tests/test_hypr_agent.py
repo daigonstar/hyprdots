@@ -333,6 +333,47 @@ class _Hits(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class WebSearchMerging(unittest.TestCase):
+    QUERY = "Kobra S1 Combo vs Ender 3 V3 KE"
+
+    def test_engines_are_merged_varied_and_filtered(self):
+        marginalia = [("Hands-on with the Kobra S1 Combo", "https://www.fabbaloo.com/s1-part-1", ""),
+                      ("Kobra S1 Combo part 2", "https://fabbaloo.com/s1-part-2", ""),
+                      ("Kobra S1 Combo part 3", "https://www.fabbaloo.com/s1-part-3", "")]
+        bing = [("Kobra S1 Combo", "https://www.amazon.co.uk/dp/B0X", "Ender 3 V3 KE alternative"),
+                ("King cobra", "https://en.wikipedia.org/wiki/King_cobra", "a snake"),
+                ("Hands-on with the Kobra S1 Combo", "https://fabbaloo.com/s1-part-1/", ""),
+                ("Ender 3 V3 KE vs Kobra S1", "https://www.reddit.com/r/3Dprinting/x", "")]
+        merged = [url for _, url, _ in a._merge_results([marginalia, bing], self.QUERY)]
+        self.assertNotIn("https://en.wikipedia.org/wiki/King_cobra", merged)  # off-topic
+        self.assertEqual(sum("fabbaloo" in u for u in merged), a.MAX_PER_SITE)  # duplicates and a third page dropped
+        self.assertIn("https://www.reddit.com/r/3Dprinting/x", merged)
+        self.assertEqual(merged[-1], "https://www.amazon.co.uk/dp/B0X")  # shops last
+
+    def test_own_searxng_results_lead(self):
+        own = [(f"Ender 3 V3 KE review {i}", f"https://site{i}.example/ender-3-v3-ke", "") for i in range(4)]
+        bing = [("Ender 3", "https://www.creality.com/products/ender-3-3d-printer", "Ender 3 V3")]
+        merged = [u for _, u, _ in a._merge_results([own, bing], "Ender 3 V3 KE review", lead=True)]
+        self.assertEqual(merged[:4], [u for _, u, _ in own])
+        self.assertEqual(merged[4], "https://www.creality.com/products/ender-3-3d-printer")
+
+    def test_one_engine_failing_does_not_stop_the_search(self):
+        def broken(query):
+            raise TimeoutError("stalled")
+        good = lambda query: [("Ender 3 V3 KE review", "https://www.tomshardware.com/ender-3-v3-ke-review", "")]
+        with mock.patch.object(a, "SEARCH_ENGINES", (broken, good)), mock.patch.object(a, "_page_excerpt", return_value=None):
+            result = a.tool_web_search("Ender 3 V3 KE review")
+        self.assertIn("tomshardware.com/ender-3-v3-ke-review", result)
+
+    def test_aria_hidden_article_text_is_kept(self):
+        html = ("<html><body><main><h1>Review</h1><p>" + "Intro text about the printer. " * 20 + "</p>"
+                "<table aria-hidden='true'><tr><td>Build Volume</td><td>220 x 220 x 240 mm</td></tr></table>"
+                "<p hidden>secret</p></main></body></html>")
+        text = a._extract(html)["text"]
+        self.assertIn("220 x 220 x 240 mm", text)
+        self.assertNotIn("secret", text)
+
+
 class WebFetchPinning(unittest.TestCase):
     def setUp(self):
         _Hits.hits = []

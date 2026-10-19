@@ -322,9 +322,9 @@ class LoopGuardTests(unittest.TestCase):
         self.assertIsNone(self.g.before("run_command", "systemctl status x"))
 
     def test_tool_caps(self):
-        for i in range(3):
+        for i in range(a.TOOL_CAPS["web_search"]):
             self.run_call("web_search", f"q{i}", f"result {i}")
-        self.assertTrue(self.g.before("web_search", "q9").startswith("BUDGET REACHED"))
+        self.assertTrue(self.g.before("web_search", "q99").startswith("BUDGET REACHED"))
         self.assertFalse(self.g.halted)
         self.g.before("web_search", "q10")
         self.g.before("web_search", "q11")
@@ -409,6 +409,161 @@ class FitContext(unittest.TestCase):
         self.assertNotEqual(out[1]["role"], "tool")
         self.assertNotIn("thinking", out[2])  # old reasoning goes first
         self.assertEqual(msgs[2]["thinking"][:14], "long reasoning")  # the input list is not modified
+
+
+class SessionTranscript(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="hypr-agent-run-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.addCleanup(a.end_session)
+        env = mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": self.dir})
+        env.start()
+        self.addCleanup(env.stop)
+        for target in ("atexit.register", "signal.signal"):  # keep the test process's own handlers
+            patcher = mock.patch(target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_file_lives_for_the_session_only(self):
+        stale = os.path.join(self.dir, "hypr_agent_session_999999999.jsonl")
+        Path(stale).write_text("{}\n")
+        a.start_session()
+        path = a.SESSION_FILE[0]
+        self.assertTrue(os.path.exists(path))
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertFalse(os.path.exists(stale))  # left behind by a session that no longer runs
+        a.end_session()
+        self.assertFalse(os.path.exists(path))
+        self.assertEqual(a.session_transcript(), "")
+
+    def test_turns_reach_the_system_prompt(self):
+        a.start_session()
+        a.log_turn("which browser do I use?", "Firefox, from your profile.")
+        a.log_turn("open it", "", "cancelled by the user")
+        context = a.build_context()
+        self.assertIn("CONVERSATION SO FAR THIS SESSION", context)
+        self.assertIn("1. [", context)
+        self.assertIn("User: which browser do I use?", context)
+        self.assertIn("You: Firefox, from your profile.", context)
+        self.assertIn("(cancelled by the user, no full answer was given)", context)
+
+    def test_long_sessions_keep_the_newest_turns(self):
+        a.start_session()
+        for n in range(40):
+            a.log_turn(f"question {n}", "x" * 2000)
+        text = a.session_transcript()
+        self.assertLessEqual(len(text), a.SESSION_LOG_CHARS + 100)
+        self.assertIn("User: question 39", text)
+        self.assertNotIn("User: question 0\n", text)
+        self.assertTrue(text.startswith("("))  # says how many earlier turns were left out
+
+
+def _reply(text):
+    return {"message": {"role": "assistant", "content": text}}
+
+
+class FactCheck(unittest.TestCase):
+    DRAFT = "The Ender 3 V3 KE is a CoreXY printer, so the Kobra S1 is only a small step up for you. " * 3
+    FIXED = "The Ender 3 V3 KE is a bed slinger and the Kobra S1 is CoreXY, so the S1 is a real upgrade for you. " * 3
+
+    def setUp(self):
+        a.HISTORY.clear()
+        self.addCleanup(a.HISTORY.clear)
+        for name, value in (("FACT_CHECK", True), ("recent_focus_context", lambda: "CONTEXT - none")):
+            patcher = mock.patch.object(a, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_turn(self, drafts, verdicts):
+        with mock.patch.object(a, "_ask", side_effect=[_reply(d) for d in drafts]) as ask, \
+                mock.patch.object(a, "chat", side_effect=[_reply(v) for v in verdicts]):
+            text = a.process_prompt("is this a worthy upgrade for my ender 3 v3 ke")
+        return text, ask
+
+    def test_a_misread_request_sends_the_answer_back_once(self):
+        misread = 'TOPIC | SPECIFIC\nMISREAD | "treats the Ender as the new printer" | the user owns the Ender'
+        text, ask = self.run_turn([self.DRAFT, self.FIXED], [misread, "TOPIC | SPECIFIC\nBACKED | \"bed slinger\" | fetched"])
+        self.assertTrue(text.startswith(self.FIXED.strip()))
+        self.assertNotIn("couldn't confirm", text)
+        note = ask.call_args_list[1].args[0][-1]
+        self.assertEqual(note["role"], "system")  # the model must not think the user wrote the review
+        self.assertIn("the user has NOT seen it", note["content"])
+        self.assertIn("treats the Ender as the new printer", note["content"])
+        saved = [m["content"] for m in a.HISTORY]
+        self.assertNotIn(self.DRAFT.strip(), saved)  # the rejected draft and the review are not kept
+        self.assertFalse(any("Internal review" in c for c in saved))
+        self.assertIn(self.FIXED.strip(), saved)
+
+    def test_a_wrong_fact_is_edited_in_place(self):
+        wrong = 'TOPIC | SPECIFIC\nCONTRADICTED | "The Ender 3 V3 KE is a CoreXY printer" | the spec page says bed slinger'
+        text, ask = self.run_turn([self.DRAFT], [wrong, self.FIXED])
+        self.assertEqual(ask.call_count, 1)  # no second research round
+        self.assertTrue(text.startswith(self.FIXED.strip()))
+        self.assertNotIn("couldn't confirm", text)
+        self.assertIn(self.FIXED.strip(), [m["content"] for m in a.HISTORY])
+
+    def test_a_failed_edit_keeps_the_answer(self):
+        wrong = 'TOPIC | SPECIFIC\nCONTRADICTED | "The Ender 3 V3 KE is a CoreXY printer" | bed slinger'
+        text, _ = self.run_turn([self.DRAFT], [wrong, "ok"])
+        self.assertTrue(text.startswith(self.DRAFT.strip()))
+
+    def test_an_edit_that_invents_figures_is_rejected(self):
+        wrong = 'TOPIC | SPECIFIC\nCONTRADICTED | "The Ender 3 V3 KE is a CoreXY printer" | bed slinger'
+        invented = self.FIXED + " It prints 350×350×350mm."
+        text, _ = self.run_turn([self.DRAFT], [wrong, invented])
+        self.assertTrue(text.startswith(self.DRAFT.strip()))
+
+    def test_claims_still_unbacked_are_flagged_under_the_answer(self):
+        problem = ('TOPIC | SPECIFIC\nUNBACKED | "The Ender 3 V3 KE is a CoreXY printer" | not in any source\n'
+                   'UNBACKED | "the S1 has a resin tank" | not in any source')
+        text, ask = self.run_turn([self.DRAFT, self.DRAFT], [problem, problem])
+        self.assertEqual(ask.call_count, 2)  # only one research round
+        footer = text.split(self.DRAFT.strip())[-1]
+        self.assertIn("I couldn't confirm these details", footer)
+        self.assertIn("The Ender 3 V3 KE is a CoreXY printer; the S1 has a resin tank", footer)
+
+    def test_one_unchecked_detail_is_noted_without_a_rewrite(self):
+        problem = 'TOPIC | SPECIFIC\nUNBACKED | "costs about £300" | no price in the evidence'
+        text, ask = self.run_turn([self.DRAFT], [problem])
+        self.assertEqual(ask.call_count, 1)
+        self.assertTrue(text.startswith(self.DRAFT.strip()))
+        self.assertIn("I couldn't confirm these details, so double-check them: costs about £300", text)
+
+    def test_short_replies_and_disabled_checks_skip_the_checker(self):
+        with mock.patch.object(a, "_ask", return_value=_reply("Hi! What can I do for you?")), \
+                mock.patch.object(a, "chat") as checker:
+            a.process_prompt("hello")
+        checker.assert_not_called()
+        with mock.patch.object(a, "FACT_CHECK", False), mock.patch.object(a, "chat") as checker:
+            self.assertEqual(a.fact_check([{"role": "system", "content": ""}], "q", self.DRAFT), [])
+        checker.assert_not_called()
+
+    def test_verdict_lines_are_read_in_any_layout(self):
+        reply = ("TOPIC | SPECIFIC\nBACKED | \"140 W\" | spec page\n- **UNBACKED** | \"16 GB RAM\" | not mentioned\n"
+                 "VERDICT | \"has HDMI 2.1\" | CONTRADICTED by the manual\nUNBACKED | \"Kobra S1 Combo\" | name not in evidence\n1. MISREAD: compares them the wrong way round")
+        with mock.patch.object(a, "chat", return_value=_reply(reply)):
+            problems = a.fact_check([{"role": "system", "content": ""}], "pros and cons of the Kobra S1 Combo", self.DRAFT)
+        self.assertEqual(problems, [('"16 GB RAM"', "unbacked", "not mentioned"), ('"has HDMI 2.1"', "contradicted", ""),
+                                    ("compares them the wrong way round", "misread", "")])
+        with mock.patch.object(a, "chat", return_value=_reply("TOPIC | GENERAL")):
+            self.assertEqual(a.fact_check([{"role": "system", "content": ""}], "why are toddlers loud", self.DRAFT), [])
+
+    def test_figures_that_were_looked_up_are_not_flagged(self):
+        messages = [{"role": "system", "content": ""},
+                    {"role": "tool", "tool_name": "web_fetch", "content": "Build volume 250*250*250mm, chamber heating 65℃, 2 fans"}]
+        reply = ('TOPIC | SPECIFIC\nUNBACKED | "250×250×250mm build volume" | framed oddly\nUNBACKED | "chamber up to 65°C" | x\n'
+                 'UNBACKED | "2 extruders" | not mentioned\nCONTRADICTED | "chamber up to 65°C" | evidence says 65')
+        with mock.patch.object(a, "chat", return_value=_reply(reply)):
+            problems = a.fact_check(messages, "q", self.DRAFT)
+        self.assertEqual([p[0] for p in problems], ['"2 extruders"', '"chamber up to 65°C"'])
+
+    def test_evidence_is_tool_output_not_earlier_answers(self):
+        messages = [{"role": "system", "content": "prompt"},
+                    {"role": "assistant", "content": "earlier claim: it is CoreXY"},
+                    {"role": "tool", "tool_name": "web_fetch", "content": "Ender-3 V3 KE: Cartesian (bed slinger)"}]
+        evidence = a._evidence(messages)
+        self.assertIn("[web_fetch]\nEnder-3 V3 KE: Cartesian", evidence)
+        self.assertNotIn("earlier claim", evidence)
 
 
 if __name__ == "__main__":

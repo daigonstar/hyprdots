@@ -89,6 +89,69 @@ class SetupScript(unittest.TestCase):
         self.assertNotEqual(self.setup("--bogus").returncode, 0)
 
 
+class SearchSetup(unittest.TestCase):
+    """The SearXNG step, run against stand-in docker, curl and sudo commands so nothing real is started."""
+
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp(prefix="setup-search-"))
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.local = self.home / "user_settings.local.toml"
+        self.calls = self.home / "docker-calls"
+        fake = self.home / "bin"
+        fake.mkdir()
+        scripts = {
+            "docker": f'''echo "$*" >> {self.calls}
+case "$1" in
+  container) [ -e {self.home}/created ] ;;
+  run) touch {self.home}/created ;;
+esac''',
+            "curl": "exit 0",
+            "sudo": "exit 0",
+            "ollama": "exit 0",
+        }
+        for name, body in scripts.items():
+            (fake / name).write_text("#!/bin/sh\n" + body + "\n")
+            (fake / name).chmod(0o755)
+        self.env = {**os.environ, "HOME": str(self.home), "XDG_STATE_HOME": str(self.home / "state"),
+                    "XDG_CONFIG_HOME": str(self.home / "config"), "ASSISTANT_LOCAL_SETTINGS": str(self.local),
+                    "PATH": f"{fake}:{os.environ['PATH']}"}
+        self.env.pop("HYPR_ASSISTANT", None)
+        self.assistant = self.home / "assistant"
+        self.assistant.mkdir()
+        for name in ("setup.sh", "agent_context.example.md"):
+            shutil.copy(ASSISTANT / name, self.assistant / name)
+
+    def setup(self, *args):
+        return subprocess.run(["bash", str(self.assistant / "setup.sh"), "--no-pull", "--no-packages", "--tier", "light", *args],
+                              env=self.env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+
+    def test_installs_once_then_reuses(self):
+        result = self.setup()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn("run -d --name searxng --restart unless-stopped -p 127.0.0.1:8888:8080", calls)
+        self.assertEqual(tomllib.loads(self.local.read_text())["assistant"]["searxng_url"], "http://127.0.0.1:8888")
+        config = self.home / "config" / "searxng" / "settings.yml"
+        self.assertIn("- json", config.read_text())
+        self.assertEqual(oct(config.stat().st_mode & 0o777), "0o600")  # holds the secret key
+        config.write_text("my own searxng settings\n")
+        self.calls.unlink()
+        self.assertEqual(self.setup().returncode, 0)
+        calls = self.calls.read_text()
+        self.assertIn("start searxng", calls)
+        self.assertNotIn("run -d", calls)
+        self.assertEqual(config.read_text(), "my own searxng settings\n")  # never overwritten
+
+    def test_no_search_and_dry_run_start_nothing(self):
+        self.assertEqual(self.setup("--no-search").returncode, 0)
+        self.assertFalse(self.calls.exists() and "searxng" in self.calls.read_text())
+        self.assertNotIn("searxng_url", self.local.read_text())
+        result = self.setup("--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("would start the searxng container", result.stdout)
+        self.assertFalse((self.home / "config" / "searxng").exists())
+
+
 class ContextFile(unittest.TestCase):
     def profile(self, with_own):
         root = Path(tempfile.mkdtemp(prefix="agent-context-"))

@@ -13,3 +13,5 @@ OrcaSlicer-Linux-flatpak_V2.3.1_x86_64.flatpak
 /.config/hypr/user_overrides.lua
 __pycache__/
 /.claude/
+.config/hypr/settings/tests/
+.config/hypr/assistant/tests/
