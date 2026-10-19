@@ -1,0 +1,83 @@
+--- settings/hyprsettings/tui.py	2026-10-19 18:36:46.282012649 +0100
++++ settings/hyprsettings/tui.py	2026-10-19 18:26:01.167206781 +0100
+@@ -137,24 +135,6 @@
+                            help="Opens user_settings.toml (shared defaults) and user_settings.local.toml (yours) in your editor."))
+         return out
+ 
+-    def _keybind_rows(self, out: list[Row]) -> list[Row]:
+-        binds = self.store.keybind_rows()
+-        out.append(Row("action", "? How to edit or add keys", ref="keybind_help",
+-                       help="Press Enter for a short guide: changing a key here, and adding a brand new keybind."))
+-        out.append(Row("note", ""))
+-        if not binds:
+-            out.append(Row("note", f"No keybinds found. keybinds.lua needs its KEYBINDS-BEGIN list in {self.store.dir}."))
+-            return out
+-        last = None
+-        for b in binds:
+-            if b["group"] and b["group"] != last:
+-                out.append(Row("header", b["group"]))
+-                last = b["group"]
+-            keys, source = self.store.get_keybind(b)
+-            out.append(Row("keybind", b["label"], "(unbound)" if keys == "none" else keys, source, ref=b["id"],
+-                           help=f"Enter to change. Default: {b['keys']}. r puts the default back. Takes effect when Hyprland reloads."))
+-        return out
+-
+     @staticmethod
+     def _mask(link: str) -> str:
+         if link.startswith(("http://", "https://", "webcal://")):
+@@ -404,55 +380,10 @@
+     def confirm(self, title: str, lines: list[str], options: str, on_confirm: Callable[[str], None]) -> None:
+         self.popup = Popup("confirm", title, lines, options=options, on_confirm=on_confirm)
+ 
+-    # ---- keybinds ----------------------------------------------------------------------------------------
+-    # A terminal cannot see the Super key (Hyprland takes the combo first), so the combo is built in two
+-    # steps: choose the modifiers, then type the key name.
+-    MODIFIER_CHOICES = [("SUPER", "Super"), ("SUPER + SHIFT", "Super + Shift"), ("SUPER + CTRL", "Super + Ctrl"),
+-                        ("SUPER + ALT", "Super + Alt"), ("SUPER + CTRL + SHIFT", "Super + Ctrl + Shift"),
+-                        ("CTRL + ALT", "Ctrl + Alt"), ("CTRL + SHIFT", "Ctrl + Shift"), ("ALT", "Alt"),
+-                        ("", "No modifier (the key on its own)")]
+-
+-    def store_keybind(self, bind_id: str) -> dict:
+-        return next(b for b in self.store.keybind_rows() if b["id"] == bind_id)
+-
+-    def rebind(self, bind_id: str) -> None:
+-        b = self.store_keybind(bind_id)
+-        current = self.store.get_keybind(b)[0]
+-        items = [(m, label, "") for m, label in self.MODIFIER_CHOICES] + [("__type__", "Type the whole combo...", ""), ("none", "Leave unbound", "")]
+-
+-        def chosen(v):
+-            if v == "none":
+-                self.store.stage_keybind(b, "none")
+-            elif v == "__type__":
+-                self.ask(b["label"], "" if current == "none" else current, lambda t: self.store.stage_keybind(b, t),
+-                         ["Write it like SUPER + SHIFT + T. Modifiers: Super, Ctrl, Alt, Shift."])
+-            else:
+-                def got_key(t):
+-                    t = t.strip()
+-                    if not t:
+-                        raise ValueError("type a key, for example T, F5, left or SPACE")
+-                    self.store.stage_keybind(b, f"{v} + {t}" if v else t)
+-                self.ask(f"{b['label']}: key to use with {v or 'no modifier'}", "", got_key,
+-                         ["One letter or digit, or a name such as F5, left, right, SPACE, RETURN, TAB, PRINT."])
+-        self.popup = Popup("choose", b["label"], [f"Now: {'(unbound)' if current == 'none' else current}. Pick the modifiers first, then type the key."],
+-                           items, 0, on_select=chosen)
+-
+     # ---- calendars -----------------------------------------------------------------------------------------
+     def action(self, name: str) -> None:
+         if name == "toggle_assistant":
+             return self.toggle_assistant()
+-        if name == "keybind_help":
+-            return self.message("Keybinds: change and add", [
+-                "CHANGE a key: pick an action in the list, press Enter, choose the modifiers (Super is the Windows key), then type the key.",
+-                "Choose 'Leave unbound' to switch an action off, or press r to put its default back.",
+-                "Save with Ctrl+S, then reload Hyprland when asked.",
+-                "",
+-                "ADD a new keybind: open keybinds.lua and add one line inside the KEYBINDS-BEGIN / KEYBINDS-END list, for example:",
+-                '{ id = "calc", label = "Open calculator", keys = "SUPER + equal", action = hl.dsp.exec_cmd("gnome-calculator") },',
+-                "Keep id unique, and put '-- group: Name' above a section to start a new heading.",
+-                "Reload Hyprland and the new action appears here, ready to rebind.",
+-                "",
+-                f"File: {self.store.keybinds_path}"])
+         if name == "edit_files":
+             self.exit_action = "edit"
+             return

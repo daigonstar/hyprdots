@@ -1,0 +1,11 @@
+--- settings/hyprsettings/schema.py	2026-10-19 18:26:01.168515365 +0100
++++ settings/hyprsettings/schema.py	2026-10-19 18:36:42.695082881 +0100
+@@ -18,6 +18,8 @@
+                          "wrong. For screen layout use the display icon in the bar's drawer.",
+     "Calendar": "Calendars shown in the clock popup and readable by the assistant. Links stay private on this computer.",
+     "Hyprland": "How the desktop looks and how your keyboard and mouse behave. After saving you are offered a reload.",
++    "Keybinds": "Select an action and press Enter to give it a new key combo. Open the first item for how to add your own. "
++                "Super is the Windows key. Applied when Hyprland reloads.",
+     "Hyprdots": "Default apps for the keybinds, and what starts when you log in.",
+ }
+ 
