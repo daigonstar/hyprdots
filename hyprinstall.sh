@@ -292,9 +292,10 @@ select_gpu_vendors() {
 
   local gpu_info detected=()
   gpu_info="$(lspci -nn 2>/dev/null | grep -Ei 'vga|3d controller|display controller' || true)"
-  grep -qi 'nvidia' <<<"$gpu_info" && detected+=(nvidia)
-  grep -qiE 'amd|ati|advanced micro' <<<"$gpu_info" && detected+=(amd)
-  grep -qi 'intel' <<<"$gpu_info" && detected+=(intel)
+  # Match the PCI vendor ID ([10de:...] etc.), or the name as a whole word: a bare 'ati' would match "Intel Corporation"
+  grep -qiE '\[10de:|\bnvidia\b' <<<"$gpu_info" && detected+=(nvidia)
+  grep -qiE '\[1002:|\b(amd|ati)\b|advanced micro' <<<"$gpu_info" && detected+=(amd)
+  grep -qiE '\[8086:|\bintel\b' <<<"$gpu_info" && detected+=(intel)
 
   if [[ "$DRY_RUN" == "true" || ! -t 0 ]]; then
     GPU_VENDORS=("${detected[@]}")

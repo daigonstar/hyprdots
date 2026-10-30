@@ -55,9 +55,10 @@ interactive() { [[ -t 0 && -t 1 ]] && ! $ASSUME_YES; }
 gpu_vendor() {
   local info
   info="$(lspci -nn 2>/dev/null | grep -Ei 'vga|3d controller|display controller' || true)"
-  if grep -qi nvidia <<<"$info"; then echo nvidia
-  elif grep -qiE 'amd|ati|advanced micro' <<<"$info"; then echo amd
-  elif grep -qi intel <<<"$info"; then echo intel
+  # Match the PCI vendor ID ([10de:...] etc.), or the name as a whole word: a bare 'ati' would match "Intel Corporation"
+  if grep -qiE '\[10de:|\bnvidia\b' <<<"$info"; then echo nvidia
+  elif grep -qiE '\[1002:|\b(amd|ati)\b|advanced micro' <<<"$info"; then echo amd
+  elif grep -qiE '\[8086:|\bintel\b' <<<"$info"; then echo intel
   else echo none; fi
 }
 
