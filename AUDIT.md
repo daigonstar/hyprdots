@@ -8,12 +8,12 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 
 | # | Problem | Why it matters |
 |---|---|---|
-| 1 | `update.sh` moves your local config (`monitors.lua`, `user_settings.local.toml`, `user_overrides.lua` and others) to `~/.config/backup` before it checks the network. A failed `git fetch` strands it there. *(checked)* | Hyprland fails to load `monitors.lua` on the next start. |
-| 2 | `update.sh` runs `git reset --hard` on the repo while it is still reading `update.sh`. | The rest of the run can execute garbled. |
-| 3 | `git clean -fdx` deletes more than the five preserved files, including the saved branch choice. The updater also never installs new dependencies from `install/required.txt`. | Existing installs break after an update that adds a package. |
-| 4 | `hyprinstall.sh` and `update.sh` delete your existing configs and `~/Pictures/wallpapers`. The installer's backup prompt defaults to No. | A clean-machine user can lose their own configs and wallpapers. |
-| 5 | `assistant/setup.sh` classes every Intel GPU as AMD: the pattern `amd\|ati\|advanced micro` matches "Intel Corporation". *(checked)* | Intel users get the AMD ROCm build of ollama. |
-| 6 | `assistant/setup.sh` assumes `paru` exists. On a clean Arch machine the install silently fails. | This is the bug hit on the laptop. | # Paru will always exsist as during setup paru is auto installed
+| 1 | `update.sh` moves your local config (`monitors.lua`, `user_settings.local.toml`, `user_overrides.lua` and others) to `~/.config/backup` before it checks the network. A failed `git fetch` strands it there. *(checked)* | Hyprland fails to load `monitors.lua` on the next start. **Fixed in 9213b2e:** fetches first, keeps local files in place, restores ones stranded by older versions. |
+| 2 | `update.sh` runs `git reset --hard` on the repo while it is still reading `update.sh`. | The rest of the run can execute garbled. **Fixed in 9213b2e:** the script runs from `main()`. |
+| 3 | `git clean -fdx` deletes more than the five preserved files, including the saved branch choice. The updater also never installs new dependencies from `install/required.txt`. | Existing installs break after an update that adds a package. **Fixed in 9213b2e:** `git clean` skips a preserve list (including `.update-branch` and `private_modes/`), and missing packages are installed. |
+| 4 | `hyprinstall.sh` and `update.sh` delete your existing configs and `~/Pictures/wallpapers`. The installer's backup prompt defaults to No. | A clean-machine user can lose their own configs and wallpapers. **Fixed in 9213b2e:** configs are moved to `~/.config-backup/<timestamp>/`, wallpapers are added without overwriting. |
+| 5 | `assistant/setup.sh` classes every Intel GPU as AMD: the pattern `amd\|ati\|advanced micro` matches "Intel Corporation". *(checked)* | Intel users get the AMD ROCm build of ollama. **Fixed in 3ed9e8b**, along with the same bug in the installer's GPU driver step. |
+| 6 | `assistant/setup.sh` assumes `paru` exists. On a clean Arch machine the install silently fails. | This is the bug hit on the laptop. **Low priority:** the installer installs paru before running this, so it only fails when `setup.sh` is run on its own. |
 | 7 | Assistant command guard bypasses: `env -S`, docker/systemctl option values read as the subcommand, `git ls-remote --upload-pack`, `cp`/`mv --target-directory=`. `write_file` can also stage a config file that a "safe" command then loads. | Commands run or files are written without a prompt. Prompt injection from a web page or calendar entry could use this. |
 | 8 | Displays page: turning off the laptop's own screen while docked can be saved to `monitors.lua`. | Undocked, no screen is enabled. |
 | 9 | Display confirm popup: Esc is ignored and Enter keeps the layout, but the text says anything else puts the old settings back. Saving also forgets screens that are not plugged in, and mirrored screens are not handled. | On a blank screen the popup cannot be cancelled. |
@@ -22,8 +22,8 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 
 ## Installer and updater
 
-- `update.sh` reads its whole body before the repo is reset; wrap it in a function or re-run itself after the reset.
-- Wallpapers are wiped and recopied on every install and update; use `rsync -a` or `cp -rn`.
+- ~~`update.sh` reads its whole body before the repo is reset; wrap it in a function or re-run itself after the reset.~~ Fixed in 9213b2e.
+- ~~Wallpapers are wiped and recopied on every install and update; use `rsync -a` or `cp -rn`.~~ Fixed in 9213b2e (`cp --update=none`); `update.sh` also no longer runs `rsync --delete` into a real `~/.config/hypr`.
 - Plymouth: `git clone` into `/usr/share/plymouth/themes` fails on a re-run and aborts the installer under `set -e`. The `plymouth` hook and `splash` kernel parameter are never added, so the splash never appears.
 - `--dry-run` crashes on a machine without `paru`, because the clone is only printed and `pushd` then fails.
 - The log directory is created only in dry-run mode, so a real first run falls back to `~/hyprinstall.log`.
@@ -93,7 +93,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 
 ## Suggested order
 
-1. Updater and installer safety (items 1-4), then the Intel and `paru` bugs (items 5-6).
+1. ~~Updater and installer safety (items 1-4), then the Intel and `paru` bugs (items 5-6).~~ Items 1-5 done; item 6 is low priority.
 2. Tighten the assistant guard (item 7) by allow-listing flags per command instead of deny-listing, then fix the display popup and docked-laptop cases (items 8-9).
 3. Clear the broken or accidentally committed files (items 10-11) and un-ignore the tests so CI runs them.
 
