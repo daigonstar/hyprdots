@@ -267,28 +267,9 @@ class App:
 
     def _display_change(self, name: str, **edits) -> None:
         before = copy.deepcopy(self.monitors())
-        after = copy.deepcopy(before)
-        m = next(x for x in after if x["name"] == name)
-        if "width" in edits:
-            m.update(width=edits["width"], height=edits["height"], refresh=edits["refresh"])
-        for key in ("scale", "transform", "vrr", "x", "y"):
-            if key in edits:
-                m[key] = edits[key]
-        if "disabled" in edits:
-            m["disabled"] = edits["disabled"]
-            if not edits["disabled"]:
-                if not m["width"] and m["modes"]:
-                    m["width"], m["height"], m["refresh"] = displays.parse_mode(m["modes"][0])
-                live = [x for x in after if not x["disabled"] and x is not m]
-                if live:
-                    right = max(live, key=lambda x: x["x"])
-                    m["x"], m["y"] = displays.place_beside(m, right, "right")
-        if "x" not in edits:
-            displays.resolve_overlaps(after, name)
-        problem = displays.overlaps(after)
+        after, problem = displays.plan_change(before, name, **edits)
         if problem:
-            return self.message("Screens would overlap", [problem])
-        displays.normalize_positions(after)
+            return self.message("Screens would overlap" if "overlap" in problem else "Not possible", [problem])
         ok, why = displays.apply(after)
         if not ok:
             displays.apply(before)

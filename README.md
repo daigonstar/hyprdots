@@ -77,7 +77,7 @@ Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_co
 
 ### Settings app
 
-Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`) for a menu where you can change things without editing files:
+Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`) for a settings window where you can change things without editing files. It uses your wallpaper's colours, and on a narrow or rotated screen it shows the page list and the page one at a time. Over SSH, or with `settings.sh --tui`, the same settings open as a terminal app instead.
 
 | Page | What you can change |
 | --- | --- |
@@ -88,11 +88,11 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays); changes apply at once and undo themselves if you do not confirm |
 | Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
 | Hyprland | Gaps, borders, rounding, blur, animations, layout, keyboard layout and mouse |
-| Keybinds | Change the key combo for any action |
+| Keybinds | Change the key combo for any action: click it and press the new combo |
 | File types | Which app opens links, pictures, video, PDFs, archives and other kinds of file |
-| Hyprdots | Default terminal, file manager, browser and store, and which apps start with the desktop |
+| Hyprdots | Default terminal, file manager, browser and store, which apps start with the desktop, and whether the Super key is drawn as the Arch logo, Tux or the word SUPER |
 
-Every option has a short explanation and says when it takes effect. The Displays, Appearance, File types and Cloud drives pages apply straight away. On the other pages changes are not applied until you save: the title bar and a yellow bar at the bottom say how many are pending, and Ctrl+S, `s` or the **[ Save changes ]** button (mouse works too) keeps them. Your choices are saved to `~/.config/hypr/user_settings.local.toml` (and `user_overrides.lua` for the Hyprland look and apps); both are git-ignored, so updating the dotfiles never undoes them. The shared `user_settings.toml` only holds the defaults. Use `r` to go back to a default.
+Every option has a short explanation and says when it takes effect. The Displays, Appearance, File types and Cloud drives pages apply straight away. On the other pages changes are held until you save: a bar at the bottom says how many are pending, with **Save** (Ctrl+S) and **Discard**, and changed options are marked *unsaved*. Your choices are saved to `~/.config/hypr/user_settings.local.toml` (and `user_overrides.lua` for the Hyprland look and apps); both are git-ignored, so updating the dotfiles never undoes them. The shared `user_settings.toml` only holds the defaults. Options you have changed are marked *custom*, with an undo button to go back to the default.
 
 ### User settings
 

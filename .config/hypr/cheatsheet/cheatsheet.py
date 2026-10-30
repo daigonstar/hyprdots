@@ -6,7 +6,6 @@ Keys: type to search, Esc closes (or clears the search first). Clicking outside 
 Run through cheatsheet.sh (it preloads gtk4-layer-shell, which has to be loaded before GTK). Running it again
 while it is open closes it. --list prints the rows instead of opening the window."""
 
-import re
 import sys
 from pathlib import Path
 
@@ -14,10 +13,8 @@ HYPR_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HYPR_DIR / "settings"))
 from hyprsettings.schema import BY_ID  # noqa: E402
 from hyprsettings.store import Store  # noqa: E402
+from hyprsettings.theme import ICON_FONT, colors, super_glyph  # noqa: E402
 
-COLORS_FILE = Path.home() / ".config/rofi/colors.rasi"
-ICON_FONT = "CaskaydiaCove Nerd Font"
-LOGOS = {"arch": "", "tux": ""}
 
 # Combos keybinds.lua sets itself, outside the rebindable list
 FIXED = [
@@ -70,39 +67,6 @@ def caps(keys: str) -> list[str]:
         else:
             out.append(part)
     return out
-
-
-def theme_colors() -> dict:
-    """Wallust colours from the rofi colour file, with a calm fallback."""
-    out = {"accent": "#949ab3", "soft": "#a8a8ab", "fg": "#faf7fa", "bg": "#1c1a1c"}
-    try:
-        text = COLORS_FILE.read_text()
-    except OSError:
-        return out
-    for key, name in (("accent", "color12"), ("soft", "color5"), ("fg", "foreground"), ("bg", "background")):
-        m = re.search(rf"^\s*{name}:\s*(#[0-9a-fA-F]{{6}})", text, re.M)
-        if m:
-            out[key] = m[1]
-    # Some wallpapers give a very dark accent; blend it towards the text colour until it reads on the dark card
-    for key in ("accent", "soft"):
-        for _ in range(6):
-            if luminance(out[key]) >= 0.28:
-                break
-            out[key] = mix(out[key], out["fg"], 0.35)
-    return out
-
-
-def _rgb(hex_colour: str) -> tuple:
-    return tuple(int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5))
-
-
-def luminance(hex_colour: str) -> float:
-    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in _rgb(hex_colour)]
-    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
-
-
-def mix(a: str, b: str, t: float) -> str:
-    return "#" + "".join(f"{round((x + (y - x) * t) * 255):02x}" for x, y in zip(_rgb(a), _rgb(b)))
 
 
 def css(c: dict) -> str:
@@ -177,7 +141,7 @@ def build_window(app, Gtk, Gtk4LayerShell, Gdk):
 
     # Header: logo, title, search
     header = Gtk.Box(spacing=14)
-    header.append(Gtk.Label(label=LOGOS.get(logo, ""), css_classes=["logo"]))
+    header.append(Gtk.Label(label=super_glyph("arch" if logo == "text" else logo), css_classes=["logo"]))
     titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
     titles.append(Gtk.Label(label="Keybinds", xalign=0, css_classes=["title"]))
     titles.append(Gtk.Label(label="Change them in hypr-settings → Keybinds", xalign=0, css_classes=["subtitle"]))
@@ -204,8 +168,7 @@ def build_window(app, Gtk, Gtk4LayerShell, Gdk):
                 if i:
                     keyline.append(Gtk.Label(label="+", css_classes=["plus"]))
                 if part == "SUPER":
-                    text = "SUPER" if logo == "text" else LOGOS.get(logo, "")
-                    keyline.append(Gtk.Label(label=text, css_classes=["cap", "super"]))
+                    keyline.append(Gtk.Label(label=super_glyph(logo), css_classes=["cap", "super"]))
                 else:
                     keyline.append(Gtk.Label(label=part, css_classes=["cap"]))
             row.append(Gtk.Label(label=label, xalign=0, hexpand=True, css_classes=["label"]))
@@ -275,7 +238,7 @@ def build_window(app, Gtk, Gtk4LayerShell, Gdk):
     backdrop.add_controller(click)
 
     provider = Gtk.CssProvider()
-    provider.load_from_string(css(theme_colors()))
+    provider.load_from_string(css(colors()))
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     win.present()
     search.grab_focus()

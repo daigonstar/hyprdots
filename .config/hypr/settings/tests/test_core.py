@@ -173,15 +173,15 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(store.get(self.s("hyprland.gaps_in"))[1], "default")
 
     def test_startup_apps_and_calendar(self):
-        self.assertIn("discord", [a["id"] for a in self.store.startup_apps()])
-        self.store.set_startup("discord", False)
+        self.assertIn("vesktop", [a["id"] for a in self.store.startup_apps()])
+        self.store.set_startup("vesktop", False)
         self.store.set_startup("solaar", False)
         self.store.set_calendar_sources(["Home|https://example.com/x.ics"])
         self.store.save()
         again = Store(self.dir)
-        self.assertEqual(again.disabled_startup(), ["discord", "solaar"])
+        self.assertEqual(again.disabled_startup(), ["solaar", "vesktop"])
         self.assertEqual(again.calendar_sources(), ["Home|https://example.com/x.ics"])
-        again.set_startup("discord", True)
+        again.set_startup("vesktop", True)
         again.set_startup("solaar", True)
         again.save()
         self.assertEqual(Store(self.dir).disabled_startup(), [])
@@ -215,7 +215,7 @@ class Overrides(unittest.TestCase):
     @unittest.skipUnless(LUA, "lua is not installed")
     def test_generated_file_is_valid_lua_and_applies(self):
         text = overrides.render([(("general", "gaps_in"), 7), (("decoration", "blur", "enabled"), False),
-                                 (("input", "kb_layout"), 'we"ird')], {"terminal": "foo bar"}, ["discord", "a b"])
+                                 (("input", "kb_layout"), 'we"ird')], {"terminal": "foo bar"}, ["vesktop", "a b"])
         path = Path(tempfile.mkdtemp()) / "user_overrides.lua"
         self.addCleanup(shutil.rmtree, path.parent, True)
         overrides.write(path, text)
@@ -225,7 +225,7 @@ class Overrides(unittest.TestCase):
         local m = dofile("{path}")
         m.apply()
         assert(seen.general.gaps_in == 7 and seen.decoration.blur.enabled == false and seen.input.kb_layout == 'we"ird')
-        assert(m.apps.terminal == "foo bar" and m.startup_disabled["discord"] and m.startup_disabled["a b"])
+        assert(m.apps.terminal == "foo bar" and m.startup_disabled["vesktop"] and m.startup_disabled["a b"])
         """
         result = self.run_lua(code)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -270,11 +270,11 @@ class Overrides(unittest.TestCase):
         autostart = _paths.HYPR / "autostart.lua"
         script = f'dofile("{autostart}"); print(table.concat(execs, "\\n"))'
         everything = self.harness(None, script).stdout
-        for app in ("discord", "solaar", "coolercontrol", "waybar", "swaync"):
+        for app in ("vesktop", "solaar", "coolercontrol", "waybar", "swaync"):
             self.assertIn(app, everything)
-        fewer = self.harness(overrides.render([], {}, ["discord", "solaar"]), script)
+        fewer = self.harness(overrides.render([], {}, ["vesktop", "solaar"]), script)
         self.assertEqual(fewer.returncode, 0, fewer.stderr)
-        self.assertNotIn("discord", fewer.stdout)
+        self.assertNotIn("vesktop", fewer.stdout)
         self.assertNotIn("solaar", fewer.stdout)
         for kept in ("coolercontrol", "waybar", "swaync", "hypridle"):
             self.assertIn(kept, fewer.stdout)

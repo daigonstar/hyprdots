@@ -475,10 +475,10 @@ class OtherPages(TuiBase):
 
     def test_startup_apps_toggle(self):
         self.goto("Hyprdots")
-        self.select("Discord")
+        self.select("Vesktop")
         self.assertIn("on", self.app.current_row().value)
         self.app.handle_key(" ")
-        self.assertEqual(self.store.disabled_startup(), ["discord"])
+        self.assertEqual(self.store.disabled_startup(), ["vesktop"])
         self.assertEqual(self.app.current_row().value, "off")
         self.app.handle_key(" ")
         self.assertEqual(self.store.disabled_startup(), [])

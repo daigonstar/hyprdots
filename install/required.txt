@@ -97,6 +97,7 @@ grim
 slurp
 gtk-layer-shell
 gtk4
+libadwaita
 gtk4-layer-shell
 python
 python-gobject

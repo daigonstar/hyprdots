@@ -273,7 +273,7 @@
             "exec": "echo '{\"tooltip\": \"Settings: assistant, calendars, cloud drives, displays, GTK look, Hyprland, keybinds and default apps\"}'",
             "return-type": "json",
             "interval": "once",
-            "on-click": "ghostty -e ~/.config/hypr/scripts/settings.sh"
+            "on-click": "~/.config/hypr/scripts/settings.sh"
         },
         "custom/keys": {
             "format": "󰌌",
