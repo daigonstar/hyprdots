@@ -6,9 +6,9 @@ local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == 
 
 -- STARTUP-APPS-BEGIN
 local optional_apps = {
-    { id = "discord", label = "Discord", cmd = "discord" },
+    { id = "vesktop", label = "Vesktop", cmd = "vesktop" },
     { id = "nextcloud", label = "Nextcloud sync", cmd = "com.nextcloud.desktopclient.nextcloud --background" },
-    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "openrgb --startminimized -p Ice.orp" },
+    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "openrgb --startminimized -p ICE.orp" },
     { id = "coolercontrol", label = "CoolerControl (fans and cooling)", cmd = "coolercontrol" },
     { id = "solaar", label = "Solaar (Logitech devices)", cmd = "solaar --w hide" },
     { id = "bitwarden", label = "Bitwarden", cmd = "com.bitwarden.desktop --hidden" },
@@ -24,6 +24,7 @@ hl.on("hyprland.start", function()
         -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
+        "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\"",
         "systemctl --user start hyprpolkitagent",
         "systemctl --user enable --now hyprpolkitagent.service",
         "waybar",
@@ -39,6 +40,7 @@ hl.on("hyprland.start", function()
         -- `hyprctl dispatch workspace 1`/`focusmonitor DP-1` are legacy
         -- dispatcher names and no longer work under the Lua config parser.
         "sleep 2 && hyprctl dispatch 'hl.dsp.focus({ workspace = 1 })' && hyprctl dispatch 'hl.dsp.focus({ monitor = \"DP-1\" })'",
+        "thunar --daemon",
     }
 
     for _, command in ipairs(commands) do

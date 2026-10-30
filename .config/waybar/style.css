@@ -3,6 +3,7 @@
 * {
     font-size: 15px;
     font-family: "ttf-cascadia-code-nerd";
+    color: @color12;
 }
 window#waybar {
     all: unset;
@@ -10,26 +11,27 @@ window#waybar {
 .expand {
     margin-left: 2px;
     margin-right: 2px;
+    color: @color12;
 }
 .modules-center {
     padding: 5px;
     margin: 5 0 5 0;
     border-radius: 20px;
-    background: alpha(@color2, 0.6);
+    background: alpha(@color2, 0.8);
     box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
 }
 .modules-left {
     padding: 5px;
     margin: 5 0 5 0;
     border-radius: 10px;
-    background: alpha(@color2, 0.6);
+    background: alpha(@color2, 0.8);
     box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
 }
 .modules-right {
     padding: 5px;
     margin: 5 0 5 0;
     border-radius: 10px;
-    background: alpha(@color2, 0.6);
+    background: alpha(@color2, 0.8);
     box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
 }
 #workspaces {
@@ -74,7 +76,7 @@ window#waybar {
     margin: 0px;
     font-size: 15px;
     opacity: 0.8;
-    color: @color15;
+    color: @color12;
 }
 #custom-assistant:hover {
     opacity: 1;
@@ -82,16 +84,16 @@ window#waybar {
 
 #clock {
     padding: 0px 0px 0px 3px;
-    color: @color15;
+    color: @color12;
 }
 
 #network {
     padding: 0px 4px;
-    color: @color15;
+    color: @color12;
 }
 
 #bluetooth {
-    color: @color15;
+    color: @color12;
 }
 #bluetooth-connected {
     color: #5254e9;
@@ -99,14 +101,14 @@ window#waybar {
 
 #custom-power {
     padding: 0px 0px;
-    color: red;
+    color: @color12;
 }
 
 #battery.charging {
     color: rgba(24, 185, 9, 0.5);
 }
 #cava {
-    color: @color7;
+    color: @color12;
     border-left: 0px;
     border-right: 0px;
     padding-right: 7px;
@@ -129,23 +131,26 @@ window#waybar {
 #temperature {
     padding: 0px 5px;
     background: none;
+    color: red;
 }
 
 #tray {
     padding: 0px 5px;
     margin: 0px 0px 0px 0px;
-    background: alpha(@color8, 0.6);
+    background: alpha(@color3, 0.6);
     border-radius: 10px;
     box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
 }
 
-#custom-trayicon {
+#custom-trayarrow,
+#custom-settingarrow {
     padding: 0px 6px;
     margin: 0px 0px 0px 0px;
+    color: @color12;
 }
 #pulseaudio {
     padding: 0px 0px;
-    color: @color15;
+    color: @color12;
 }
 
 #pulseaudio.format-icons,
@@ -156,7 +161,7 @@ window#waybar {
     font-family: "NotoSansMono Nerd Font";
     margin-right: 15px;
     padding-top: 1px; /* Fine-tune the vertical position if it looks off */
-    color: @color15;
+    color: @color12;
 }
 #custom-settingsicon,
 #custom-wallpaper,
@@ -169,7 +174,7 @@ window#waybar {
 }
 #custom-updates {
     padding: 0px 4px;
-    color: @color15;
+    color: @color12;
 }
 #custom-updates.pending {
     color: orange;

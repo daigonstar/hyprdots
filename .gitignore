@@ -15,3 +15,6 @@ __pycache__/
 /.claude/
 .config/hypr/settings/tests/
 .config/hypr/assistant/tests/
+.update-branch
+.config/hypr/assistant/private_modes/
+*.pre-modes

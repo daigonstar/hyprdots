@@ -34,6 +34,14 @@ TYPE_LABELS = {"drive": "Google Drive", "onedrive": "OneDrive", "dropbox": "Drop
 NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,30}$")
 TEMPLATE = "rclone-mount@.service"
 
+# Flags for every mount. They make the first visit to a drive fast:
+#   --vfs-refresh      lists the folders in the background right after mounting, so Thunar hits the cache
+#   --dir-cache-time   keeps listings for an hour (--poll-interval still picks up remote changes)
+#   --attr-timeout     lets the kernel cache file attributes, so repeated stat calls never reach rclone
+#   --vfs-cache-max-size  caps the on-disk file cache per drive, so a PC left on for days cannot fill the disk
+MOUNT_FLAGS = ("--vfs-cache-mode full --vfs-cache-max-size 10G --dir-cache-time 1h --poll-interval 1m "
+               "--vfs-refresh --attr-timeout 30s")
+
 _cache: dict = {"t": float("-inf"), "data": []}
 
 
@@ -52,6 +60,12 @@ def mount_root() -> Path:
 
 def mount_path(name: str) -> Path:
     return mount_root() / name
+
+
+def bookmarks_enabled() -> bool:
+    """Thunar probes every sidebar bookmark when it starts, so a slow drive slows Thunar down.
+    Set HYPR_CLOUD_BOOKMARKS=0 (for example in ~/.config/environment.d/) to keep drives out of the sidebar."""
+    return os.environ.get("HYPR_CLOUD_BOOKMARKS", "1").strip().lower() not in ("0", "no", "off", "false")
 
 
 def type_label(kind: str) -> str:
@@ -166,7 +180,7 @@ Wants=network-online.target
 Type=notify
 ExecStartPre=-{fuse} -uz "{root}/%i"
 ExecStartPre=/usr/bin/env mkdir -p "{root}/%i"
-ExecStart={exe} mount %i: "{root}/%i" --vfs-cache-mode full --dir-cache-time 5m --poll-interval 1m
+ExecStart={exe} mount %i: "{root}/%i" {MOUNT_FLAGS}
 ExecStop={fuse} -u "{root}/%i"
 Restart=on-failure
 RestartSec=15
@@ -200,8 +214,11 @@ def connect(name: str) -> tuple[bool, str]:
     invalidate()
     if r.returncode != 0:
         return False, f"Could not connect {name}: {_last(r.stderr)}. Details: journalctl --user -u {unit(name)}"
-    add_bookmark(name)
-    return True, f"{name} is connected. It is in Thunar's sidebar and at {mount_path(name)}."
+    if bookmarks_enabled():
+        add_bookmark(name)
+        return True, f"{name} is connected. It is in Thunar's sidebar and at {mount_path(name)}."
+    remove_bookmark(name)  # tidy up an entry left from before the sidebar entry was switched off
+    return True, f"{name} is connected at {mount_path(name)}."
 
 
 def disconnect(name: str) -> tuple[bool, str]:

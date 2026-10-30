@@ -385,14 +385,16 @@ fi
 
 run_cmd "mkdir -p \"$HOME/Pictures\" \"$HOME/Videos\" \"$HOME/Documents\" \"$HOME/.config\" \"$HOME/Downloads\""
 
-# Backup existing config (optional)
+# Existing configs are always moved here rather than deleted, so nothing of the user's is lost
 
-BACKUP_YES=false
-if yesno_prompt "Back up existing config directories?"; then
-    BACKUP_DIR="$HOME/.config-backup"
-    run_cmd "mkdir -p \"$BACKUP_DIR\""
-    BACKUP_YES=true
-fi
+BACKUP_DIR="$HOME/.config-backup/$(date +%Y%m%d-%H%M%S)"
+backup_path() {
+local path="$1"
+[[ -e "$path" || -L "$path" ]] || return 0
+run_cmd "mkdir -p \"$BACKUP_DIR\""
+run_cmd "mv \"$path\" \"$BACKUP_DIR/\""
+log "INFO" "Moved existing $path to $BACKUP_DIR"
+}
 
 # Symlink config directories
 
@@ -408,8 +410,7 @@ if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
 log "OK" "Already symlinked: $target"
 continue
 fi
-[[ -e "$target" ]] && [[ "$BACKUP_YES" == "true" ]] && run_cmd cp -r "$target" "$BACKUP_DIR/"
-run_cmd rm -rf "$target"
+backup_path "$target"
 run_cmd ln -sfn "$source" "$target"
 done
 
@@ -421,15 +422,20 @@ run_cmd touch "$HOME/.config/hypr/workspaces.lua"
 # Starship config
 
 starship_file="$HOME/.config/starship.toml"
-[[ -e "$starship_file" ]] && run_cmd rm "$starship_file"
+if [[ ! -L "$starship_file" || "$(readlink "$starship_file")" != "$DOTFILES_DIR/starship.toml" ]]; then
+backup_path "$starship_file"
+fi
 run_cmd ln -sfn "$DOTFILES_DIR/starship.toml" "$starship_file"
 
 # Wallpapers
 
 wallpaper_src="$REPO_DIR/wallpapers"
 wallpaper_dest="$HOME/Pictures/wallpapers"
-[[ -e "$wallpaper_dest" ]] && run_cmd rm -rf "$wallpaper_dest"
-[[ -d "$wallpaper_src" ]] && run_cmd cp -r "$wallpaper_src" "$wallpaper_dest"
+# Add the repo's wallpapers alongside the user's own; never delete or overwrite existing files
+if [[ -d "$wallpaper_src" ]]; then
+run_cmd "mkdir -p \"$wallpaper_dest\""
+run_cmd "cp -r --update=none \"$wallpaper_src/.\" \"$wallpaper_dest/\""
+fi
 
 # Make scripts executable
 

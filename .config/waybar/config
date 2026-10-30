@@ -19,7 +19,13 @@
                 "transition-to-left": true,
                 "click-to-reveal": false
             },
-            "modules": ["custom/trayicon","tray","cpu","memory","temperature"]
+            "modules": [
+                "custom/trayarrow",
+                "tray",
+                "cpu",
+                "memory",
+                "temperature"
+            ]
         },
         "group/expand2": {
             "orientation": "horizontal",
@@ -30,7 +36,7 @@
                 "click-to-reveal": false
             },
             "modules": [
-                "custom/settingsicon",
+                "custom/settingsarrow",
                 "custom/wallpaper",
                 "custom/drive",
                 "custom/keys",
@@ -161,11 +167,11 @@
             "on-click": "swaync-client -t -sw",
             "escape": true
         },
-        "custom/trayicon": {
+        "custom/trayarrow": {
             "format": "󰅁",
             "tooltip": false
         },
-        "custom/settingsicon": {
+        "custom/settingsarrow": {
             "format": "󰅂",
             "tooltip": false
         },

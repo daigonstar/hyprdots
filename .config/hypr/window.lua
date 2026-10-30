@@ -125,8 +125,8 @@ hl.window_rule({
     fullscreen = true,
 })
 hl.window_rule({
-    name = "discord-silent",
-    match = { class = "^(discord)$" },
+    name = "vesktop-silent",
+    match = { class = "^(vesktop)$" },
     workspace = "2 silent",
 })
 hl.window_rule({
