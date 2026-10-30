@@ -69,6 +69,7 @@ KB_LAYOUTS = _c(("gb", "gb - United Kingdom"), ("us", "us - United States"), ("d
                 ("es", "es - Spanish"), ("it", "it - Italian"), ("pt", "pt - Portuguese"), ("se", "se - Swedish"),
                 ("no", "no - Norwegian"), ("dk", "dk - Danish"), ("fi", "fi - Finnish"), ("pl", "pl - Polish"),
                 ("ie", "ie - Irish"), ("br", "br - Brazilian"))
+SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
@@ -187,6 +188,10 @@ SETTINGS: list[Setting] = [
             effect="when Hyprland reloads", group="Default apps"),
     Setting(HYPRDOTS, "hyprdots", "store", "App store", "text", "flatpak run io.github.kolunmi.Bazaar", "Opened by Super+A.", allow_custom=True,
             effect="when Hyprland reloads", group="Default apps"),
+    # Its own section: everything in [hyprdots] is passed to keybinds.lua as a default app
+    Setting(HYPRDOTS, "look", "super_logo", "Super key shown as", "choice", "arch",
+            "How the Super (Windows) key is drawn in the keybind cheatsheet (Super+K).", choices=SUPER_LOGOS,
+            effect="next time the cheatsheet opens", group="Keybind cheatsheet"),
 ]
 
 # Installed programs suggested for each default app (only those that exist are offered)

@@ -17,7 +17,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 | 7 | Assistant command guard bypasses: `env -S`, docker/systemctl option values read as the subcommand, `git ls-remote --upload-pack`, `cp`/`mv --target-directory=`. `write_file` can also stage a config file that a "safe" command then loads. | Commands run or files are written without a prompt. Prompt injection from a web page or calendar entry could use this. |
 | 8 | Displays page: turning off the laptop's own screen while docked can be saved to `monitors.lua`. | Undocked, no screen is enabled. |
 | 9 | Display confirm popup: Esc is ignored and Enter keeps the layout, but the text says anything else puts the old settings back. Saving also forgets screens that are not plugged in, and mirrored screens are not handled. | On a blank screen the popup cannot be cancelled. |
-| 10 | The Super+K cheatsheet reads `~/.config/hypr/keybinds.conf`, which no longer exists. *(checked)* | The cheatsheet opens empty. |
+| 10 | The Super+K cheatsheet reads `~/.config/hypr/keybinds.conf`, which no longer exists. *(checked)* | The cheatsheet opens empty. **Fixed:** replaced by a GTK4 window (`hypr/cheatsheet/`) that reads `keybinds.lua` through the settings store, applies your custom keys, and lists the fixed binds. |
 | 11 | `.config/rofi/.current_wallpaper` is committed as a symlink to `/home/robb/Pictures/wallpapers/lieutenant-titus.jpg`, and `.config/rofi/.wallpaper_current` is a committed 2.2 MB JPEG. *(checked)* | They break game mode on other machines and are re-committed on every wallpaper change. |
 
 ## Installer and updater

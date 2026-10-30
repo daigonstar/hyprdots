@@ -27,7 +27,7 @@ local binds = {
     { id = "launcher", label = "App launcher", keys = "SUPER + SPACE", action = hl.dsp.exec_cmd(menu) },
     { id = "wallpaper", label = "Wallpaper picker", keys = "SUPER + W", action = hl.dsp.exec_cmd(wallpaper_menu) },
     { id = "clipboard", label = "Clipboard history", keys = "SUPER + CTRL + C", action = hl.dsp.exec_cmd("clipvault list | rofi -dmenu -display-columns 2 | clipvault get | wl-copy") },
-    { id = "cheatsheet", label = "Keybind cheatsheet", keys = "SUPER + K", action = hl.dsp.exec_cmd("~/.config/rofi/cheatsheet/cheatsheet.sh") },
+    { id = "cheatsheet", label = "Keybind cheatsheet", keys = "SUPER + K", action = hl.dsp.exec_cmd("~/.config/hypr/cheatsheet/cheatsheet.sh") },
     { id = "screenshot_window", label = "Screenshot a window", keys = "CONTROL + ALT + S", action = hl.dsp.exec_cmd("hyprshot -m window -o ~/Pictures/screenshots") },
     { id = "screenshot_region", label = "Screenshot a region", keys = "CONTROL + SHIFT + S", action = hl.dsp.exec_cmd("hyprshot -m region -o ~/Pictures/screenshots") },
 
