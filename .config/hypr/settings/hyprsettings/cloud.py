@@ -39,8 +39,11 @@ TEMPLATE = "rclone-mount@.service"
 #   --dir-cache-time   keeps listings for an hour (--poll-interval still picks up remote changes)
 #   --attr-timeout     lets the kernel cache file attributes, so repeated stat calls never reach rclone
 #   --vfs-cache-max-size  caps the on-disk file cache per drive, so a PC left on for days cannot fill the disk
-MOUNT_FLAGS = ("--vfs-cache-mode full --vfs-cache-max-size 10G --dir-cache-time 1h --poll-interval 1m "
-               "--vfs-refresh --attr-timeout 30s")
+#   --vfs-cache-max-age   keeps cached files for 30 days instead of 1 hour. The first Thunar window of a session reads
+#                      every .trashinfo on the drive; uncached, that was one server round trip each (11s for 31 files)
+#   --contimeout       gives up on an unreachable server after 15s instead of a minute, so Thunar is not left waiting
+MOUNT_FLAGS = ("--vfs-cache-mode full --vfs-cache-max-size 10G --vfs-cache-max-age 720h --dir-cache-time 1h "
+               "--poll-interval 1m --vfs-refresh --attr-timeout 30s --contimeout 15s")
 
 _cache: dict = {"t": float("-inf"), "data": []}
 
@@ -200,6 +203,29 @@ def ensure_unit(exe: str, fuse: str) -> None:
         _sc("daemon-reload")
 
 
+def block_trash(name: str) -> str:
+    """Puts an empty file named .Trash-<uid> at the top of the drive, so no trash folder can be made there.
+
+    The desktop's trash service reads every .trashinfo in every drive's trash when the first Thunar window of a
+    session opens, one server round trip each on a cloud drive; that is what made Thunar take seconds to open.
+    With the file in place there is nothing to read, and deleting on the drive asks to delete permanently instead.
+    Nothing is lost: Google Drive keeps deleted files in its own trash, and Nextcloud/ownCloud in their trash bin.
+    Returns a note for the user when an existing trash still holds files (those are never deleted here)."""
+    path = mount_path(name) / f".Trash-{os.getuid()}"
+    try:
+        if path.is_file():
+            return ""
+        if path.is_dir():
+            if any(p.is_file() for p in path.rglob("*")):
+                return (f" Its trash folder still holds files, which slows Thunar down; empty {path} and connect again "
+                        "to stop that.")
+            shutil.rmtree(path)
+        path.touch()
+    except OSError as e:
+        return f" Could not replace its trash folder ({e.strerror or e}); Thunar may open slowly until {path} is removed."
+    return ""
+
+
 def connect(name: str) -> tuple[bool, str]:
     exe, fuse = rclone(), fuse_cmd()
     if not exe:
@@ -214,11 +240,12 @@ def connect(name: str) -> tuple[bool, str]:
     invalidate()
     if r.returncode != 0:
         return False, f"Could not connect {name}: {_last(r.stderr)}. Details: journalctl --user -u {unit(name)}"
+    note = block_trash(name)
     if bookmarks_enabled():
         add_bookmark(name)
-        return True, f"{name} is connected. It is in Thunar's sidebar and at {mount_path(name)}."
+        return True, f"{name} is connected. It is in Thunar's sidebar and at {mount_path(name)}.{note}"
     remove_bookmark(name)  # tidy up an entry left from before the sidebar entry was switched off
-    return True, f"{name} is connected at {mount_path(name)}."
+    return True, f"{name} is connected at {mount_path(name)}.{note}"
 
 
 def disconnect(name: str) -> tuple[bool, str]:
@@ -313,8 +340,13 @@ def setup_dav(name: str, kind: str, server: str, user: str, password: str,
     obscured = _run([exe, "obscure", "-"], text_in=password).stdout.strip()
     if not obscured:
         return False, "rclone could not protect the password."
+    url = dav_url(kind, server, user)
     vendor = kind if kind in ("nextcloud", "owncloud") else "other"
-    made = _run([exe, "config", "create", name, "webdav", f"url={dav_url(kind, server, user)}", f"vendor={vendor}",
+    if kind == "owncloud" and "/remote.php/dav/files/" in url:
+        # rclone only uploads in chunks for Nextcloud, and ownCloud 10 speaks the same chunking. Without it every
+        # file goes up in one request, and proxies such as Cloudflare (100 MB limit) refuse big ones forever.
+        vendor = "nextcloud"
+    made = _run([exe, "config", "create", name, "webdav", f"url={url}", f"vendor={vendor}",
                  f"user={user}", f"pass={obscured}"])
     if made.returncode != 0:
         _discard(name)
