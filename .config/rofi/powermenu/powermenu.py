@@ -27,7 +27,7 @@ COLORS_FILE = Path.home() / ".config/rofi/colors.rasi"
 
 # key, label, glyph, command, needs confirmation
 ACTIONS = [
-    ("l", "Lock", "", ["loginctl", "lock-session"], False),
+    ("l", "Lock", "", [str(Path.home() / ".config/hypr/scripts/lock.sh")], False),
     ("s", "Suspend", "\U000f04b2", ["systemctl", "suspend"], True),
     ("o", "Log out", "\U000f0343", ["hyprctl", "dispatch", "hl.dsp.exit()"], True),
     ("r", "Reboot", "", ["systemctl", "reboot"], True),

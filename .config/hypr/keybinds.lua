@@ -61,7 +61,7 @@ local binds = {
 
     -- group: Session and system
     { id = "reload", label = "Reload Hyprland", keys = "SUPER + SHIFT + R", action = hl.dsp.exec_cmd("hyprctl reload") },
-    { id = "lock", label = "Lock the screen", keys = "SUPER + L", action = hl.dsp.exec_cmd("loginctl lock-session") },
+    { id = "lock", label = "Lock the screen", keys = "SUPER + L", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/lock.sh") },
     { id = "restart_all", label = "Restart bar and helpers", keys = "SUPER + N", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/restart.sh all") },
     { id = "restart_waybar", label = "Restart the bar only", keys = "SUPER + SHIFT + N", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/restart.sh waybar") },
     { id = "exit", label = "Exit Hyprland", keys = "SUPER + END", action = hl.dsp.exit() },
