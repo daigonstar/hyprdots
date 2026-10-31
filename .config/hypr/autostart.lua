@@ -24,11 +24,11 @@ hl.on("hyprland.start", function()
         -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
-        "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\"",
+        "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\" && PYTHONPATH=\"$HOME/.config/hypr/settings\" python3 -m hyprsettings.design refresh",
         "systemctl --user start hyprpolkitagent",
         "systemctl --user enable --now hyprpolkitagent.service",
-        "waybar",
-        "swaync",
+        "~/.config/waybar/launch.sh",  -- puts the default theme.css in place first if there is none
+        "~/.config/swaync/launch.sh",  -- puts the default theme.css in place first if there is none
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
         -- hypr-settings (Power & lock page) writes hypridle.local.conf; without it the shipped hypridle.conf is used

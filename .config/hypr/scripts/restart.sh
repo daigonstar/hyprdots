@@ -3,18 +3,18 @@ case "$1" in
     swaync)
         pkill swaync || true
         sleep 0.1
-        swaync &
+        ~/.config/swaync/launch.sh &
         ;;
     waybar)
         pkill waybar || true
         sleep 0.1
-        waybar &
+        ~/.config/waybar/launch.sh &
         ;;
     all|"")
         pkill swaync || true
         pkill waybar || true
         sleep 0.2
-        waybar &
-        swaync &
+        ~/.config/waybar/launch.sh &
+        ~/.config/swaync/launch.sh &
         ;;
 esac

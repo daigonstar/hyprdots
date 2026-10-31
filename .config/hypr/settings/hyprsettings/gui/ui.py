@@ -13,8 +13,8 @@ from gi.repository import Adw, Gtk  # noqa: E402
 from .. import theme  # noqa: E402
 
 PAGE_GLYPHS = {
-    "Assistant": "\U000f06a9", "Assistant Monitor": "\U000f04c5", "Calendar": "\U000f00ed", "Cloud drives": "\U000f015f",
-    "Displays": "\U000f0379", "Workspaces": "\U000f0570", "Power & lock": "\U000f0904", "Appearance": "\U000f03d8", "Hyprland": "", "Keybinds": "\U000f030c",
+    "Assistant": "\U000f0674", "Assistant Monitor": "\U000f04c5", "Calendar": "\U000f00ed", "Cloud drives": "\U000f015f",
+    "Displays": "\U000f0379", "Workspaces": "\U000f0570", "Power & lock": "\U000f0904", "Theme": "\U000f08b5", "Bar layout": "\U000f0e09", "Launcher": "\U000f0349", "Appearance": "\U000f03d8", "Hyprland": "", "Keybinds": "\U000f030c",
     "File types": "\U000f0214", "Hyprdots": None,  # Hyprdots uses the Super key logo
 }
 

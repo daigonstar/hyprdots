@@ -58,6 +58,20 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
         row.add_suffix(sw)
         row.set_activatable_widget(sw)
 
+    elif s.kind == "palette":
+        row.add_suffix(palette_button(value, lambda slot: stage(slot) and win.refresh()))
+
+    elif s.kind == "font":
+        from .. import design
+        names = design.fonts()
+        if value not in names:
+            names.insert(0, value)
+        drop = Gtk.DropDown(model=Gtk.StringList.new(names), valign=Gtk.Align.CENTER, enable_search=True)
+        drop.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        drop.set_selected(names.index(value))
+        drop.connect("notify::selected", lambda d, _p: names[d.get_selected()] != store.get(s)[0] and stage(names[d.get_selected()]))
+        row.add_suffix(drop)
+
     elif s.kind in ("model", "vision_model"):
         from . import models_dialog
         text = show(s, value)
@@ -131,3 +145,49 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
         entry.add_controller(focus)
         row.add_suffix(entry)
     return row
+
+
+def swatch(hex_colour: str | None, size: int = 22, ring: bool = False) -> Gtk.DrawingArea:
+    """A round colour sample. No colour (palette not found) draws a dashed outline."""
+    from .. import theme
+    area = Gtk.DrawingArea(content_width=size, content_height=size, valign=Gtk.Align.CENTER)
+
+    def draw(_a, cr, w, h):
+        r = min(w, h) / 2 - 2
+        cr.arc(w / 2, h / 2, r, 0, 6.2832)
+        if hex_colour:
+            cr.set_source_rgb(*theme.rgb(hex_colour))
+            cr.fill_preserve()
+        cr.set_source_rgba(1, 1, 1, 0.9 if ring else 0.25)
+        cr.set_line_width(3 if ring else 1)
+        if not hex_colour:
+            cr.set_dash([3, 3])
+        cr.stroke()
+    area.set_draw_func(draw)
+    return area
+
+
+def palette_button(current: str, on_pick) -> Gtk.MenuButton:
+    """Shows the chosen palette colour; opens a grid of the wallpaper's palette to pick another."""
+    from .. import design
+    colours = design.palette()
+    face = Gtk.Box(spacing=8)
+    face.append(swatch(colours.get(current)))
+    face.append(Gtk.Label(label=current, css_classes=["dim-label"]))
+    button = Gtk.MenuButton(child=face, valign=Gtk.Align.CENTER, tooltip_text="Pick a colour from your wallpaper's palette")
+    grid = Gtk.Grid(column_spacing=6, row_spacing=6, margin_top=10, margin_bottom=10, margin_start=10, margin_end=10)
+    popover = Gtk.Popover(child=grid)
+    for i, slot in enumerate(design.PALETTE):
+        pick = Gtk.Button(css_classes=["flat", "circular"], tooltip_text=f"{slot}  {colours.get(slot, '(not found)')}")
+        pick.set_child(swatch(colours.get(slot), 26, ring=slot == current))
+
+        def picked(_b, slot=slot):
+            popover.popdown()
+            if slot != current:
+                on_pick(slot)
+        pick.connect("clicked", picked)
+        grid.attach(pick, i % 6, i // 6, 1, 1)
+    if not colours:
+        grid.attach(Gtk.Label(label="Pick a wallpaper first: its palette is not there yet.", wrap=True), 0, 3, 6, 1)
+    button.set_popover(popover)
+    return button

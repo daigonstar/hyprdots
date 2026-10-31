@@ -43,6 +43,45 @@
                 "custom/userconfig"
             ]
         },
+    // Extra modules: not on the bar by default. Add them from settings > Bar layout (drag them up from the shelf).
+    "mpris": {
+        "format": "{player_icon} {dynamic}",
+        "format-paused": "{status_icon} <i>{dynamic}</i>",
+        "dynamic-order": ["title", "artist"],
+        "dynamic-len": 40,
+        "player-icons": {"default": "󰎆"},
+        "status-icons": {"paused": "󰏤"},
+        "tooltip-format": "{player}: {artist} - {title}"
+    },
+    "idle_inhibitor": {
+        "format": "{icon}",
+        "format-icons": {"activated": "󰅶", "deactivated": "󰾪"},
+        "tooltip-format-activated": "Keeping the screen awake: it will not lock or switch off. Click to stop.",
+        "tooltip-format-deactivated": "Click to keep the screen awake (films, presentations)"
+    },
+    "hyprland/language": {
+        "format": "󰌌 {short}"
+    },
+    "disk": {
+        "path": "/",
+        "interval": 60,
+        "format": "󰋊 {percentage_free}%",
+        "tooltip-format": "{free} free of {total} on {path}"
+    },
+    "backlight": {
+        "format": "{icon} {percent}%",
+        "format-icons": ["󰃞", "󰃟", "󰃠"],
+        "on-scroll-up": "brightnessctl -e4 -n2 set 5%+",
+        "on-scroll-down": "brightnessctl -e4 -n2 set 5%-"
+    },
+    "privacy": {
+        "icon-size": 14,
+        "modules": [
+            {"type": "screenshare", "tooltip": true},
+            {"type": "audio-in", "tooltip": true}
+        ]
+    },
+
     // Generic Modules
 
     "hyprland/window": {
@@ -69,7 +108,7 @@
         "clock": {
 	    "interval": 1,
         //"format": " {:%I:%M %p}", // AM PM format
-        "format": "  {:%H:%M}", // 24H
+        "format": " {:%H:%M}", // 24H
 	    "tooltip-format": "{:%A, %d %B %Y}",
 	    "on-click": "~/.config/waybar/scripts/popup_calendar.py",
 	    "on-click-right": "~/.config/waybar/scripts/popup_calendar.py",
@@ -140,7 +179,7 @@
         },
 
         "pulseaudio": {
-        "format": "{icon}   {volume}%  ",
+        "format": "{icon} {volume}%",
         "format-bluetooth": "{volume}% {icon} {format_source}",
         "format-bluetooth-muted": " {icon} {format_source}",
         "format-muted": "0% {icon} ",
@@ -273,7 +312,7 @@
             "exec": "echo '{\"tooltip\": \"Settings: assistant, calendars, cloud drives, displays, GTK look, Hyprland, keybinds and default apps\"}'",
             "return-type": "json",
             "interval": "once",
-            "on-click": "~/.config/hypr/scripts/settings.sh"
+            "on-click": "setsid -f ~/.config/hypr/scripts/settings.sh"
         },
         "custom/keys": {
             "format": "󰌌",

@@ -20,3 +20,8 @@ __pycache__/
 *.pre-modes
 /.config/hypr/hypridle.local.conf
 /.config/hypr/hyprlock.local.conf
+/.config/waybar/theme.css
+/.config/waybar/layout.json
+/.config/waybar/config.generated.json
+/.config/swaync/theme.css
+/.config/hypr/theme.lua

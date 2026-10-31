@@ -20,8 +20,10 @@ def local_path(hypr_dir: Path | str) -> Path:
     return Path(hypr_dir) / "hyprlock.local.conf"
 
 
-def render(o: dict, header: str = "") -> str:
+def render(o: dict, header: str = "", accent: str | None = None) -> str:
+    """accent: a #hex for the password line and box (the Theme page's accent); white when not given."""
     o = {**DEFAULTS, **o}
+    line = f"rgba({accent[1:]}ee)" if accent else "$soft"
     shadow = "    shadow_passes = 2\n    shadow_size = 6\n    shadow_color = rgba(00000088)\n"
     up = 140 if o["clock_position"] == "top" else 0  # "Higher up" moves the clock and date into the upper third
     parts = [header or "# Lock screen (hyprlock), made by hypr-settings from the Power & lock page.\n",
@@ -56,7 +58,7 @@ def render(o: dict, header: str = "") -> str:
     if o["password"] == "box":
         y_field, y_user = -150 + up, -215 + up
         parts.append("input-field {\n    monitor =\n    size = 340, 54\n    outline_thickness = 2\n"
-                     "    inner_color = rgba(00000055)\n    outer_color = $soft\n    check_color = rgba(7fd17fee)\n"
+                     f"    inner_color = rgba(00000055)\n    outer_color = {line}\n    check_color = rgba(7fd17fee)\n"
                      "    fail_color = rgba(ff8a8aee)\n    font_color = $text\n    fade_on_empty = false\n    rounding = 14\n"
                      "    font_family = $font\n    placeholder_text = <span foreground=\"##ffffff88\">Password</span>\n"
                      "    fail_text = $PAMFAIL\n    dots_spacing = 0.3\n    dots_center = true\n"
@@ -70,7 +72,7 @@ def render(o: dict, header: str = "") -> str:
                      "    fail_text = <span foreground=\"##ff8a8a\">$PAMFAIL</span>\n    dots_size = 0.22\n"
                      "    dots_spacing = 0.45\n    dots_center = true\n    position = 0, 96\n    halign = center\n"
                      "    valign = bottom\n}\n\n"
-                     "shape {\n    monitor =\n    size = 320, 2\n    color = $soft\n    rounding = 0\n    border_size = 0\n"
+                     f"shape {{\n    monitor =\n    size = 320, 2\n    color = {line}\n    rounding = 0\n    border_size = 0\n"
                      "    position = 0, 90\n    halign = center\n    valign = bottom\n}\n\n")
         user_pos, user_valign = "0, 150", "bottom"
     if o["show_user"]:

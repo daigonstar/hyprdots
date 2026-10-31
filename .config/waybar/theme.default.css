@@ -1,0 +1,45 @@
+/* The bar's colours and font, made by hypr-settings from the Theme page. Each role points at a slot of
+   wallust's palette (colors/colors.css), so the bar still follows your wallpaper. Do not edit by hand. */
+
+@define-color theme_base @background;
+@define-color theme_base_text @foreground;
+@define-color theme_surface @color2;
+@define-color theme_surface_alt @color3;
+@define-color theme_text @color12;
+@define-color theme_accent @color10;
+@define-color theme_secondary @color6;
+@define-color theme_muted @color4;
+@define-color theme_icons @color15;
+@define-color theme_attention @color14;
+@define-color theme_surface_fill alpha(@color2, 0.8);
+
+* {
+    font-family: "CaskaydiaCove Nerd Font";
+    font-size: 15px;
+}
+
+/* Bar style: Islands */
+window#waybar {
+    all: unset;
+}
+.modules-center {
+    padding: 5px;
+    margin: 5px 0 5px 0;
+    border-radius: 20px;
+    background: @theme_surface_fill;
+    box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
+}
+.modules-left {
+    padding: 5px;
+    margin: 5px 0 5px 0;
+    border-radius: 10px;
+    background: @theme_surface_fill;
+    box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
+}
+.modules-right {
+    padding: 5px;
+    margin: 5px 0 5px 0;
+    border-radius: 10px;
+    background: @theme_surface_fill;
+    box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
+}

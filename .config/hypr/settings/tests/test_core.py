@@ -81,7 +81,7 @@ class Schema(unittest.TestCase):
         for s in schema.SETTINGS:
             self.assertIn(s.page, schema.PAGES)
             self.assertTrue(s.label and s.help, s.id)
-            self.assertIn(s.kind, {"choice", "bool", "int", "float", "text", "list", "model", "vision_model"}, s.id)
+            self.assertIn(s.kind, {"choice", "bool", "int", "float", "text", "list", "model", "vision_model", "palette", "font"}, s.id)
             if s.kind in ("int", "float"):
                 self.assertTrue(s.lo is not None and s.hi is not None and s.lo <= s.default <= s.hi, s.id)
             if s.kind == "choice":

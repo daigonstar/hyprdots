@@ -5,7 +5,7 @@ local apps = (has_overrides and overrides.apps) or {}
 local custom_keys = (has_overrides and type(overrides.keybinds) == "table" and overrides.keybinds) or {}
 local terminal = apps.terminal or "ghostty"
 local file_manager = apps.file_manager or "thunar"
-local menu = "~/.config/rofi/launchers/categorized/launcher.sh"
+local menu = "~/.config/hypr/launcher/launcher.sh"  -- the old rofi one: ~/.config/rofi/launchers/categorized/launcher.sh
 local wallpaper_menu = "~/.config/rofi/wallpaper/wallpaper.sh"
 local browser = apps.browser or "zen-browser"
 local store = apps.store or "flatpak run io.github.kolunmi.Bazaar"

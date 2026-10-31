@@ -7,5 +7,5 @@
  **/
 
 * {
-    font: "JetBrainsMono Nerd Font SemiBold 13";
+    /* font: set by the settings Theme page, in ../colors.rasi (rewritten when the wallpaper changes) */
 }

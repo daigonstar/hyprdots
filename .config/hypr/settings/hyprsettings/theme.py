@@ -16,17 +16,24 @@ def super_glyph(logo: str) -> str:
 
 
 def colors() -> dict:
-    """Wallust colours from the rofi colour file, with a calm fallback. A too-dark accent is blended towards
-    the text colour until it reads on a dark background, so it keeps the wallpaper's hue."""
+    """The GTK windows' colours (settings, cheatsheet, power menu) from the Theme page roles: accent, secondary,
+    text and background of large panels. Falls back to wallust's rofi colours, then to a calm grey set. A too-dark
+    accent is blended towards the text colour until it reads on a dark background, so it keeps the wallpaper's hue."""
     out = {"accent": "#949ab3", "soft": "#a8a8ab", "fg": "#faf7fa", "bg": "#1c1a1c"}
     try:
-        text = COLORS_FILE.read_text()
-    except OSError:
-        return out
-    for key, name in (("accent", "color12"), ("soft", "color5"), ("fg", "foreground"), ("bg", "background")):
-        m = re.search(rf"^\s*{name}:\s*(#[0-9a-fA-F]{{6}})", text, re.M)
-        if m:
-            out[key] = m[1]
+        from . import design
+        from .store import Store
+        c = design.resolved(design.theme_options(Store()))
+        out.update(accent=c["accent"], soft=c["secondary"], fg=c["base_text"], bg=c["base"])
+    except (OSError, ValueError, KeyError, ImportError):
+        try:
+            text = COLORS_FILE.read_text()
+        except OSError:
+            return out
+        for key, name in (("accent", "color12"), ("soft", "color5"), ("fg", "foreground"), ("bg", "background")):
+            m = re.search(rf"^\s*{name}:\s*(#[0-9a-fA-F]{{6}})", text, re.M)
+            if m:
+                out[key] = m[1]
     for key in ("accent", "soft"):
         for _ in range(6):
             if luminance(out[key]) >= 0.28:

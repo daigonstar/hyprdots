@@ -1,4 +1,10 @@
 local colors = require("wallust.colors")
+-- Border colours from the settings Theme page (hypr/theme.lua, rewritten when the wallpaper changes); without it,
+-- the wallust colours below
+local has_theme, theme = pcall(require, "theme")
+if not has_theme or type(theme) ~= "table" then
+    theme = {}
+end
 
 hl.config({
     general = {
@@ -6,8 +12,8 @@ hl.config({
         gaps_out = 10,
         border_size = 2,
         col = {
-            active_border = colors.color12,
-            inactive_border = colors.color10,
+            active_border = theme.active_border or colors.color12,
+            inactive_border = theme.inactive_border or colors.color10,
         },
         resize_on_border = false,
         allow_tearing = true,
@@ -22,8 +28,8 @@ hl.config({
             enabled = false,
             range = 4,
             render_power = 3,
-            color = colors.color13,
-            color_inactive = colors.color10,
+            color = theme.group_active or colors.color13,
+            color_inactive = theme.group_inactive or colors.color10,
         },
         blur = {
             enabled = true,

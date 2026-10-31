@@ -7,3 +7,6 @@
 }
 
 @import "overrides.css";
+
+/* Colours and font from the settings Theme page (theme.default.css until saved; see launch.sh). Must stay last. */
+@import "theme.css";

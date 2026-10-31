@@ -41,7 +41,44 @@ def basic_page(win, page: str) -> Gtk.Widget:
         files_group(win, column)
     if page == "Power & lock":
         lock_preview_button(win, column)
+    if page == "Launcher":
+        launcher_buttons(win, column)
     return scroller
+
+
+# ---- Launcher --------------------------------------------------------------------------------------------------------
+def launcher_buttons(win, column: Gtk.Box) -> None:
+    """Try it (opens the launcher in the style picked here, saved or not) and Clear history."""
+    import os
+    from pathlib import Path
+    script = Path(win.store.dir) / "launcher" / "launcher.sh"
+    look = next((g for g in _children(column) if isinstance(g, Adw.PreferencesGroup) and g.get_title() == "Look"), None)
+    if look is not None:
+        button = Gtk.Button(label="Try it", valign=Gtk.Align.CENTER, css_classes=["pill"],
+                            tooltip_text="Open the launcher in the style picked above, even before you save. Esc closes it.")
+
+        def try_it(_b):
+            from ..schema import BY_ID
+            style = win.store.get(BY_ID["launcher.style"])[0]
+            subprocess.Popen([str(script), "--style", str(style)], start_new_session=True, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        button.connect("clicked", try_it)
+        look.set_header_suffix(button)
+
+    group = Adw.PreferencesGroup(title="History")
+    column.append(group)
+    row = Adw.ActionRow(title="Forget which apps you open",
+                        subtitle="Empties Frequent and puts results back in plain order, until you use some apps again.")
+    clear = Gtk.Button(label="Clear history", valign=Gtk.Align.CENTER, css_classes=["destructive-action", "pill"])
+
+    def do_clear():
+        state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "hyprdots" / "launcher-usage.json"
+        state.unlink(missing_ok=True)
+        win.toast("Launcher history cleared.")
+    clear.connect("clicked", lambda _b: ui.confirm(win, "Clear the launcher history?",
+                                                   "Frequent will be empty until you open some apps again.", "Clear", do_clear))
+    row.add_suffix(clear)
+    group.add(row)
 
 
 # ---- Power & lock ----------------------------------------------------------------------------------------------------

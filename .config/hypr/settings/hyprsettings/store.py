@@ -85,6 +85,15 @@ class Store:
     # ---- validation ----------------------------------------------------------------------------------------
     def coerce(self, s: Setting, raw: Any):
         k = s.kind
+        if k == "palette":
+            from .design import PALETTE
+            if str(raw).strip() not in PALETTE:
+                raise ValueError("pick one of the palette colours")
+            return str(raw).strip()
+        if k == "font":
+            if not str(raw).strip() or '"' in str(raw):
+                raise ValueError("pick a font")
+            return str(raw).strip()
         if k == "bool":
             if isinstance(raw, bool):
                 return raw
@@ -215,10 +224,16 @@ class Store:
                 idle.restart(path)
             except OSError as e:
                 self.warnings.append(f"Saved, but the idle settings could not be applied: {e}")
+        if any(sid.startswith("theme.") for sid in self.staged):
+            from . import design  # the bar, notifications, rofi, window borders and the lock screen use these
+            for problem in design.refresh_all(self):
+                self.warnings.append(f"Saved, but the {problem}")
         if any(sid.startswith("lockscreen.") for sid in self.staged):
             from . import lockscreen  # hyprlock.local.conf is built from these settings
             try:
-                lockscreen.write(lockscreen.local_path(self.dir), lockscreen.render(self.lock_options()))
+                from . import design
+                accent = design.resolved(design.theme_options(self))["accent"]  # the password line follows the Theme page
+                lockscreen.write(lockscreen.local_path(self.dir), lockscreen.render(self.lock_options(), accent=accent))
             except OSError as e:
                 self.warnings.append(f"Saved, but the lock screen could not be updated: {e}")
         if any(sid.startswith("cloud.") for sid in self.staged):

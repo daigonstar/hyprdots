@@ -1,0 +1,16 @@
+/* Notification colours and font, made by hypr-settings from the Theme page (rewritten when the wallpaper changes).
+   Imported last by style.css, so these win over the theme's own colour names. Do not edit by hand. */
+@define-color text #E4F5F6;
+@define-color background #000000;
+@define-color background-alt rgba(112, 207, 179, 0.22);
+@define-color selected #70CFB3;
+@define-color button-active #70CFB3;
+@define-color hover rgba(63, 156, 192, 0.35);
+@define-color hovered #3F9CC0;
+@define-color urgent #3F9CC0;
+@define-color swaync-bg rgba(0, 0, 0, 0.9);
+@define-color swaync-bg-soft rgba(0, 0, 0, 0.86);
+
+* {
+    font-family: "CaskaydiaCove Nerd Font", "CaskaydiaCove Nerd Font";
+}

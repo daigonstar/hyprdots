@@ -31,8 +31,9 @@ I have added some wallpapers I've collected (will probably add more as I go)
 ### **JaKoolIt** Wallpaper selector
 ![image](screens/wall.png)
 
-### Applauncher (rofi)
-![image](screens/appl.png)
+### App launcher
+Super+Space. Type to find an app; it also works out sums (`12*7`, Enter copies the answer), runs commands in your terminal (`> htop`), searches the web (`? arch wiki bluetooth`) and offers lock, sleep, log out, reboot and shut down (the last four ask for a second Enter). Apps you open often come first. Five styles, picked on the settings Launcher page: Categories, Spotlight, Grid, Compact and Dock. Colours and font follow the Theme page.
+![image](screens/launcher.png)
 
 ### Powermenu
 Full screen, with a PC (a laptop when a battery is found) in the middle and the options in a ring around it. Arrow keys, the first letter of an option, or the mouse.
@@ -87,6 +88,8 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar, and whether opened files are kept on this PC (faster) or streamed from the server (nothing stored) |
 | Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays): drag screens on the map and they snap into place; changes apply at once and undo themselves if you do not confirm |
 | Workspaces | Which screen each of the ten workspaces opens on, which one each screen starts on, names, always-shown workspaces and an app to open in an empty one, with quick layouts (alternate, split, all on one screen) |
+| Theme | One look for the desktop, built from your wallpaper: which wallust colour each part of the bar uses (panels, text, accent, workspaces, icons, notifications), panel opacity, the bar's style (islands, solid strip, floating bar, bubbles or minimal), and its font and size. More of the desktop will follow the same colours |
+| Bar layout | Start from one of five ready-made layouts (Classic, Two sides, Centre pill, Full strip, Bottom dock), put the bar at the top or bottom, drag its modules between left, centre and right, reorder them, or take them off and put them back. Extra modules to add: now playing, keep awake, keyboard layout, disk space, screen brightness and a privacy indicator |
 | Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
 | Power & lock | When the screen locks, when the screens switch off and when the PC goes to sleep, which screens stay on while locked, and the lock screen's look: wallpaper or blurred background, darkening, clock style, size and position, date, username, password line or box, a grace period, with a Preview button |
 | Hyprland | Gaps, borders, rounding, blur, dimming and animations; keyboard layout, key repeat and Caps Lock options; mouse acceleration, left-handed buttons and scroll speed; touchpad tapping and clicking; hiding the pointer; and how focus, workspaces and waking the screens behave |

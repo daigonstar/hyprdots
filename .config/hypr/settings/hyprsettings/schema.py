@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Appearance",
-         "Hyprland", "Keybinds", "File types", "Hyprdots"]
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Theme",
+         "Bar layout", "Launcher", "Appearance", "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
@@ -28,6 +28,13 @@ PAGE_INTRO = {
                   "and open workspaces move to their screen.",
     "Power & lock": "What happens when you step away: when the screen locks, when the screens switch off and when the PC goes "
                     "to sleep. Applied as soon as you save. Set a time to 0 to switch that step off.",
+    "Theme": "One look for the whole desktop, built from your wallpaper. Each part below takes one of the colours wallust picked "
+             "from your wallpaper, so it still changes with it. The bar uses this now; more of the desktop will follow. "
+             "Saving updates the bar straight away.",
+    "Bar layout": "Where each module sits on the bar.",
+    "Launcher": "The app launcher you open with Super+Space. Type to find an app, or a sum (12*7) for its answer, > before a "
+                "command to run it in your terminal, ? before words to search the web, or lock, sleep, reboot or shut down. "
+                "Its colours and font come from the Theme page. Changes show the next time it opens.",
     "Appearance": "The look of GTK apps (Thunar, settings dialogs and so on): theme, icons, mouse cursor and font. "
                   "Applies straight away; apps that are already open may need a restart.",
     "Hyprland": "How the desktop looks and how your keyboard, mouse and touchpad behave. After saving you are offered a reload. "
@@ -46,7 +53,7 @@ class Setting:
     section: str                       # TOML section in user_settings.local.toml
     key: str
     label: str
-    kind: str                          # choice | bool | int | float | text | list | model | vision_model
+    kind: str                          # choice | bool | int | float | text | list | model | vision_model | palette | font
     default: Any
     help: str
     choices: tuple = ()                # ((value, label), ...)
@@ -82,6 +89,13 @@ KB_OPTIONS = _c(("", "None"), ("caps:escape", "Caps Lock is another Escape"), ("
                 ("caps:none", "Caps Lock does nothing"))
 ACCEL = _c(("", "Device default"), ("adaptive", "Adaptive (speeds up with faster moves)"), ("flat", "Flat (same speed always, good for games)"))
 POWER_EFFECT = "as soon as you save"
+THEME_EFFECT = "as soon as you save"
+from .design import ROLES as _ROLES  # noqa: E402  (the colour roles, shared with the parts of the desktop that use them)
+_ROLE_GROUPS = {"base": "Large panels", "base_text": "Large panels", "surface": "Bar and cards", "surface_alt": "Bar and cards",
+                "text": "Bar and cards", "accent": "Highlights", "secondary": "Highlights", "muted": "Highlights",
+                "icons": "Highlights", "attention": "Highlights"}
+BAR_STYLES = _c(("islands", "Islands"), ("solid", "Solid strip"), ("floating", "Floating bar"), ("bubbles", "Bubbles"),
+                ("minimal", "Minimal"))
 LOCK_EFFECT = "the next time the screen locks"
 LOCK_BACKGROUNDS = _c(("wallpaper", "Your wallpaper"), ("wallpaper_blur", "Your wallpaper, blurred"),
                       ("screenshot_blur", "What was on screen, blurred"))
@@ -92,11 +106,18 @@ PASSWORD_STYLES = _c(("underline", "A line at the bottom"), ("box", "A box under
 LOCK_SCREENS = _c(("all", "Keep every screen on"), ("focused", "Only the screen you were using"))
 CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the server"))
 CLOUD_EFFECT = "when the cloud drives restart"
+LAUNCHER_EFFECT = "the next time the launcher opens"
+LAUNCHER_STYLES = _c(("categories", "Categories: groups on the left, apps on the right"),
+                     ("spotlight", "Spotlight: a search bar in the middle of the screen"),
+                     ("grid", "Grid: every app across the whole screen"), ("compact", "Compact: a small list under the bar"),
+                     ("dock", "Dock: a strip of big icons along the bottom"))
+SEARCH_ENGINES = _c(("duckduckgo", "DuckDuckGo"), ("google", "Google"), ("brave", "Brave Search"), ("startpage", "Startpage"))
 SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
+ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, \
+    HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [
     # ---- Assistant -------------------------------------------------------------------------------------
@@ -256,6 +277,18 @@ SETTINGS: list[Setting] = [
             effect="when Hyprland reloads", lua=('misc', 'mouse_move_enables_dpms'), group="Behaviour"),
     Setting(HYPRLAND, "hyprland", "key_wakes", "Wake the screens with the keyboard", "bool", False, 'Pressing a key turns the screens back on after they switch off.',
             effect="when Hyprland reloads", lua=('misc', 'key_press_enables_dpms'), group="Behaviour"),
+    # ---- Launcher (read by hypr/launcher/launcher.py each time it opens) ---------------------------------------
+    Setting(LAUNCHER, "launcher", "style", "Style", "choice", "categories", "How the launcher looks and where it opens.",
+            choices=LAUNCHER_STYLES, effect=LAUNCHER_EFFECT, group="Look",
+            tip="Every style searches the same way; only the layout changes. Use Try it to see the one you picked."),
+    Setting(LAUNCHER, "launcher", "search_engine", "Web search", "choice", "duckduckgo",
+            "Where ? searches go. Type ? and then your words, for example ? arch wiki bluetooth.",
+            choices=SEARCH_ENGINES, effect=LAUNCHER_EFFECT, group="Searching"),
+    Setting(LAUNCHER, "launcher", "rank_by_use", "Put the apps you use most first", "bool", True,
+            "Learns which apps you open, so they come first in results and in Frequent.", effect=LAUNCHER_EFFECT,
+            group="Searching",
+            tip="What you opened recently counts most, and it fades over about a month. The list stays on this computer "
+                "(~/.local/state/hyprdots/launcher-usage.json); Clear history below wipes it."),
     # ---- Power & lock (written to hypridle.local.conf, see idle.py) -------------------------------------------
     Setting(POWER, "power", "lock_after", "Lock the screen after", "int", 0,
             "Minutes without using the PC before it locks. 0 never locks by itself.", lo=0, hi=240, unit="min",
@@ -314,6 +347,31 @@ SETTINGS: list[Setting] = [
     Setting(POWER, "lockscreen", "fade", "Fade in and out", "bool", True,
             'A short fade when the lock screen appears and goes.',
             effect=LOCK_EFFECT, group="Lock screen"),
+    # ---- Theme (colour roles and font, see design.py: the bar, notifications, rofi, borders, GTK windows) ----------
+    *[Setting(THEME, "theme", f"role_{key}", label, "palette", slot, help_, effect=THEME_EFFECT, group="Large panels")
+      for key, label, help_, slot in _ROLES if _ROLE_GROUPS[key] == "Large panels"],
+    Setting(THEME, "theme", "base_opacity", "Large panel opacity", "int", 90,
+            "How solid the notification centre and launchers are. Lower lets the desktop show through.",
+            lo=30, hi=100, step=5, unit="%", effect=THEME_EFFECT, group="Large panels"),
+    *[Setting(THEME, "theme", f"role_{key}", label, "palette", slot, help_, effect=THEME_EFFECT, group="Bar and cards")
+      for key, label, help_, slot in _ROLES if _ROLE_GROUPS[key] == "Bar and cards"],
+    Setting(THEME, "theme", "surface_opacity", "Bar panel opacity", "int", 80,
+            "How solid the bar's panels are. Lower lets the wallpaper show through.", lo=0, hi=100, step=5, unit="%",
+            effect=THEME_EFFECT, group="Bar and cards"),
+    *[Setting(THEME, "theme", f"role_{key}", label, "palette", slot, help_, effect=THEME_EFFECT, group="Highlights")
+      for key, label, help_, slot in _ROLES if _ROLE_GROUPS[key] == "Highlights"],
+    Setting(THEME, "theme", "bar_style", "Bar style", "choice", "islands",
+            "The shape of the bar: separate panels, one strip, a floating bar, a pill per module, or no background.",
+            choices=BAR_STYLES, effect=THEME_EFFECT, group="Bar style",
+            tip="Islands: three rounded panels (left, centre, right). Solid strip: one full-width bar. Floating bar: one "
+                "rounded bar with a gap around it. Bubbles: every module in its own pill. Minimal: just the icons and text "
+                "over your wallpaper."),
+    Setting(THEME, "theme", "bar_font", "Font", "font", "CaskaydiaCove Nerd Font",
+            "Used by the bar, notifications and launchers. Nerd Fonts are listed first: they include icons.",
+            effect=THEME_EFFECT, group="Font",
+            tip="Any font works: the bar's icons fall back to CaskaydiaCove Nerd Font when your font has none."),
+    Setting(THEME, "theme", "bar_font_size", "Bar font size", "int", 15, "Size of the bar's text and icons.",
+            lo=9, hi=24, unit="px", effect=THEME_EFFECT, group="Font"),
     # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------
     Setting(CLOUD, "cloud", "cache_mode", "File cache", "choice", "full",
             "Keep a local copy of what you open (faster), or stream every file from the server (nothing kept on this PC).",
