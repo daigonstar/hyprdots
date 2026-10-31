@@ -211,7 +211,7 @@ class Store:
             from . import idle  # hypridle.local.conf is built from these settings
             try:
                 path = idle.write(self.dir, idle.render(*(self.get(BY_ID[f"power.{k}"])[0] for k in
-                                                          ("lock_after", "screen_off_after", "suspend_after", "lock_before_sleep"))))
+                                                          ("lock_after", "screen_off_after", "suspend_after", "lock_before_sleep", "lock_screens"))))
                 idle.restart(path)
             except OSError as e:
                 self.warnings.append(f"Saved, but the idle settings could not be applied: {e}")

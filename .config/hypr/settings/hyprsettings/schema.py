@@ -82,6 +82,7 @@ KB_OPTIONS = _c(("", "None"), ("caps:escape", "Caps Lock is another Escape"), ("
                 ("caps:none", "Caps Lock does nothing"))
 ACCEL = _c(("", "Device default"), ("adaptive", "Adaptive (speeds up with faster moves)"), ("flat", "Flat (same speed always, good for games)"))
 POWER_EFFECT = "as soon as you save"
+LOCK_SCREENS = _c(("all", "Keep every screen on"), ("focused", "Only the screen you were using"))
 CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the server"))
 CLOUD_EFFECT = "when the cloud drives restart"
 SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
@@ -262,6 +263,11 @@ SETTINGS: list[Setting] = [
             effect=POWER_EFFECT, group="When you step away",
             tip="Sleep saves power but stops everything, including downloads, game servers and the cloud drives. "
                 "Apps that are playing video or audio can keep the PC awake."),
+    Setting(POWER, "power", "lock_screens", "Screens while locked", "choice", "all",
+            "Which screens stay on behind the lock screen. The others switch off until you unlock.",
+            choices=LOCK_SCREENS, allow_custom=True, effect=POWER_EFFECT, group="When you step away",
+            tip="Only the screen you were using: whichever screen had your mouse or keyboard focus when it locked. "
+                "Picking a screen by name always keeps that one, and the clock and password line show there."),
     Setting(POWER, "power", "lock_before_sleep", "Lock before going to sleep", "bool", True,
             "So the PC wakes up at the lock screen.", effect=POWER_EFFECT, group="When you step away"),
     # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------

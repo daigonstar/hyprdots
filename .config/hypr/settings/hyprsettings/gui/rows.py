@@ -71,6 +71,12 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
 
     elif s.kind == "choice" or (s.kind == "text" and s.key in APP_KEYS):
         items = list(store.app_choices(s)) if s.kind == "text" else [(v, label) for v, label in s.choices]
+        if s.id == "power.lock_screens":  # the screens connected right now, by name
+            from .. import displays
+            def short(text, n=26):
+                return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"
+            items += [(m["name"], f"Only {m['name']}" + (f" ({short(m['description'])})" if m["description"] else ""))
+                      for m in displays.read() if not m["disabled"]]
         if all(str(v) != str(value) for v, _ in items):
             items.insert(0, (value, f"{show(s, value)} (current)"))
         custom = s.allow_custom or s.kind == "text"
