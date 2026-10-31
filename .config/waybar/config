@@ -302,6 +302,6 @@
             "exec": "echo '{\"tooltip\": \"Keybind cheatsheet\"}'",
             "return-type": "json",
             "interval": "once",
-            "on-click": "~/.config/rofi/cheatsheet/cheatsheet.sh"
+            "on-click": "~/.config/hypr/cheatsheet/cheatsheet.sh"
         }
 }

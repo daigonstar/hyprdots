@@ -4,7 +4,7 @@
 ##
 ## Shows category tabs along the top (under the search bar) and a tiled
 ## app grid below, matching the visual style of the original drun launcher.
-## Bind this in place of (or alongside) ~/.config/rofi/launchers/launcher.sh.
+## The rofi fallback for the app launcher (~/.config/hypr/launcher).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/applist.sh"

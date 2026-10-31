@@ -268,7 +268,8 @@ install_paru
 install_package_list() {
 local pkgs=("$@")
 for pkg in "${pkgs[@]:-}"; do
-if pacman -Qq "$pkg" &>/dev/null; then
+# -T also counts a package that provides it (vesktop-git for vesktop): installing the listed one would conflict
+if pacman -T "$pkg" &>/dev/null; then
 log "OK" "Package $pkg already installed"
 elif pacman -Si "$pkg" &>/dev/null; then
 log "INFO" "Installing official package: $pkg"
@@ -528,6 +529,11 @@ run_cmd "sudo mkdir -p /usr/share/icons/Future-cursors && sudo cp -rT \"$REPO_DI
 run_cmd "flatpak --user override --filesystem=/home/\"$USER\"/.icons/:ro"
 run_cmd "flatpak --user override --filesystem=/usr/share/icons/:ro"
 fi
+# Flatpak apps follow the settings Theme page: they may read its colours (~/.config/gtk-*), and GTK 3 ones get the
+# adw-gtk3 style as a Flatpak (GTK 4 apps need no theme)
+run_cmd "flatpak --user override --filesystem=xdg-config/gtk-3.0:ro --filesystem=xdg-config/gtk-4.0:ro"
+run_cmd "flatpak install -y --noninteractive --or-update flathub org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark" ||
+  log "WARN" "Could not install the adw-gtk3 theme for Flatpak apps; GTK 3 Flatpak apps keep their own look"
 
 # Bashrc update
 

@@ -20,6 +20,7 @@ waybar-cava
 swaync
 rofi
 awww
+mpvpaper  # video wallpapers (wallpaper picker)
 ghostty
 starship
 fastfetch
@@ -77,6 +78,7 @@ sif-git
 gnome-themes-extra
 material-black-colors-theme
 papirus-icon-theme-git
+adw-gtk-theme
 ttf-cascadia-code-nerd
 ttf-cascadia-mono-nerd
 ttf-font-awesome-5
@@ -85,6 +87,7 @@ cava
 # --- Apps (autostarted or bound to keys) ---
 zen-browser-bin
 discord
+vesktop
 zed
 solaar
 openrgb
@@ -111,6 +114,7 @@ glib2
 fontconfig
 python-prompt_toolkit
 python-recurring-ical-events
+poppler  # pdftotext: lets the assistant read PDFs
 
 # --- WinBoat (Windows apps in a container) ---
 docker
