@@ -1,4 +1,5 @@
-"""GTK look and feel: theme, icons, cursor, font and dark mode. Replaces nwg-look.
+"""GTK look and feel: theme, icons, cursor, font and dark mode. Replaces nwg-look. Set from the Theme page
+(theme_parts.write_gtk), which also colours apps from the wallpaper.
 
 A choice is written to gtk-3.0 and gtk-4.0 settings.ini and to gsettings (what GTK apps, Electron and the
 portal read), then applied right away. Only the keys this module owns are touched; everything else in
@@ -52,9 +53,16 @@ def themes() -> list[str]:
     return _names("themes", ".themes", lambda p: (p / "gtk-3.0").is_dir() or (p / "gtk-4.0").is_dir())
 
 
+def _has_icons(p: Path) -> bool:
+    """An icon theme lists its icon folders in index.theme; a cursor-only theme does not (Adwaita has both)."""
+    try:
+        return "\nDirectories=" in (p / "index.theme").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
 def icon_themes() -> list[str]:
-    return _names("icons", ".icons", lambda p: (p / "index.theme").is_file() and not (p / "cursors").is_dir()
-                  and p.name not in ("default", "hicolor", "locolor"))
+    return _names("icons", ".icons", lambda p: p.name not in ("default", "hicolor", "locolor") and _has_icons(p))
 
 
 def cursor_themes() -> list[str]:
@@ -158,10 +166,11 @@ def font_parts(font: str) -> tuple[str, str]:
 
 
 # ---- applying ---------------------------------------------------------------------------------------------
-def _link_gtk4_theme(theme: str) -> None:
-    """libadwaita apps ignore gtk-theme-name; they only follow ~/.config/gtk-4.0/gtk.css. Point it at the theme, or clear it."""
+def link_gtk4_theme(theme: str | None) -> None:
+    """libadwaita apps ignore gtk-theme-name; they only follow ~/.config/gtk-4.0/gtk.css. Point it at the theme, or
+    (None) clear the links."""
     folder = config_home() / "gtk-4.0"
-    src = (theme_dir(theme) or Path("/nonexistent")) / "gtk-4.0"
+    src = ((theme and theme_dir(theme)) or Path("/nonexistent")) / "gtk-4.0"
     for name in _GTK4_LINKS:
         link = folder / name
         if link.is_symlink():
@@ -173,8 +182,9 @@ def _link_gtk4_theme(theme: str) -> None:
             link.symlink_to(src / name)
 
 
-def apply(**changes) -> tuple[bool, str]:
-    """Applies any of theme, icons, cursor, cursor_size, font, dark. Returns (ok, message)."""
+def apply(link_gtk4: bool = True, **changes) -> tuple[bool, str]:
+    """Applies any of theme, icons, cursor, cursor_size, font, dark. Returns (ok, message). link_gtk4=False leaves
+    ~/.config/gtk-4.0 alone (the Theme page writes its own colours there)."""
     ini = {}
     gset: list[tuple[str, str]] = []
     for name, value in changes.items():
@@ -187,8 +197,8 @@ def apply(**changes) -> tuple[bool, str]:
     try:
         for version in ("3.0", "4.0"):
             write_ini(version, ini)
-        if "theme" in changes:
-            _link_gtk4_theme(str(changes["theme"]))
+        if "theme" in changes and link_gtk4:
+            link_gtk4_theme(str(changes["theme"]))
     except OSError as e:
         return False, f"Could not write the GTK settings: {e}"
     problems = []

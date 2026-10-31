@@ -84,7 +84,7 @@ class Schema(unittest.TestCase):
             self.assertIn(s.kind, {"choice", "bool", "int", "float", "text", "list", "model", "vision_model", "palette", "font"}, s.id)
             if s.kind in ("int", "float"):
                 self.assertTrue(s.lo is not None and s.hi is not None and s.lo <= s.default <= s.hi, s.id)
-            if s.kind == "choice":
+            if s.kind == "choice" and s.id not in schema.INSTALLED_CHOICES:
                 self.assertIn(s.default, [v for v, _ in s.choices] if not s.allow_custom else [v for v, _ in s.choices] + [s.default], s.id)
             if s.section == "hyprland":
                 self.assertTrue(s.lua, s.id)

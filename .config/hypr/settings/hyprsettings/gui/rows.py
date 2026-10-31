@@ -84,7 +84,7 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
         row.set_activatable_widget(button)
 
     elif s.kind == "choice" or (s.kind == "text" and s.key in APP_KEYS):
-        items = list(store.app_choices(s)) if s.kind == "text" else [(v, label) for v, label in s.choices]
+        items = store.choices(s)
         if s.id == "power.lock_screens":  # the screens connected right now, by name
             from .. import displays
             def short(text, n=26):
@@ -95,7 +95,8 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
             items.insert(0, (value, f"{show(s, value)} (current)"))
         custom = s.allow_custom or s.kind == "text"
         labels = [label.split("  (")[0] if s.kind != "text" else label for _, label in items] + (["Something else…"] if custom else [])
-        drop = Gtk.DropDown(model=Gtk.StringList.new(labels), valign=Gtk.Align.CENTER)
+        drop = Gtk.DropDown(model=Gtk.StringList.new(labels), valign=Gtk.Align.CENTER, enable_search=len(labels) > 12)
+        drop.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
         index = next((i for i, (v, _) in enumerate(items) if str(v) == str(value)), 0)
         drop.set_selected(index)
         last = [index]

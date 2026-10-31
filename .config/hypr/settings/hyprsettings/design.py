@@ -1,5 +1,7 @@
 """The desktop's shared look (Theme page): colour roles picked from the wallpaper's wallust palette, and the font.
 
+Apps (GTK) take the large panel colours and the accent too (theme_parts.write_gtk).
+
 A role names a palette slot (color0-color15, foreground, background), not a fixed colour, so everything keeps following
 the wallpaper. The bar is the first part of the desktop built on these roles; others are meant to follow.
 
@@ -32,7 +34,9 @@ ROLES = [
     ("attention", "Attention", "Unread and urgent notifications.", "color14"),
 ]
 DEFAULTS = {**{f"role_{k}": slot for k, _l, _h, slot in ROLES}, "surface_opacity": 80, "base_opacity": 90,
-            "bar_font": "CaskaydiaCove Nerd Font", "bar_font_size": 15, "bar_style": "islands"}
+            "bar_font": "CaskaydiaCove Nerd Font", "bar_font_size": 15, "bar_style": "islands",
+            "gtk_colours": True, "gtk_theme": "Adwaita", "app_font": "Adwaita Sans", "app_font_size": 11, "icons": "Adwaita",
+            "cursor": "Adwaita", "cursor_size": 24}
 STYLES = (("islands", "Islands"), ("solid", "Solid strip"), ("floating", "Floating bar"), ("bubbles", "Bubbles"),
           ("minimal", "Minimal"))
 SHADOW = "0px 0px 2px rgba(0, 0, 0, 0.6)"
@@ -186,7 +190,7 @@ def refresh_all(store=None) -> list[str]:
     problems = []
     for name, job in (("bar", lambda: write_bar_theme(store)), ("notifications", lambda: theme_parts.write_swaync(o)),
                       ("rofi", lambda: theme_parts.write_rofi(o)), ("window borders", lambda: theme_parts.write_hypr(o)),
-                      ("lock screen", lambda: theme_parts.write_lock(store))):
+                      ("lock screen", lambda: theme_parts.write_lock(store)), ("apps", lambda: theme_parts.write_gtk(o))):
         try:
             job()
         except OSError as e:

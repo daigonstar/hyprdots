@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Theme",
-         "Bar layout", "Launcher", "Appearance", "Hyprland", "Keybinds", "File types", "Hyprdots"]
+         "Bar layout", "Launcher", "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
@@ -28,15 +28,14 @@ PAGE_INTRO = {
                   "and open workspaces move to their screen.",
     "Power & lock": "What happens when you step away: when the screen locks, when the screens switch off and when the PC goes "
                     "to sleep. Applied as soon as you save. Set a time to 0 to switch that step off.",
-    "Theme": "One look for the whole desktop, built from your wallpaper. Each part below takes one of the colours wallust picked "
-             "from your wallpaper, so it still changes with it. The bar uses this now; more of the desktop will follow. "
-             "Saving updates the bar straight away.",
+    "Theme": "One look for the whole desktop, built from your wallpaper: the bar, notifications, launchers, window borders, "
+             "the lock screen and your apps. Each part below takes one of the colours wallust picked from your wallpaper, so "
+             "it still changes with it. Saving applies it straight away; apps that are already open pick up new colours "
+             "when you restart them.",
     "Bar layout": "Where each module sits on the bar.",
     "Launcher": "The app launcher you open with Super+Space. Type to find an app, or a sum (12*7) for its answer, > before a "
                 "command to run it in your terminal, ? before words to search the web, or lock, sleep, reboot or shut down. "
                 "Its colours and font come from the Theme page. Changes show the next time it opens.",
-    "Appearance": "The look of GTK apps (Thunar, settings dialogs and so on): theme, icons, mouse cursor and font. "
-                  "Applies straight away; apps that are already open may need a restart.",
     "Hyprland": "How the desktop looks and how your keyboard, mouse and touchpad behave. After saving you are offered a reload. "
                 "Hover over an option for more detail.",
     "Keybinds": "Select an action and press Enter to give it a new key combo. Open the first item for how to add your own. "
@@ -118,7 +117,7 @@ SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "Th
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, \
+ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, HYPRLAND, KEYBINDS, FILETYPES, \
     HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [
@@ -393,6 +392,26 @@ SETTINGS: list[Setting] = [
             tip="Any font works: the bar's icons fall back to CaskaydiaCove Nerd Font when your font has none."),
     Setting(THEME, "theme", "bar_font_size", "Bar font size", "int", 15, "Size of the bar's text and icons.",
             lo=9, hi=24, unit="px", effect=THEME_EFFECT, group="Font"),
+    # Apps (GTK): the defaults are what GTK uses now (Store.default), so saving the page never changes them by surprise
+    Setting(THEME, "theme", "gtk_colours", "Colour apps from the theme", "bool", True,
+            "Thunar, the settings window, file dialogs and other GTK apps take the large panel colours and the accent.",
+            effect=THEME_EFFECT, group="Apps",
+            tip="Dark or light follows the large panel colour. GTK 3 apps such as Thunar need the adw-gtk-theme package "
+                "(sudo pacman -S adw-gtk-theme); GTK 4 apps follow without it. Apps that are already open pick up new "
+                "colours when you restart them. Turn this off to use an installed GTK theme instead."),
+    Setting(THEME, "theme", "gtk_theme", "App style", "choice", "Adwaita",
+            "The installed GTK theme to use when apps are not coloured from the theme.",
+            effect=THEME_EFFECT, group="Apps"),
+    Setting(THEME, "theme", "app_font", "App font", "font", "Adwaita Sans", "Font for the text in GTK apps.",
+            effect=THEME_EFFECT, group="Apps"),
+    Setting(THEME, "theme", "app_font_size", "App font size", "int", 11, "Text size in GTK apps (11 is normal).",
+            lo=6, hi=24, unit="pt", effect=THEME_EFFECT, group="Apps"),
+    Setting(THEME, "theme", "icons", "Icons", "choice", "Adwaita", "Icon set used in file managers and dialogs.",
+            effect=THEME_EFFECT, group="Apps"),
+    Setting(THEME, "theme", "cursor", "Mouse cursor", "choice", "Adwaita", "Pointer theme.",
+            effect=THEME_EFFECT, group="Apps"),
+    Setting(THEME, "theme", "cursor_size", "Cursor size", "int", 24, "Pointer size in pixels (24 is normal).",
+            lo=8, hi=128, unit="px", effect=THEME_EFFECT, group="Apps"),
     # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------
     Setting(CLOUD, "cloud", "cache_mode", "File cache", "choice", "full",
             "Keep a local copy of what you open (faster), or stream every file from the server (nothing kept on this PC).",
@@ -435,6 +454,12 @@ APP_CANDIDATES = {
     "browser": ["zen-browser", "firefox", "chromium", "google-chrome-stable", "brave", "librewolf", "vivaldi"],
     "store": ["flatpak run io.github.kolunmi.Bazaar", "gnome-software", "pamac-manager", "plasma-discover", "cosmic-store"],
 }
+
+# Choices read from what is installed: setting id -> gtktheme function listing them
+INSTALLED_CHOICES = {"theme.gtk_theme": "themes", "theme.icons": "icon_themes", "theme.cursor": "cursor_themes"}
+# Apps settings whose default is what GTK uses now: setting id -> key of gtktheme.current() (font split in two)
+GTK_NOW = {"theme.gtk_theme": "theme", "theme.icons": "icons", "theme.cursor": "cursor", "theme.cursor_size": "cursor_size",
+           "theme.app_font": "font", "theme.app_font_size": "font_size"}
 
 BY_ID = {s.id: s for s in SETTINGS}
 

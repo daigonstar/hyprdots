@@ -4,17 +4,23 @@ current wallpaper's palette, so design.refresh_all() runs them again after wallu
 - notifications: swaync/theme.css, imported last by swaync/style.css (theme.default.css is the fallback; launch.sh)
 - rofi: a marked block appended to wallust's ~/.config/rofi/colors.rasi, which every rofi theme imports
 - window borders: hypr/theme.lua, read by window.lua when it exists
-- lock screen: hyprlock.local.conf, when you have one (the password line takes the accent)"""
+- lock screen: hyprlock.local.conf, when you have one (the password line takes the accent)
+- apps: a marked block in ~/.config/gtk-3.0/gtk.css and gtk-4.0/gtk.css with GTK's named colours, the adw-gtk3 style
+  for GTK 3 apps, and the icons, cursor and font from the Apps group. Flatpak apps are allowed to read those folders."""
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
-from . import design
+from . import design, gtktheme, theme
 
 HOME = Path.home()
 ROFI_MARK = "/* hyprdots theme"
+GTK_MARK, GTK_END = "/* hyprdots theme: ", "/* hyprdots theme end */"
+FLATPAK_GTK = ("xdg-config/gtk-3.0:ro", "xdg-config/gtk-4.0:ro")
+ADW_GTK3 = "adw-gtk3"  # the adw-gtk-theme package: GTK 3 apps drawn like libadwaita, following its named colours
 
 
 def swaync_css(o: dict) -> str:
@@ -99,3 +105,104 @@ def write_lock(store) -> None:
     path = lockscreen.local_path(store.dir)
     if path.exists():
         lockscreen.write(path, lockscreen.render(store.lock_options(), accent=design.resolved(design.theme_options(store))["accent"]))
+
+
+def gtk_colours(o: dict) -> dict[str, str]:
+    """GTK's named colours (libadwaita's, which adw-gtk3 follows too) from the large panel colours and the accent, the
+    same ones and the same steps as the settings window (gui/ui.css), which this file also reaches."""
+    c = theme.colors(o)
+    bg, fg, accent = c["bg"], c["fg"], c["accent"]
+    shade = lambda t: theme.mix(bg, fg, t)  # noqa: E731  (a step from the panel colour towards the text)
+    return {"accent_color": accent, "accent_bg_color": accent,
+           "accent_fg_color": bg if theme.luminance(accent) > 0.3 else "#ffffff",
+           "window_bg_color": bg, "window_fg_color": fg, "view_bg_color": bg, "view_fg_color": fg,
+           "headerbar_bg_color": bg, "headerbar_fg_color": fg, "headerbar_backdrop_color": bg,
+           "sidebar_bg_color": shade(0.03), "sidebar_fg_color": fg, "sidebar_backdrop_color": shade(0.02),
+           "secondary_sidebar_bg_color": shade(0.02), "secondary_sidebar_fg_color": fg,
+           "card_bg_color": shade(0.05), "card_fg_color": fg, "dialog_bg_color": shade(0.04), "dialog_fg_color": fg,
+           "popover_bg_color": shade(0.06), "popover_fg_color": fg, "thumbnail_bg_color": shade(0.06), "thumbnail_fg_color": fg,
+           # the older names: plain GTK 4 apps (no libadwaita) and most GTK 3 themes draw with these
+           "theme_bg_color": bg, "theme_fg_color": fg, "theme_base_color": shade(0.02), "theme_text_color": fg,
+           "theme_selected_bg_color": accent, "theme_selected_fg_color": bg if theme.luminance(accent) > 0.3 else "#ffffff",
+           "theme_unfocused_bg_color": bg, "theme_unfocused_fg_color": fg, "theme_unfocused_base_color": shade(0.02),
+           "theme_unfocused_text_color": fg, "theme_unfocused_selected_bg_color": accent,
+           "theme_unfocused_selected_fg_color": bg if theme.luminance(accent) > 0.3 else "#ffffff",
+           "borders": shade(0.12), "unfocused_borders": shade(0.10)}
+
+
+def gtk_css(o: dict, version: str) -> str:
+    """The marked block for gtk-<version>/gtk.css. GTK 4 apps read libadwaita's CSS variables; @define-color covers
+    GTK 3 and older libadwaita."""
+    colours = gtk_colours(o)
+    text = GTK_MARK + "colours from the settings Theme page, rewritten when the wallpaper changes. Your own CSS can go\n" \
+        "   above or below this block. */\n"
+    text += "".join(f"@define-color {k} {v};\n" for k, v in colours.items())
+    if version == "4.0":
+        text += ":root {\n" + "".join(f"    --{k.replace('_', '-')}: {v};\n" for k, v in colours.items()
+                                       if not k.startswith(("theme_", "borders", "unfocused_"))) + "}\n"
+    return text + GTK_END + "\n"
+
+
+def _set_block(path: Path, block: str | None) -> None:
+    """Puts the block in path (replacing the previous one, keeping anything else), or takes it out (None). A file left
+    empty is removed. A link to an installed theme's gtk.css (set when apps were not coloured) is replaced."""
+    if path.is_symlink() and "/themes/" in str(path.readlink()):
+        path.unlink()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    if GTK_MARK in text:
+        start = text.index(GTK_MARK)
+        end = text.find(GTK_END, start)
+        end = len(text) if end < 0 else end + len(GTK_END)
+        text = text[:start].rstrip("\n") + ("\n" if text[:start].strip() else "") + text[end:].lstrip("\n")
+    if block:
+        text = text.rstrip("\n") + ("\n\n" if text.strip() else "") + block
+    if text.strip():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        design.write(path, text)
+    elif path.exists():
+        path.unlink()
+
+
+def write_gtk(o: dict) -> None:
+    """Applies the Apps group: colours (or your GTK theme), dark or light, icons, cursor and font. Only what changed is
+    applied, since this runs on every wallpaper change and setting the cursor or theme again makes apps redraw."""
+    o = {**design.DEFAULTS, **o}
+    coloured = bool(o["gtk_colours"])
+    dark = theme.luminance(theme.colors(o)["bg"]) < 0.4
+    if coloured and gtktheme.theme_dir(ADW_GTK3):
+        style = ADW_GTK3 + ("-dark" if dark else "")
+    else:
+        style = str(o["gtk_theme"])
+    if coloured:
+        gtktheme.link_gtk4_theme(None)  # links to an installed theme would hide the colours from GTK 4 apps
+        flatpak_can_read_gtk()
+    for version in ("3.0", "4.0"):
+        _set_block(gtktheme.config_home() / f"gtk-{version}" / "gtk.css", gtk_css(o, version) if coloured else None)
+    if not coloured:
+        gtktheme.link_gtk4_theme(style)
+    want = {"theme": style, "icons": str(o["icons"]), "cursor": str(o["cursor"]), "cursor_size": str(int(o["cursor_size"])),
+            "font": f"{o['app_font']} {int(o['app_font_size'])}", "dark": dark}
+    now = gtktheme.current()
+    changes = {k: v for k, v in want.items() if (now[k] if k == "dark" else str(now[k])) != v}
+    if changes:
+        ok, message = gtktheme.apply(link_gtk4=False, **changes)
+        if not ok:
+            raise OSError(message)
+
+
+def flatpak_can_read_gtk() -> None:
+    """Flatpak apps only see ~/.config/gtk-3.0 and gtk-4.0 (the colours) when allowed. Allowed once, for every app,
+    read-only. GTK 3 Flatpak apps also need the theme as a Flatpak (the installer adds org.gtk.Gtk3theme.adw-gtk3)."""
+    if not shutil.which("flatpak"):
+        return
+    try:
+        shown = subprocess.run(["flatpak", "override", "--user", "--show"], capture_output=True, text=True, timeout=20).stdout
+        missing = [f for f in FLATPAK_GTK if f not in shown]
+        if missing:
+            subprocess.run(["flatpak", "override", "--user", *(f"--filesystem={f}" for f in missing)],
+                           capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        pass

@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 import copy
 
-from . import cloud, displays, gtktheme, mimeapps, models
+from . import cloud, displays, mimeapps, models
 from .schema import BY_ID, PAGE_INTRO, PAGES, Setting, for_page
 from .store import RESET, STARTUP_ID, Store
 
@@ -93,7 +93,6 @@ class App:
         self.exit_hook: Callable[[str], None] | None = None
         self.notice_error = False
         self._mons: list[dict] | None = None
-        self._gtk: dict | None = None
         self._apps: dict | None = None
         self._revert: threading.Timer | None = None
 
@@ -120,8 +119,6 @@ class App:
             return self._cloud_rows(out)
         if page == "Displays":
             return self._display_rows(out)
-        if page == "Appearance":
-            return self._gtk_rows(out)
         if page == "File types":
             return self._mime_rows(out)
         if page == "Keybinds":
@@ -314,70 +311,6 @@ class App:
         self._revert.daemon = True
         self._revert.start()
 
-    # ---- GTK look (applied live) ----------------------------------------------------------------------------
-    GTK_ROWS = [("theme", "Theme", "Window and button style for GTK apps."),
-                ("icons", "Icons", "Icon set used in file managers and dialogs."),
-                ("cursor", "Mouse cursor", "Pointer theme."),
-                ("cursor_size", "Cursor size", "Pointer size in pixels (24 is normal)."),
-                ("font", "Font", "Font family for GTK apps."),
-                ("font_size", "Font size", "Text size in points (11 is normal)."),
-                ("dark", "Prefer dark mode", "Asks apps that support it to use their dark style.")]
-
-    def gtk_now(self) -> dict:
-        if self._gtk is None:
-            self._gtk = gtktheme.current()
-        return self._gtk
-
-    def _gtk_rows(self, out: list[Row]) -> list[Row]:
-        now = self.gtk_now()
-        font, size = gtktheme.font_parts(now["font"])
-        shown = {**now, "font": font, "font_size": size, "dark": "on" if now["dark"] else "off"}
-        out.append(Row("header", "GTK look (Enter to change)"))
-        for key, label, help_ in self.GTK_ROWS:
-            out.append(Row("gtk", label, str(shown[key]), "default", ref=key, help=help_ + " Applies at once."))
-        out.append(Row("action", "Refresh", ref="gtk_refresh", help="Reads the current look again."))
-        return out
-
-    def gtk_edit(self, key: str) -> None:
-        now = self.gtk_now()
-        font, size = gtktheme.font_parts(now["font"])
-        if key == "dark":
-            return self._gtk_apply(dark=not now["dark"])
-        if key == "font_size":
-            def got(text):
-                try:
-                    value = float(text)
-                except ValueError:
-                    raise ValueError("enter a number like 11") from None
-                if not 6 <= value <= 40:
-                    raise ValueError("choose between 6 and 40")
-                self._gtk_apply(font=f"{font} {value:g}")
-            return self.ask("Font size (points)", size, got)
-        if key == "cursor_size":
-            def got(text):
-                try:
-                    value = int(text)
-                except ValueError:
-                    raise ValueError("enter a whole number like 24") from None
-                if not 8 <= value <= 128:
-                    raise ValueError("choose between 8 and 128")
-                self._gtk_apply(cursor_size=value)
-            return self.ask("Cursor size (pixels)", str(now["cursor_size"]), got)
-        names = {"theme": gtktheme.themes, "icons": gtktheme.icon_themes, "cursor": gtktheme.cursor_themes, "font": gtktheme.fonts}[key]()
-        current = font if key == "font" else now[key]
-        if current not in names:
-            names.insert(0, current)
-        items = [(n, n, "current" if n == current else "") for n in names]
-        title = {"theme": "Theme", "icons": "Icon theme", "cursor": "Mouse cursor", "font": "Font"}[key]
-        value = (lambda n: f"{n} {size}") if key == "font" else (lambda n: n)
-        self.popup = Popup("choose", title, [f"{len(names)} installed."], items, names.index(current),
-                           on_select=lambda n: self._gtk_apply(**{key: value(n)}))
-
-    def _gtk_apply(self, **changes) -> None:
-        ok, msg = gtktheme.apply(**changes)
-        self._gtk = None
-        self.notice, self.notice_error = msg, not ok
-
     # ---- file types: which app opens what (applied live) ------------------------------------------------------
     def apps(self) -> dict:
         if self._apps is None:
@@ -527,8 +460,6 @@ class App:
                     self.toggle(row)
                 elif row and row.kind == "cloud":
                     self.cloud_toggle(row.ref)
-                elif row and row.kind == "gtk" and row.ref == "dark":
-                    self.gtk_edit("dark")
             elif key in ("r", "R"):
                 self.reset(row)
             elif key in ("-", "+", "="):
@@ -591,8 +522,6 @@ class App:
             return self.cloud_menu(row.ref)
         if row.kind == "display":
             return self.display_menu(row.ref)
-        if row.kind == "gtk":
-            return self.gtk_edit(row.ref)
         if row.kind == "mime":
             label, what, mimes = mimeapps.CATEGORIES[row.ref]
             return self.mime_menu(label, what, mimes)
@@ -614,7 +543,7 @@ class App:
 
     def choose_value(self, s: Setting) -> None:
         current = self.store.get(s)[0]
-        choices = list(self.store.app_choices(s)) if s.kind == "text" else [(v, label) for v, label in s.choices]
+        choices = self.store.choices(s)
         if all(str(v) != str(current) for v, _ in choices):
             choices.insert(0, (current, f"{current}  (current)"))
         items = [(v, label, "") for v, label in choices]
@@ -892,10 +821,6 @@ class App:
             return self.mime_other()
         if name == "mime_refresh":
             self._apps = None
-            self.notice, self.notice_error = "Refreshed.", False
-            return
-        if name == "gtk_refresh":
-            self._gtk = None
             self.notice, self.notice_error = "Refreshed.", False
             return
         if name == "keybind_help":

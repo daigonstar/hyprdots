@@ -15,15 +15,17 @@ def super_glyph(logo: str) -> str:
     return "SUPER" if logo == "text" else LOGOS.get(logo, LOGOS["arch"])
 
 
-def colors() -> dict:
+def colors(o: dict | None = None) -> dict:
     """The GTK windows' colours (settings, cheatsheet, power menu) from the Theme page roles: accent, secondary,
     text and background of large panels. Falls back to wallust's rofi colours, then to a calm grey set. A too-dark
     accent is blended towards the text colour until it reads on a dark background, so it keeps the wallpaper's hue."""
     out = {"accent": "#949ab3", "soft": "#a8a8ab", "fg": "#faf7fa", "bg": "#1c1a1c"}
     try:
         from . import design
-        from .store import Store
-        c = design.resolved(design.theme_options(Store()))
+        if o is None:
+            from .store import Store
+            o = design.theme_options(Store())
+        c = design.resolved(o)
         out.update(accent=c["accent"], soft=c["secondary"], fg=c["base_text"], bg=c["base"])
     except (OSError, ValueError, KeyError, ImportError):
         try:

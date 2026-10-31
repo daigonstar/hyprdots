@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 import _paths
-from hyprsettings import displays, gtktheme, tui
+from hyprsettings import design, displays, gtktheme, theme_parts, tui
 from test_tui import TuiBase
 
 MODES = ["2560x1440@164.84Hz", "2560x1440@59.95Hz", "1920x1080@60.00Hz", "1920x1080@74.97Hz"]
@@ -103,6 +103,45 @@ class GtkTest(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
+    def _write_gtk(self, **o):
+        colours = {"accent": "#3388ff", "secondary": "#88aacc", "fg": "#eeeeee", "bg": "#111111", "soft": "#88aacc"}
+        with mock.patch.object(theme_parts.theme, "colors", return_value=colours), \
+                mock.patch.object(theme_parts.gtktheme, "theme_dir", side_effect=lambda n: Path("/x") if n == "adw-gtk3" else None), \
+                mock.patch.object(theme_parts, "flatpak_can_read_gtk"), \
+                mock.patch.object(theme_parts.gtktheme, "apply", return_value=(True, "")) as apply:
+            theme_parts.write_gtk({**design.DEFAULTS, "icons": "Papirus", **o})
+        return apply
+
+    def test_theme_colours_apps(self):
+        css4 = Path(self.home) / "gtk-4.0" / "gtk.css"
+        css4.parent.mkdir(parents=True)
+        css4.write_text("/* mine */\nwindow { padding: 1px; }\n")
+        apply = self._write_gtk()
+        for _ in range(2):                                         # written again on the next wallpaper: still one block
+            apply = self._write_gtk()
+        text = css4.read_text()
+        self.assertIn("window { padding: 1px; }", text)            # your own CSS is kept
+        self.assertEqual(text.count(theme_parts.GTK_MARK), 1)
+        self.assertIn("@define-color accent_bg_color #3388ff;", text)
+        self.assertIn("--window-bg-color: #111111;", text)
+        self.assertNotIn("--", (Path(self.home) / "gtk-3.0" / "gtk.css").read_text().replace("/* hyprdots", ""))
+        changes = apply.call_args.kwargs
+        self.assertEqual((changes["theme"], changes["dark"], changes["icons"]), ("adw-gtk3-dark", True, "Papirus"))
+        self.assertFalse(changes["link_gtk4"])
+
+    def test_flatpak_apps_may_read_the_colours_once(self):
+        shown = mock.Mock(stdout="[Context]\nfilesystems=xdg-config/gtk-3.0:ro;\n")
+        with mock.patch.object(theme_parts.shutil, "which", return_value="/usr/bin/flatpak"), \
+                mock.patch.object(theme_parts.subprocess, "run", return_value=shown) as run:
+            theme_parts.flatpak_can_read_gtk()
+        self.assertEqual(run.call_args.args[0], ["flatpak", "override", "--user", "--filesystem=xdg-config/gtk-4.0:ro"])
+
+    def test_turning_theme_colours_off(self):
+        self._write_gtk()
+        apply = self._write_gtk(gtk_colours=False, gtk_theme="Material")
+        self.assertFalse((Path(self.home) / "gtk-3.0" / "gtk.css").exists())   # only our block was there
+        self.assertEqual(apply.call_args.kwargs["theme"], "Material")
+
     def test_ini_keeps_other_keys_and_comments(self):
         ini = Path(self.home) / "gtk-3.0" / "settings.ini"
         ini.parent.mkdir()
@@ -158,17 +197,19 @@ class PagesTest(TuiBase):
             self.assertEqual(apply.call_count, 2)
             self.assertIn("restored", self.app.notice)
 
-    def test_appearance_page(self):
-        self.app._gtk = {"theme": "Adwaita", "icons": "Papirus", "cursor": "X", "cursor_size": "24", "font": "Sans 11", "dark": False}
-        self.goto("Appearance")
-        text = self.app.render_plain()
-        for want in ("Theme", "Papirus", "Font size", "Prefer dark mode"):
-            self.assertIn(want, text)
-        with mock.patch.object(gtktheme, "apply", return_value=(True, "Applied.")) as apply:
-            self.app.handle_key(" ")                                  # first row is Theme: Space opens the list
-            self.app.handle_key("escape")
-            self.app.gtk_edit("dark")
-            apply.assert_called_with(dark=True)
+    def test_theme_page_apps_start_from_what_gtk_uses_now(self):
+        now = {"theme": "adw-gtk3-dark", "icons": "Papirus", "cursor": "Future-cursors", "cursor_size": "32",
+               "font": "Inter 10", "dark": True}
+        with mock.patch.object(gtktheme, "current", return_value=now):
+            self.app.store.reload()
+            self.goto("Theme")
+            text = " ".join(f"{r.label} {r.value}" for r in self.app.rows())
+            for want in ("Colour apps from the theme", "Papirus", "Future-cursors", "Inter"):
+                self.assertIn(want, text)
+            store, by_id = self.app.store, tui.BY_ID
+            self.assertEqual(store.get(by_id["theme.cursor_size"])[0], 32)
+            self.assertEqual(store.get(by_id["theme.app_font_size"])[0], 10)
+            self.assertEqual(store.get(by_id["theme.gtk_theme"])[0], "Adwaita")  # the style it sets itself is not "yours"
 
 
 if __name__ == "__main__":

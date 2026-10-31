@@ -23,9 +23,9 @@ APP_ID = "com.hyprdots.settings"
 
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import appearance, barlayout, cloud, displays, filetypes, keybinds, workspaces
+    from . import barlayout, cloud, displays, filetypes, keybinds, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
-    out.update({"Keybinds": keybinds.build, "Appearance": appearance.build, "File types": filetypes.build,
+    out.update({"Keybinds": keybinds.build, "File types": filetypes.build,
                 "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build})
     return out
 

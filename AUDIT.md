@@ -83,7 +83,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
   - `rclone` and `systemctl` calls run on the render thread and can freeze the UI; Esc does not stop a mount in progress.
   - Bookmarks and unit files are written non-atomically.
 - **File types:** the default lookup ignores desktop-specific `mimeapps.list` files, Removed Associations, `Hidden=true` masking, and MIME aliases.
-- **Appearance:** writing `settings.ini` replaces a symlinked file with a regular file, and the GTK 4 link step unlinks any existing symlink.
+- **GTK settings (Theme page, Apps):** writing `settings.ini` replaces a symlinked file with a regular file, and the GTK 4 link step unlinks any existing symlink.
 - **`exo-terminal.sh`:** the cleanup of `helpers.rc` can strip the `[Default]` header and leave a broken file when other keys are present.
 - **Power menu:** the toggle uses `pkill -f` on the script path, which also matches an editor that has the file open. Lock is silent if `hypridle` is not listening. The layer-shell library path is hardcoded to `/usr/lib`.
 - **Wallpaper picker:** a second keypress closes and then reopens it, and it kills any rofi. Thumbnails are written straight to their final name, so a killed run leaves a broken file that is never regenerated. Thumbnail names use a 32-bit checksum, so two files can collide.

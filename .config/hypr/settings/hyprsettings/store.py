@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import keyspec, overrides, tomledit
-from .schema import APP_CANDIDATES, BY_ID, SETTINGS, Setting
+from .schema import APP_CANDIDATES, BY_ID, GTK_NOW, INSTALLED_CHOICES, SETTINGS, Setting
 
 RESET = object()  # staged marker: remove the key from the local file
 STARTUP_ID = "hyprdots.startup_disabled"
@@ -40,6 +40,7 @@ class Store:
         self.shared = self._safe_read(self.shared_path)
         self.local = self._safe_read(self.local_path)
         self.staged = {}
+        self._gtk: dict | None = None
 
     def _safe_read(self, path: Path) -> dict:
         try:
@@ -61,7 +62,36 @@ class Store:
 
     def default(self, s: Setting):
         shared = self._from(self.shared, s)
+        if shared is None and s.id in GTK_NOW:
+            return self._gtk_now().get(GTK_NOW[s.id], s.default)
         return s.default if shared is None else shared
+
+    def _gtk_now(self) -> dict:
+        """What GTK uses now, as the Theme page's Apps values (read once). The adw-gtk3 style the Theme page sets
+        itself is not offered as your own style."""
+        if self._gtk is None:
+            from . import gtktheme
+            now = gtktheme.current()
+            family, size = gtktheme.font_parts(now["font"])
+            self._gtk = {**now, "font": family}
+            try:
+                self._gtk["font_size"] = int(float(size))
+                self._gtk["cursor_size"] = int(float(now["cursor_size"]))
+            except ValueError:
+                self._gtk.pop("font_size", None)
+                self._gtk.pop("cursor_size", None)
+            if str(now["theme"]).startswith("adw-gtk3"):
+                self._gtk.pop("theme")
+        return self._gtk
+
+    def choices(self, s: Setting) -> list[tuple]:
+        """(value, label) pairs to pick from: the schema's, or what is installed."""
+        if s.kind == "text":
+            return self.app_choices(s)
+        if s.id in INSTALLED_CHOICES:
+            from . import gtktheme
+            return [(n, n) for n in getattr(gtktheme, INSTALLED_CHOICES[s.id])()]
+        return list(s.choices)
 
     def get(self, s: Setting) -> tuple[Any, str]:
         """(value, source) where source is 'changed' (unsaved), 'yours' or 'default'."""
