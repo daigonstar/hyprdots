@@ -79,6 +79,44 @@ def place_beside(m: dict, other: dict, side: str) -> tuple[int, int]:
     return other["x"], other["y"] - mh
 
 
+def snap_position(m: dict, monitors: list[dict], x: float, y: float) -> tuple[int, int]:
+    """Where screen m lands when dropped with its top-left at (x, y) on the shared desktop: touching the nearest edge of
+    another screen, slid along that edge to where it was dropped, and pulled to line up (tops, bottoms, centres, left or
+    right edges) when it is close. Never overlapping another screen. With no other screen it goes to 0,0."""
+    others = [o for o in monitors if o["name"] != m["name"] and not o["disabled"]]
+    if not others:
+        return 0, 0
+    mw, mh = logical_size(m)
+    best = None
+    for o in others:
+        ow, oh = logical_size(o)
+        pull = max(40, 0.08 * min(mw, mh, ow, oh))  # how close counts as "meant to line up"
+        share = 0.25 * min(mh, oh, mw, ow)          # never just touching at a corner
+        for side in ("right", "left", "below", "above"):
+            if side in ("right", "left"):
+                cx = o["x"] + ow if side == "right" else o["x"] - mw
+                cy = min(max(y, o["y"] - mh + share), o["y"] + oh - share)  # share a real part of the edge
+                for line in (o["y"], o["y"] + oh - mh, o["y"] + (oh - mh) / 2):
+                    if abs(cy - line) <= pull:
+                        cy = line
+                        break
+            else:
+                cy = o["y"] + oh if side == "below" else o["y"] - mh
+                cx = min(max(x, o["x"] - mw + share), o["x"] + ow - share)
+                for line in (o["x"], o["x"] + ow - mw, o["x"] + (ow - mw) / 2):
+                    if abs(cx - line) <= pull:
+                        cx = line
+                        break
+            spot = (round(cx), round(cy))
+            trial = [dict(t, x=spot[0], y=spot[1]) if t["name"] == m["name"] else t for t in monitors]
+            if overlaps(trial):
+                continue
+            distance = (cx - x) ** 2 + (cy - y) ** 2
+            if best is None or distance < best[0]:
+                best = (distance, spot)
+    return best[1] if best else (m["x"], m["y"])
+
+
 def normalize_positions(monitors: list[dict]) -> None:
     """Hyprland copes with negative positions, but shifting everything so the top-left is 0x0 keeps the file tidy."""
     live = [m for m in monitors if not m["disabled"]]

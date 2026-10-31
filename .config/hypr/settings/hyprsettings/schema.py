@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Appearance", "Hyprland", "Keybinds", "File types", "Hyprdots"]
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Appearance", "Hyprland", "Keybinds",
+         "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
@@ -22,6 +23,9 @@ PAGE_INTRO = {
                     "Passwords and tokens are kept by rclone, never in these settings files.",
     "Displays": "Your screens: resolution, refresh rate, scale, rotation and where each one sits. Changes apply straight away and you "
                 "get a few seconds to confirm, so a bad choice undoes itself. Remembered in monitors.lua.",
+    "Workspaces": "Super+1 to Super+0 switch between ten workspaces. Choose which screen each one opens on, which one a screen "
+                  "starts on, and give it a name or an app to open. Saved to workspaces.lua when you press Save: Hyprland reloads "
+                  "and open workspaces move to their screen.",
     "Appearance": "The look of GTK apps (Thunar, settings dialogs and so on): theme, icons, mouse cursor and font. "
                   "Applies straight away; apps that are already open may need a restart.",
     "Hyprland": "How the desktop looks and how your keyboard and mouse behave. After saving you are offered a reload.",
@@ -76,7 +80,7 @@ SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "Th
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
+ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [
     # ---- Assistant -------------------------------------------------------------------------------------

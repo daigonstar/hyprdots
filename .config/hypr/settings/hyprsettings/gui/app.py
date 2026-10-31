@@ -23,10 +23,10 @@ APP_ID = "com.hyprdots.settings"
 
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import appearance, cloud, displays, filetypes, keybinds
+    from . import appearance, cloud, displays, filetypes, keybinds, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
     out.update({"Keybinds": keybinds.build, "Appearance": appearance.build, "File types": filetypes.build,
-                "Displays": displays.build, "Cloud drives": cloud.build})
+                "Displays": displays.build, "Workspaces": workspaces.build, "Cloud drives": cloud.build})
     return out
 
 
@@ -37,6 +37,9 @@ class Window(Adw.ApplicationWindow):
         self.builders = builders()
         self.page = page if page in PAGES else PAGES[0]
         self.scroll_memory: dict[str, float] = {}
+        # Pages whose changes are not in the settings files (Workspaces) put an object here with count(), save() ->
+        # (ok, message) and discard(); the save bar, Save, Discard and closing treat them like staged settings.
+        self.pending: dict = {}
 
         # Sidebar: one row per page
         self.sidebar_list = Gtk.ListBox(css_classes=["navigation-sidebar"], selection_mode=Gtk.SelectionMode.SINGLE)
@@ -133,19 +136,36 @@ class Window(Adw.ApplicationWindow):
         bar.append(save)
         return Gtk.Revealer(child=bar, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
 
+    @property
+    def dirty(self) -> bool:
+        return self.store.dirty or any(p.count() for p in self.pending.values())
+
     def changed(self) -> None:
-        n = len(self.store.staged)
+        n = len(self.store.staged) + sum(p.count() for p in self.pending.values())
         self.savebar_label.set_label(f"{n} unsaved change{'s' if n != 1 else ''}")
-        self.savebar.set_reveal_child(self.store.dirty)
+        self.savebar.set_reveal_child(self.dirty)
 
     def discard(self) -> None:
         self.store.reload()
+        for p in self.pending.values():
+            p.discard()
         self.refresh()
         self.toast("Changes discarded.")
 
     def save(self, then=None) -> None:
-        if not self.store.dirty:
+        if not self.dirty:
             self.toast("Nothing to save.")
+            return
+        for p in [p for p in self.pending.values() if p.count()]:
+            ok, msg = p.save()
+            if ok:
+                self.toast(msg)
+            else:
+                ui.message(self, "Could not apply", msg)
+        if not self.store.dirty:
+            self.refresh()
+            if then:
+                then()
             return
         seen = len(self.store.warnings)
         try:
@@ -180,7 +200,7 @@ class Window(Adw.ApplicationWindow):
             self.toast("Hyprland reloaded." if result.returncode == 0 else "Could not reload Hyprland.")
 
     def _on_close(self, _w) -> bool:
-        if not self.store.dirty:
+        if not self.dirty:
             return False
         d = Adw.AlertDialog(heading="Save your changes?", body="Some changes are not saved yet.")
         d.add_response("cancel", "Cancel")
@@ -194,6 +214,8 @@ class Window(Adw.ApplicationWindow):
         def answered(_d, r):
             if r == "discard":
                 self.store.reload()
+                for p in self.pending.values():
+                    p.discard()
                 self.close()
             elif r == "save":
                 self.save(then=self.close)

@@ -27,7 +27,7 @@ def build(win) -> Gtk.Widget:
                                      description="Hyprland has to be running to change screens here."))
         return scroller
 
-    column.append(layout_map(mons))
+    column.append(layout_map(win, mons))
     live = [m for m in mons if not m["disabled"]]
     for m in mons:
         column.append(screen_group(win, mons, m, can_turn_off=len(live) > 1 or m["disabled"]))
@@ -35,45 +35,123 @@ def build(win) -> Gtk.Widget:
 
 
 # ---- the map --------------------------------------------------------------------------------------------------
-def layout_map(mons: list[dict]) -> Gtk.Widget:
+def layout_map(win, mons: list[dict]) -> Gtk.Widget:
+    """Your screens to scale. Drag one to move it: it snaps against the nearest edge of another screen, and letting go
+    applies the new layout (with the usual keep-or-put-back countdown)."""
     live = [m for m in mons if not m["disabled"]]
     c = theme.colors()
     accent, fg = theme.rgb(c["accent"]), theme.rgb(c["fg"])
-    area = Gtk.DrawingArea(content_height=190, hexpand=True)
+    area = Gtk.DrawingArea(content_height=300, hexpand=True)
+    drag = {"m": None, "raw": None, "snap": None}
 
-    def draw(_a, cr, width, height):
-        if not live:
-            return
-        boxes = [(m, *logical(m)) for m in live]
-        left = min(m["x"] for m, *_ in boxes)
-        top = min(m["y"] for m, *_ in boxes)
-        right = max(m["x"] + w for m, w, _h in boxes)
-        bottom = max(m["y"] + h for m, _w, h in boxes)
-        pad = 14
-        k = min((width - 2 * pad) / max(1, right - left), (height - 2 * pad) / max(1, bottom - top))
+    # Fixed view, with room around the screens so a dragged one does not rescale everything under the pointer
+    boxes = [(m, *logical(m)) for m in live]
+    if boxes:
+        # a screen can land beside, above or below any other, so leave a whole screen of room on every side
+        room_x = max(w for _m, w, _h in boxes)
+        room_y = max(h for _m, _w, h in boxes)
+        left = min(m["x"] for m, *_ in boxes) - room_x
+        top = min(m["y"] for m, *_ in boxes) - room_y
+        right = max(m["x"] + w for m, w, _h in boxes) + room_x
+        bottom = max(m["y"] + h for m, _w, h in boxes) + room_y
+
+    def view(width, height):
+        k = min(width / max(1, right - left), height / max(1, bottom - top))
         ox = (width - (right - left) * k) / 2
         oy = (height - (bottom - top) * k) / 2
+        return k, ox, oy
+
+    def to_screen(x, y, width, height):
+        k, ox, oy = view(width, height)
+        return ox + (x - left) * k, oy + (y - top) * k
+
+    def screen_box(cr, m, x, y, w, h, width, height, fill, line, dashed=False, label=True):
+        k, _ox, _oy = view(width, height)
+        sx, sy = to_screen(x, y, width, height)
+        bw, bh = w * k - 6, h * k - 6
+        rounded(cr, sx + 3, sy + 3, bw, bh, 10)
+        cr.set_source_rgba(*accent, fill)
+        cr.fill_preserve()
+        cr.set_source_rgba(*accent, line)
+        cr.set_line_width(2)
+        cr.set_dash([6, 4] if dashed else [])
+        cr.stroke()
+        cr.set_dash([])
+        if not label:
+            return
+        layout = PangoCairo.create_layout(cr)
+        layout.set_alignment(Pango.Alignment.CENTER)
+        layout.set_font_description(Pango.FontDescription.from_string("Sans 10"))
+        layout.set_markup(f"<b>{GLib.markup_escape_text(m['name'])}</b>\n<small>{m['width']}×{m['height']}"
+                          f"{'  ·  ' + format(m['scale'], 'g') + '×' if m['scale'] != 1 else ''}</small>", -1)
+        tw, th = layout.get_pixel_size()
+        cr.set_source_rgba(*fg, 0.92)
+        cr.move_to(sx + 3 + (bw - tw) / 2, sy + 3 + (bh - th) / 2)
+        PangoCairo.show_layout(cr, layout)
+
+    def draw(_a, cr, width, height):
         for m, w, h in boxes:
-            x, y = ox + (m["x"] - left) * k + 3, oy + (m["y"] - top) * k + 3
-            bw, bh = w * k - 6, h * k - 6
-            rounded(cr, x, y, bw, bh, 10)
-            cr.set_source_rgba(*accent, 0.16)
-            cr.fill_preserve()
-            cr.set_source_rgba(*accent, 0.9)
-            cr.set_line_width(2)
-            cr.stroke()
-            layout = PangoCairo.create_layout(cr)
-            layout.set_alignment(Pango.Alignment.CENTER)
-            layout.set_font_description(Pango.FontDescription.from_string("Sans 10"))
-            layout.set_markup(f"<b>{GLib.markup_escape_text(m['name'])}</b>\n<small>{m['width']}×{m['height']}"
-                              f"{'  ·  ' + format(m['scale'], 'g') + '×' if m['scale'] != 1 else ''}</small>", -1)
-            tw, th = layout.get_pixel_size()
-            cr.set_source_rgba(*fg, 0.92)
-            cr.move_to(x + (bw - tw) / 2, y + (bh - th) / 2)
-            PangoCairo.show_layout(cr, layout)
+            if m is drag["m"]:
+                continue
+            screen_box(cr, m, m["x"], m["y"], w, h, width, height, 0.16, 0.9)
+        if drag["m"] is not None:
+            m = drag["m"]
+            w, h = logical(m)
+            screen_box(cr, m, *drag["snap"], w, h, width, height, 0.10, 1.0, dashed=True, label=False)  # where it lands
+            screen_box(cr, m, *drag["raw"], w, h, width, height, 0.30, 0.6)                           # under the pointer
     area.set_draw_func(draw)
-    frame = Gtk.Frame(child=area, css_classes=["card"])
-    return frame
+
+    def hit(px, py):
+        width, height = area.get_width(), area.get_height()
+        k, _ox, _oy = view(width, height)
+        for m, w, h in reversed(boxes):
+            sx, sy = to_screen(m["x"], m["y"], width, height)
+            if sx <= px <= sx + w * k and sy <= py <= sy + h * k:
+                return m
+        return None
+
+    gesture = Gtk.GestureDrag()
+
+    def begin(_g, px, py):
+        m = hit(px, py) if len(boxes) > 1 else None
+        drag.update(m=m, raw=(m["x"], m["y"]) if m else None, snap=(m["x"], m["y"]) if m else None)
+        if m is None:
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+        else:
+            area.set_cursor_from_name("grabbing")
+
+    def update(_g, dx, dy):
+        m = drag["m"]
+        if m is None:
+            return
+        k, _ox, _oy = view(area.get_width(), area.get_height())
+        raw = (m["x"] + dx / k, m["y"] + dy / k)
+        drag.update(raw=raw, snap=displays.snap_position(m, live, *raw))
+        area.queue_draw()
+
+    def end(_g, _dx, _dy):
+        m, spot = drag["m"], drag["snap"]
+        drag.update(m=None, raw=None, snap=None)
+        area.set_cursor_from_name("default")
+        area.queue_draw()
+        if m is not None and spot != (m["x"], m["y"]):
+            change(win, mons, m["name"], x=spot[0], y=spot[1])
+    gesture.connect("drag-begin", begin)
+    gesture.connect("drag-update", update)
+    gesture.connect("drag-end", end)
+    area.add_controller(gesture)
+
+    motion = Gtk.EventControllerMotion()
+    motion.connect("motion", lambda _c, px, py: drag["m"] is None and
+                   area.set_cursor_from_name("grab" if len(boxes) > 1 and hit(px, py) else "default"))
+    area.add_controller(motion)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    box.append(Gtk.Frame(child=area, css_classes=["card"]))
+    if len(boxes) > 1:
+        box.append(Gtk.Label(label="Drag a screen to move it. It snaps against the edges of the others.",
+                             xalign=0, css_classes=["dim-label", "caption"]))
+    return box
 
 
 def logical(m: dict) -> tuple[int, int]:

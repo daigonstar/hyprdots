@@ -85,7 +85,8 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
 | Calendar | Add, rename or remove calendars (links stay private) |
 | Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar, and whether opened files are kept on this PC (faster) or streamed from the server (nothing stored) |
-| Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays); changes apply at once and undo themselves if you do not confirm |
+| Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays): drag screens on the map and they snap into place; changes apply at once and undo themselves if you do not confirm |
+| Workspaces | Which screen each of the ten workspaces opens on, which one each screen starts on, names, always-shown workspaces and an app to open in an empty one, with quick layouts (alternate, split, all on one screen) |
 | Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
 | Hyprland | Gaps, borders, rounding, blur, animations, layout, keyboard layout and mouse |
 | Keybinds | Change the key combo for any action: click it and press the new combo |

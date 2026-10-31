@@ -126,6 +126,11 @@ class App:
             return self._mime_rows(out)
         if page == "Keybinds":
             return self._keybind_rows(out)
+        if page == "Workspaces":
+            out.append(Row("note", f"Workspaces are set up in the settings window, or by editing {self.store.dir / 'workspaces.lua'}."))
+            out.append(Row("action", "Open the settings window on this page", ref="workspaces_gui",
+                           help="Starts the settings window (it needs a desktop session, so not over SSH)."))
+            return out
         last_group = None
         for s in for_page(page):
             if s.group and s.group != last_group:
@@ -863,6 +868,13 @@ class App:
     def action(self, name: str) -> None:
         if name == "toggle_assistant":
             return self.toggle_assistant()
+        if name == "workspaces_gui":
+            if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+                return self.message("No desktop here", ["The settings window needs a desktop session. Open it from the bar instead."])
+            subprocess.Popen([str(self.store.dir / "scripts" / "settings.sh"), "--page=Workspaces"], start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.notice, self.notice_error = "Opening the settings window...", False
+            return
         if name == "add_cloud":
             return self.add_cloud()
         if name == "open_cloud":
