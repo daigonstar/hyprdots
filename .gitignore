@@ -25,3 +25,13 @@ __pycache__/
 /.config/waybar/config.generated.json
 /.config/swaync/theme.css
 /.config/hypr/theme.lua
+# Follow the current wallpaper (wallust and the wallpaper picker rewrite them); new installs start from the .default copies
+/.config/rofi/.current_wallpaper
+/.config/rofi/.wallpaper_current
+/.config/rofi/wallpaper/.wallpaper_current
+/.config/waybar/colors/colors.css
+/.config/rofi/colors.rasi
+/.config/swaync/wallust/colors-wallust.css
+/.config/hypr/wallust/colors.lua
+*.orig
+*.rej

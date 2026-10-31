@@ -18,9 +18,8 @@ if [ -f "$wallpaper_path" ]; then
     wallpaper_path="$(readlink -f "$wallpaper_path")"
     echo "Wallust processing: $wallpaper_path"
 
-    # Symlinks for Rofi and Styles
+    # The lock screen and game mode read the wallpaper through this link
     ln -sf "$wallpaper_path" "$HOME/.config/rofi/.current_wallpaper"
-    cp "$wallpaper_path" "$HOME/.config/rofi/.wallpaper_current"
 
     # 3. Execute Wallust 3.0+ (Flags BEFORE the path)
     # -s: skip terminal sequences for speed

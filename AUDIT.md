@@ -18,7 +18,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 | 8 | Displays page: turning off the laptop's own screen while docked can be saved to `monitors.lua`. | Undocked, no screen is enabled. **Fixed:** a built-in screen (eDP, LVDS, DSI) is never saved as off; it stays off only for the session. |
 | 9 | Display confirm popup: Esc is ignored and Enter keeps the layout, but the text says anything else puts the old settings back. Saving also forgets screens that are not plugged in, and mirrored screens are not handled. | On a blank screen the popup cannot be cancelled. **Mostly fixed** in the GTK settings window: Esc or closing puts the old layout back, the countdown is shown, and screens that are not plugged in keep their saved line. Mirrored screens are still not handled. |
 | 10 | The Super+K cheatsheet reads `~/.config/hypr/keybinds.conf`, which no longer exists. *(checked)* | The cheatsheet opens empty. **Fixed:** replaced by a GTK4 window (`hypr/cheatsheet/`) that reads `keybinds.lua` through the settings store, applies your custom keys, and lists the fixed binds. |
-| 11 | `.config/rofi/.current_wallpaper` is committed as a symlink to `/home/robb/Pictures/wallpapers/lieutenant-titus.jpg`, and `.config/rofi/.wallpaper_current` is a committed 2.2 MB JPEG. *(checked)* | They break game mode on other machines and are re-committed on every wallpaper change. |
+| 11 | `.config/rofi/.current_wallpaper` is committed as a symlink to `/home/robb/Pictures/wallpapers/lieutenant-titus.jpg`, and `.config/rofi/.wallpaper_current` is a committed 2.2 MB JPEG. *(checked)* | They break game mode on other machines and are re-committed on every wallpaper change. **Fixed:** both, an empty `rofi/wallpaper/.wallpaper_current` and the four wallust colour files are no longer tracked. The colour files ship as `.default` copies; `hypr/scripts/first-colours.sh` fills in any that are missing and points `.current_wallpaper` at a shipped wallpaper. The installer, the updater, and the bar and notification launch scripts run it. The updater keeps them, plus the git-ignored `hypridle.local.conf` and `hyprlock.local.conf` it used to delete, across its reset. Nothing read the JPEG copy, so it is no longer written. |
 
 ## Installer and updater
 
@@ -48,7 +48,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 - Waybar's update click runs `bash -ic update`, which depends on the `.bashrc` alias.
 - `wallust.toml` has orphaned templates and writes kitty and cava configs for programs that are not required.
 - Hardware-specific defaults: UK keyboard layout, an `epic-mouse-v1` device rule, and autostart entries (`openrgb ... Ice.orp`, Solaar, Nextcloud, Bitwarden) that are on by default.
-- `.gitignore` does not cover `*.orig` and `*.rej`.
+- ~~`.gitignore` does not cover `*.orig` and `*.rej`.~~ Fixed.
 
 ## AI assistant
 
@@ -95,7 +95,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 
 1. ~~Updater and installer safety (items 1-4), then the Intel and `paru` bugs (items 5-6).~~ Items 1-5 done; item 6 is low priority.
 2. Tighten the assistant guard (item 7) by allow-listing flags per command instead of deny-listing, then fix the display popup and docked-laptop cases (items 8-9).
-3. Clear the broken or accidentally committed files (items 10-11) and un-ignore the tests so CI runs them.
+3. ~~Clear the broken or accidentally committed files (items 10-11)~~ (done), and un-ignore the tests so CI runs them.
 
 ## For the launch page
 

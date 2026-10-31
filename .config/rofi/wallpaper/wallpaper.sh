@@ -6,7 +6,6 @@
 terminal=kitty
 wallDIR="$HOME/Pictures/wallpapers"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
-wallpaper_current="$HOME/.config/rofi/wallpaper/.wallpaper_current"
 
 # Directory for rofi/swaync
 iDIR="$HOME/.config/rofi/images"

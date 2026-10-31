@@ -35,6 +35,13 @@ PRESERVE=(
   .config/waybar/layout.json
   .config/swaync/theme.css
   .config/hypr/theme.lua
+  .config/hypr/hypridle.local.conf
+  .config/hypr/hyprlock.local.conf
+  .config/rofi/.current_wallpaper
+  .config/waybar/colors/colors.css
+  .config/rofi/colors.rasi
+  .config/swaync/wallust/colors-wallust.css
+  .config/hypr/wallust/colors.lua
 )
 
 # Older versions of this script moved the local files to ~/.config/backup before fetching,
@@ -135,8 +142,20 @@ main() {
     exit 2
   fi
 
+  # Older versions tracked some of the PRESERVE files (the wallpaper colours); the reset would delete those,
+  # so keep a copy and put back any the reset removed
+  local saved f
+  saved="$(mktemp -d)"
+  for f in "${PRESERVE[@]}"; do
+    [[ -f "$f" || -L "$f" ]] && mkdir -p "$saved/$(dirname "$f")" && cp -P "$f" "$saved/$f"
+  done
+
   echo "Resetting local $branch to $remote/$branch (this will discard local commits not on remote)"
   git reset --hard "$remote/$branch"
+  for f in "${PRESERVE[@]}"; do
+    [[ -e "$f" || -L "$f" || ! ( -e "$saved/$f" || -L "$saved/$f" ) ]] || cp -P "$saved/$f" "$f"
+  done
+  rm -rf "$saved"
 
   echo "Removing untracked files, including ignored ones, except machine-local config (git clean -fdx)"
   local keep=() f
@@ -151,6 +170,7 @@ main() {
 
   install_new_packages
   apply_symlinks
+  "$HOME/.config/hypr/scripts/first-colours.sh" || true
   # Re-apply the settings Theme page to the files the reset just put back (best-effort)
   PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh || true
   exit 0
@@ -224,7 +244,7 @@ apply_symlinks() {
   fi
 
   # Make key scripts executable (best-effort)
-  SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/scripts/exo-terminal.sh hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.sh rofi/powermenu/powermenu.py rofi/launchers/launcher.sh rofi/wallpaper/wallpaper.sh)
+  SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/scripts/first-colours.sh hypr/scripts/exo-terminal.sh hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.sh rofi/powermenu/powermenu.py rofi/launchers/launcher.sh rofi/wallpaper/wallpaper.sh)
   for s in "${SCRIPT_FILES[@]}"; do
     sp="$DOTFILES_DIR/$s"
     [[ -f "$sp" ]] && chmod +x "$sp" && echo "Chmod +x $sp"
