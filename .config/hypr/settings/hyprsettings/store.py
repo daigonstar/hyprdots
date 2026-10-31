@@ -207,6 +207,14 @@ class Store:
         self.local = self._safe_read(self.local_path)
         if touched_lua or not self.overrides_path.exists():
             self.write_overrides()
+        if any(sid.startswith("power.") for sid in self.staged):
+            from . import idle  # hypridle.local.conf is built from these settings
+            try:
+                path = idle.write(self.dir, idle.render(*(self.get(BY_ID[f"power.{k}"])[0] for k in
+                                                          ("lock_after", "screen_off_after", "suspend_after", "lock_before_sleep"))))
+                idle.restart(path)
+            except OSError as e:
+                self.warnings.append(f"Saved, but the idle settings could not be applied: {e}")
         if any(sid.startswith("cloud.") for sid in self.staged):
             from . import cloud  # mount flags come from these settings; drives use them from their next restart
             try:

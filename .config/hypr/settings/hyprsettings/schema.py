@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Appearance", "Hyprland", "Keybinds",
-         "File types", "Hyprdots"]
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Appearance",
+         "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
@@ -26,9 +26,12 @@ PAGE_INTRO = {
     "Workspaces": "Super+1 to Super+0 switch between ten workspaces. Choose which screen each one opens on, which one a screen "
                   "starts on, and give it a name or an app to open. Saved to workspaces.lua when you press Save: Hyprland reloads "
                   "and open workspaces move to their screen.",
+    "Power & lock": "What happens when you step away: when the screen locks, when the screens switch off and when the PC goes "
+                    "to sleep. Applied as soon as you save. Set a time to 0 to switch that step off.",
     "Appearance": "The look of GTK apps (Thunar, settings dialogs and so on): theme, icons, mouse cursor and font. "
                   "Applies straight away; apps that are already open may need a restart.",
-    "Hyprland": "How the desktop looks and how your keyboard and mouse behave. After saving you are offered a reload.",
+    "Hyprland": "How the desktop looks and how your keyboard, mouse and touchpad behave. After saving you are offered a reload. "
+                "Hover over an option for more detail.",
     "Keybinds": "Select an action and press Enter to give it a new key combo. Open the first item for how to add your own. "
                 "Super is the Windows key. Applied when Hyprland reloads.",
     "File types": "Which app opens each kind of file: links, pictures, video, PDFs and so on. Changes apply straight away and are "
@@ -74,13 +77,18 @@ KB_LAYOUTS = _c(("gb", "gb - United Kingdom"), ("us", "us - United States"), ("d
                 ("es", "es - Spanish"), ("it", "it - Italian"), ("pt", "pt - Portuguese"), ("se", "se - Swedish"),
                 ("no", "no - Norwegian"), ("dk", "dk - Danish"), ("fi", "fi - Finnish"), ("pl", "pl - Polish"),
                 ("ie", "ie - Irish"), ("br", "br - Brazilian"))
+KB_OPTIONS = _c(("", "None"), ("caps:escape", "Caps Lock is another Escape"), ("caps:ctrl_modifier", "Caps Lock is another Ctrl"),
+                ("ctrl:swapcaps", "Swap Caps Lock and left Ctrl"), ("compose:ralt", "Right Alt is the Compose key"),
+                ("caps:none", "Caps Lock does nothing"))
+ACCEL = _c(("", "Device default"), ("adaptive", "Adaptive (speeds up with faster moves)"), ("flat", "Flat (same speed always, good for games)"))
+POWER_EFFECT = "as soon as you save"
 CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the server"))
 CLOUD_EFFECT = "when the cloud drives restart"
 SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
+ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, APPEARANCE, HYPRLAND, KEYBINDS, FILETYPES, HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [
     # ---- Assistant -------------------------------------------------------------------------------------
@@ -166,6 +174,8 @@ SETTINGS: list[Setting] = [
             "dwindle splits each window in two; master keeps one big window with a stack beside it.",
             choices=_c(("dwindle", "dwindle - binary splits"), ("master", "master - one main window")),
             effect="when Hyprland reloads", lua=("general", "layout"), group="Windows"),
+    Setting(HYPRLAND, "hyprland", "resize_on_border", "Resize by dragging window edges", "bool", False, 'Grab the edge or border of a tiled or floating window with the mouse to resize it.',
+            effect="when Hyprland reloads", lua=('general', 'resize_on_border'), group="Windows"),
     Setting(HYPRLAND, "hyprland", "active_opacity", "Focused window opacity", "float", 1.0, "1.0 is fully solid.", lo=0.3, hi=1.0, step=0.05,
             effect="when Hyprland reloads", lua=("decoration", "active_opacity"), group="Effects"),
     Setting(HYPRLAND, "hyprland", "inactive_opacity", "Unfocused window opacity", "float", 1.0, "Lower makes windows you are not using fade.",
@@ -176,16 +186,84 @@ SETTINGS: list[Setting] = [
             effect="when Hyprland reloads", lua=("decoration", "shadow", "enabled"), group="Effects"),
     Setting(HYPRLAND, "hyprland", "animations", "Animations", "bool", True, "Window and workspace animations. Turn off for a snappier feel.",
             effect="when Hyprland reloads", lua=("animations", "enabled"), group="Effects"),
+    Setting(HYPRLAND, "hyprland", "dim_inactive", "Dim unfocused windows", "bool", False, 'Darkens every window except the one you are using.',
+            effect="when Hyprland reloads", lua=('decoration', 'dim_inactive'), group="Effects"),
+    Setting(HYPRLAND, "hyprland", "dim_strength", "Dim amount", "float", 0.5, 'How dark unfocused windows get when dimming is on.', lo=0.05, hi=1.0, step=0.05,
+            effect="when Hyprland reloads", lua=('decoration', 'dim_strength'), group="Effects"),
+    Setting(HYPRLAND, "hyprland", "blur_size", "Blur strength", "int", 3, 'How far the blur spreads behind transparent windows and the bar.', lo=1, hi=20,
+            effect="when Hyprland reloads", lua=('decoration', 'blur', 'size'), group="Effects"),
+    Setting(HYPRLAND, "hyprland", "blur_passes", "Blur smoothness", "int", 1, 'More passes look smoother but cost more GPU.', lo=1, hi=4,
+            effect="when Hyprland reloads", lua=('decoration', 'blur', 'passes'), group="Effects"),
     Setting(HYPRLAND, "hyprland", "kb_layout", "Keyboard layout", "choice", "gb", "Your keyboard layout code.", choices=KB_LAYOUTS, allow_custom=True,
-            effect="when Hyprland reloads", lua=("input", "kb_layout"), group="Input"),
+            effect="when Hyprland reloads", lua=("input", "kb_layout"), group="Keyboard"),
     Setting(HYPRLAND, "hyprland", "kb_variant", "Keyboard variant", "text", "", "Optional layout variant such as dvorak or intl. Leave empty for the standard one.",
-            effect="when Hyprland reloads", lua=("input", "kb_variant"), group="Input"),
+            effect="when Hyprland reloads", lua=("input", "kb_variant"), group="Keyboard"),
+    Setting(HYPRLAND, "hyprland", "kb_options", "Extra keyboard options", "choice", '', 'Small changes to what some keys do, such as using Caps Lock as Escape.', choices=KB_OPTIONS, allow_custom=True,
+            effect="when Hyprland reloads", lua=('input', 'kb_options'), group="Keyboard",
+            tip='Something else... takes any XKB option, several separated by commas, for example caps:escape,compose:ralt.'),
+    Setting(HYPRLAND, "hyprland", "repeat_delay", "Key repeat delay", "int", 600, 'How long to hold a key before it starts repeating.', lo=150, hi=1500, step=25, unit="ms",
+            effect="when Hyprland reloads", lua=('input', 'repeat_delay'), group="Keyboard"),
+    Setting(HYPRLAND, "hyprland", "repeat_rate", "Key repeat speed", "int", 25, 'How many times a second a held key repeats.', lo=5, hi=80, unit="per second",
+            effect="when Hyprland reloads", lua=('input', 'repeat_rate'), group="Keyboard"),
+    Setting(HYPRLAND, "hyprland", "numlock", "Num Lock on at login", "bool", False, 'Turns the number pad on when you log in.',
+            effect="when Hyprland reloads", lua=('input', 'numlock_by_default'), group="Keyboard"),
     Setting(HYPRLAND, "hyprland", "follow_mouse", "Focus follows mouse", "choice", 1, "Whether moving the mouse over a window focuses it.", choices=FOLLOW,
-            effect="when Hyprland reloads", lua=("input", "follow_mouse"), group="Input"),
+            effect="when Hyprland reloads", lua=("input", "follow_mouse"), group="Mouse"),
     Setting(HYPRLAND, "hyprland", "sensitivity", "Mouse sensitivity", "float", 0.0, "-1.0 is slowest, 1.0 fastest, 0 is unchanged.", lo=-1.0, hi=1.0, step=0.1,
-            effect="when Hyprland reloads", lua=("input", "sensitivity"), group="Input"),
-    Setting(HYPRLAND, "hyprland", "natural_scroll", "Natural scrolling (touchpad)", "bool", False, "Content follows your fingers, like a phone.",
-            effect="when Hyprland reloads", lua=("input", "touchpad", "natural_scroll"), group="Input"),
+            effect="when Hyprland reloads", lua=("input", "sensitivity"), group="Mouse"),
+    Setting(HYPRLAND, "hyprland", "accel_profile", "Pointer acceleration", "choice", '', 'Whether the pointer goes further when you move the mouse faster.', choices=ACCEL,
+            effect="when Hyprland reloads", lua=('input', 'accel_profile'), group="Mouse",
+            tip='Adaptive suits everyday use. Flat makes the pointer move the same distance for the same hand movement whatever the speed, which many people prefer for games and drawing.'),
+    Setting(HYPRLAND, "hyprland", "left_handed", "Left-handed buttons", "bool", False, 'Swaps the left and right mouse buttons.',
+            effect="when Hyprland reloads", lua=('input', 'left_handed'), group="Mouse"),
+    Setting(HYPRLAND, "hyprland", "scroll_factor", "Mouse scroll speed", "float", 1.0, 'How far one notch of the wheel scrolls. 1.0 is normal.', lo=0.2, hi=3.0, step=0.1,
+            effect="when Hyprland reloads", lua=('input', 'scroll_factor'), group="Mouse"),
+    Setting(HYPRLAND, "hyprland", "natural_scroll", "Natural scrolling", "bool", False, "Content follows your fingers, like a phone.",
+            effect="when Hyprland reloads", lua=("input", "touchpad", "natural_scroll"), group="Touchpad"),
+    Setting(HYPRLAND, "hyprland", "tap_to_click", "Tap to click", "bool", True, 'A light tap on the touchpad counts as a click.',
+            effect="when Hyprland reloads", lua=('input', 'touchpad', 'tap_to_click'), group="Touchpad"),
+    Setting(HYPRLAND, "hyprland", "disable_while_typing", "Ignore the touchpad while typing", "bool", True, 'Stops a palm brushing the touchpad from moving the pointer while you type.',
+            effect="when Hyprland reloads", lua=('input', 'touchpad', 'disable_while_typing'), group="Touchpad"),
+    Setting(HYPRLAND, "hyprland", "clickfinger", "Two-finger click is a right click", "bool", False, 'Click with two fingers anywhere on the pad for a right click, instead of clicking its bottom-right corner.',
+            effect="when Hyprland reloads", lua=('input', 'touchpad', 'clickfinger_behavior'), group="Touchpad"),
+    Setting(HYPRLAND, "hyprland", "touchpad_scroll_factor", "Touchpad scroll speed", "float", 1.0, 'How far a two-finger swipe scrolls. 1.0 is normal.', lo=0.2, hi=3.0, step=0.1,
+            effect="when Hyprland reloads", lua=('input', 'touchpad', 'scroll_factor'), group="Touchpad"),
+    Setting(HYPRLAND, "hyprland", "hide_on_key_press", "Hide the pointer while typing", "bool", False, 'It comes back as soon as you move the mouse.',
+            effect="when Hyprland reloads", lua=('cursor', 'hide_on_key_press'), group="Cursor"),
+    Setting(HYPRLAND, "hyprland", "cursor_timeout", "Hide the pointer after", "int", 0, 'Hides a still pointer after this many seconds. 0 never hides it.', lo=0, hi=120, unit="s",
+            effect="when Hyprland reloads", lua=('cursor', 'inactive_timeout'), group="Cursor"),
+    Setting(HYPRLAND, "hyprland", "no_warps", "Leave the pointer where it is", "bool", False, 'Normally the pointer jumps to a window when you focus it with the keyboard. On keeps it where you left it.',
+            effect="when Hyprland reloads", lua=('cursor', 'no_warps'), group="Cursor"),
+    Setting(HYPRLAND, "hyprland", "focus_on_activate", "Switch to windows that ask for attention", "bool", False, 'When an app asks to be shown (for example a link opening in your browser), go straight to it.',
+            effect="when Hyprland reloads", lua=('misc', 'focus_on_activate'), group="Behaviour",
+            tip='Off: the app is only marked as wanting attention, and you switch to it yourself. On can pull you away from what you are doing, for example while gaming.'),
+    Setting(HYPRLAND, "hyprland", "workspace_back_and_forth", "Press a workspace's key again to go back", "bool", False, 'Pressing Super and the number of the workspace you are already on takes you to the one you were on before.',
+            effect="when Hyprland reloads", lua=('binds', 'workspace_back_and_forth'), group="Behaviour"),
+    Setting(HYPRLAND, "hyprland", "middle_click_paste", "Middle-click paste", "bool", True, 'Paste the last text you selected with the middle mouse button.',
+            effect="when Hyprland reloads", lua=('misc', 'middle_click_paste'), group="Behaviour"),
+    Setting(HYPRLAND, "hyprland", "force_zero_scaling", "Sharp old apps on scaled screens", "bool", False, 'Stops older (XWayland) apps looking blurry on a screen with a scale above 1. They may draw small instead.',
+            effect="when Hyprland reloads", lua=('xwayland', 'force_zero_scaling'), group="Behaviour",
+            tip='Only matters if a screen on the Displays page has a scale other than 1. Steam and some games are XWayland apps.'),
+    Setting(HYPRLAND, "hyprland", "mouse_wakes", "Wake the screens with the mouse", "bool", False, 'Moving the mouse turns the screens back on after they switch off.',
+            effect="when Hyprland reloads", lua=('misc', 'mouse_move_enables_dpms'), group="Behaviour"),
+    Setting(HYPRLAND, "hyprland", "key_wakes", "Wake the screens with the keyboard", "bool", False, 'Pressing a key turns the screens back on after they switch off.',
+            effect="when Hyprland reloads", lua=('misc', 'key_press_enables_dpms'), group="Behaviour"),
+    # ---- Power & lock (written to hypridle.local.conf, see idle.py) -------------------------------------------
+    Setting(POWER, "power", "lock_after", "Lock the screen after", "int", 0,
+            "Minutes without using the PC before it locks. 0 never locks by itself.", lo=0, hi=240, unit="min",
+            effect=POWER_EFFECT, group="When you step away",
+            tip="Locking shows the lock screen; your apps keep running. Super+L or the power menu locks straight away."),
+    Setting(POWER, "power", "screen_off_after", "Switch the screens off after", "int", 30,
+            "Minutes without using the PC before the screens turn off. 0 keeps them on.", lo=0, hi=240, unit="min",
+            effect=POWER_EFFECT, group="When you step away",
+            tip="Moving the mouse or pressing a key turns them back on (see Wake the screens on the Hyprland page)."),
+    Setting(POWER, "power", "suspend_after", "Go to sleep after", "int", 0,
+            "Minutes without using the PC before it goes to sleep. 0 never sleeps by itself.", lo=0, hi=720, unit="min",
+            effect=POWER_EFFECT, group="When you step away",
+            tip="Sleep saves power but stops everything, including downloads, game servers and the cloud drives. "
+                "Apps that are playing video or audio can keep the PC awake."),
+    Setting(POWER, "power", "lock_before_sleep", "Lock before going to sleep", "bool", True,
+            "So the PC wakes up at the lock screen.", effect=POWER_EFFECT, group="When you step away"),
     # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------
     Setting(CLOUD, "cloud", "cache_mode", "File cache", "choice", "full",
             "Keep a local copy of what you open (faster), or stream every file from the server (nothing kept on this PC).",

@@ -31,7 +31,8 @@ hl.on("hyprland.start", function()
         "swaync",
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
-        "hypridle",
+        -- hypr-settings (Power & lock page) writes hypridle.local.conf; without it the shipped hypridle.conf is used
+        "c=~/.config/hypr/hypridle.local.conf; if [ -f \"$c\" ]; then exec hypridle -c \"$c\"; else exec hypridle; fi",
         "wl-paste --watch clipvault store",
         -- Detects games launched from Steam, Lutris, Heroic, or bare
         -- Wine/Proton/gamescope wrappers (no shared window class exists

@@ -18,3 +18,4 @@ __pycache__/
 .update-branch
 .config/hypr/assistant/private_modes/
 *.pre-modes
+/.config/hypr/hypridle.local.conf
