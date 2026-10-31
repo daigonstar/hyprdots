@@ -219,8 +219,7 @@ start_ollama() {
     run sudo systemctl enable --now ollama.service || warn "Could not enable ollama.service"
   fi
   $DRY_RUN && return 0
-  local i
-  for i in $(seq 1 20); do
+  for _ in $(seq 1 20); do
     curl -fsS --max-time 2 "${OLLAMA_HOST:-http://127.0.0.1:11434}/api/tags" >/dev/null 2>&1 && return 0
     sleep 1
   done
@@ -292,8 +291,8 @@ setup_search() {
     if [[ "$tool" == podman ]]; then systemctl --user enable --now podman-restart.service >/dev/null 2>&1 || true; fi
   fi
   if ! $DRY_RUN; then
-    local i ready=false
-    for i in $(seq 1 30); do
+    local ready=false
+    for _ in $(seq 1 30); do
       if curl -fsS --max-time 3 "$url/search?q=test&format=json" >/dev/null 2>&1; then ready=true; break; fi
       sleep 1
     done

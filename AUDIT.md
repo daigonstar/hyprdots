@@ -32,7 +32,7 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 - ~~The installer defaults to the unstable `dev` branch~~ (fixed: the installer and updater default to `main`; `dev` had not been updated since March), and the pull rewrites `hyprinstall.sh` mid-run.
 - Services are enabled unconditionally (`NetworkManager`, `docker`, and others), which can drop the network on machines using another network manager.
 - Packages used but not listed in `install/required.txt`: `lm_sensors`, `kitty`. `bluetui` and `docker-compose` need checking.
-- ~~CI does not run the settings tests (`.config/hypr/settings/tests/` is gitignored, including `test_mime.py` and `test_displays_gtk.py`)~~ Fixed: neither test folder is ignored any more, both missing files are tracked, and CI runs every test (it had been failing since 31 Oct on three setup tests, fixed in 195e6e5). Still open: CI does not run a dry-run install (blocked by the dry-run bugs above), and shellcheck warnings are now listed in the log but do not fail the build yet.
+- ~~CI does not run the settings tests (`.config/hypr/settings/tests/` is gitignored, including `test_mime.py` and `test_displays_gtk.py`)~~ Fixed: neither test folder is ignored any more, both missing files are tracked, and CI runs every test (it had been failing since 31 Oct on three setup tests, fixed in 195e6e5). Still open: CI does not run a dry-run install (blocked by the dry-run bugs above), and shellcheck now fails the build on warnings as well as errors (the nine warnings it found are fixed).
 - Hardcoded paths: `install/hide.sh` defaults to `$HOME/hyprdots/...`, `.bashrc` aliases expand `$REPO_DIR` at install time, and `update.sh` has a shorter chmod list than the installer.
 
 ## Hyprland, Waybar and rofi

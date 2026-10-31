@@ -529,7 +529,7 @@ command fastfetch
 EOF
 log "OK" "Appended hyprinstall additions to ~/.bashrc"
 else
-log "INFO" "~/.bashrc already contains hyprinstall additions; skipping"
+log "INFO" "$HOME/.bashrc already contains hyprinstall additions; skipping"
 fi
 
 # SDDM: the login screen runs on Wayland inside Weston, on your main screen only

@@ -22,19 +22,6 @@ CACHE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/rofi-categorized-apps.cache"
 
 BUCKET_ORDER=(Internet Development Multimedia Graphics Games Office System Settings Utility Other)
 
-declare -A BUCKET_ICON=(
-    [Internet]="applications-internet"
-    [Development]="applications-development"
-    [Multimedia]="applications-multimedia"
-    [Graphics]="applications-graphics"
-    [Games]="applications-games"
-    [Office]="applications-office"
-    [System]="applications-system"
-    [Settings]="preferences-system"
-    [Utility]="applications-utilities"
-    [Other]="applications-other"
-)
-
 # Populates the following globals (name-keyed, i.e. the app's display Name
 # is the key - fine for a desktop launcher, collisions just keep the first
 # hit found, and user-installed dirs are scanned before system ones):

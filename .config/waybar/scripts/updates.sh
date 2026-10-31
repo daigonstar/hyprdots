@@ -9,7 +9,7 @@
 
 TTL=20   # seconds a result is shared between bars; a refresh after an update is always newer than this
 dir="${XDG_RUNTIME_DIR:-/tmp}/waybar-updates-$UID"
-mkdir -p -m 700 "$dir"
+mkdir -p "$dir" && chmod 700 "$dir"
 state="$dir/state"                  # "epoch official aur flatpak"; a ? means that source has never been read
 exec 9>"$dir/lock"
 flock 9                             # the second bar waits here, then reuses the first bar's result

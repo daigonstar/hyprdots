@@ -3,13 +3,8 @@
 # Optimized for Multi-Monitor Sync and Wallust 3.0
 
 # WALLPAPERS PATH
-terminal=kitty
 wallDIR="$HOME/Pictures/wallpapers"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
-
-# Directory for rofi/swaync
-iDIR="$HOME/.config/rofi/images"
-iDIRi="$HOME/.config/rofi/icons"
 
 # awww transition config
 FPS=60
