@@ -146,11 +146,15 @@ def _prompt(code, text):
 def ui_tool(name, args):
     print(f"{dim('  ⚙')} {_c('1', name)} {dim((args or '').strip())}".rstrip())
 
+def _visible(text):
+    """Shows control characters (escape codes, carriage returns) as text, so a command cannot hide what it is."""
+    return "".join(ch if ch.isprintable() else ch.encode("unicode_escape").decode() for ch in text)
+
 def ui_command(command):
-    print(f"{_c('32', '  $')} {command}")
+    print(f"{_c('32', '  $')} {_visible(command)}")
 
 def ui_write(action, target):
-    print(f"{_c('33', '  ✎')} {action} {target}")
+    print(f"{_c('33', '  ✎')} {action} {_visible(target)}")
 
 _INLINE_RE = re.compile(r"(\*\*.+?\*\*|`[^`]+`)")
 _LIST_RE = re.compile(r"^(\s*)([-*•]|\d+[.)])\s+(.*)$")
@@ -2461,15 +2465,15 @@ CONFIRMED_COMMAND_TIMEOUT = SETTINGS["confirmed_command_timeout"]  # approved co
 # Commands that only read state. These run without asking.
 READ_ONLY_COMMANDS = {
     "lscpu", "lsblk", "lspci", "lsusb", "lsmod", "free", "df", "du", "uname", "uptime",
-    "whoami", "id", "ps", "ss", "sensors", "ls", "stat", "wc", "head", "tail", "cat",
+    "whoami", "id", "ps", "stat", "wc", "head", "tail", "cat", "ls",
     "grep", "nproc", "findmnt", "checkupdates",
-    "which", "whereis", "printenv", "getent", "lsof", "pgrep", "vmstat", "iostat", "mpstat",
+    "which", "whereis", "getent", "lsof", "pgrep", "vmstat", "iostat", "mpstat",
     "lsns", "lsattr", "getfacl", "readlink", "realpath", "basename", "dirname",
     "echo", "printf", "cut", "tr", "tac", "nl", "column", "jq", "diff", "cmp", "md5sum",
     "sha1sum", "sha256sum", "b2sum", "strings", "hexdump", "od",
-    "glxinfo", "vulkaninfo", "vainfo", "clinfo", "lsb_release", "fastfetch", "pactree",
-    "vercmp", "lslocks", "lsipc", "lshw", "pstree", "w", "last", "lastlog", "groups", "locale",
-    "zramctl", "numfmt", "expr", "seq", "true", "false", "test",
+    "glxinfo", "vainfo", "clinfo", "lsb_release", "pactree",
+    "vercmp", "lslocks", "lsipc", "pstree", "w", "last", "groups", "locale",
+    "numfmt", "expr", "seq", "true", "false", "test",
 }
 SAFE_SUBCOMMANDS = {
     "systemctl": {"status", "is-active", "is-enabled", "is-failed", "list-units",
@@ -2499,30 +2503,74 @@ SAFE_SUBCOMMANDS = {
     "busctl": {"list", "status", "tree"},
     "upower": set(),
 }
+# Options allowed before the subcommand: (short flags, long flags, short flags taking a value, long ones taking a value)
+GLOBAL_OPTIONS = {
+    "systemctl": ("laq", {"no-pager", "user", "system", "full", "all", "no-legend", "plain", "quiet", "failed", "value"},
+                  "tpno", {"state", "type", "property", "lines", "output"}),
+    "hyprctl": ("j", set(), "i", {"instance"}),
+}
 NO_SUBCOMMAND_OK = {"systemctl", "hostnamectl", "timedatectl", "loginctl", "resolvectl",
                     "localectl", "systemd-analyze", "coredumpctl", "upower"}
 AWK_UNSAFE_RE = re.compile(r"\bsystem\s*\(|>|\||getline|@(load|include)|\bclose\s*\(|\bfflush\s*\(|ENVIRON")
-ROCM_CHANGE_RE = re.compile(r"-r$|--(set|reset|load|save|auto|rassign|fan|power|perf|overdrive|mem)", re.I)
 FIND_FORBIDDEN = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"}
-NMCLI_FORBIDDEN = {"up", "down", "delete", "modify", "add", "connect", "disconnect", "reload", "edit",
-                   "clone", "import", "export", "monitor", "hotspot", "radio", "networking", "on", "off", "set"}
 IW_FORBIDDEN = {"set", "del", "connect", "disconnect", "add", "reg"}
 GIT_BRANCH_FORBIDDEN = {"-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy", "--set-upstream-to", "-u"}
-JOURNALCTL_FORBIDDEN = {"--vacuum-size", "--vacuum-time", "--vacuum-files", "--rotate",
-                        "--flush", "--sync", "--setup-keys", "--relinquish-var",
-                        "--smart-relinquish-var", "--update-catalog"}
-DMESG_FORBIDDEN = {"-c", "-C", "--clear", "--read-clear", "-D", "-E", "-n",
-                   "--console-off", "--console-on", "--console-level"}
-IP_FORBIDDEN = {"add", "del", "delete", "set", "flush", "change", "replace", "exec"}
+# git long options that write a file or run a program; any abbreviation of them counts too (git accepts those)
+GIT_FORBIDDEN_LONG = {"output", "ext-diff", "open-files-in-pager", "textconv", "upload-pack", "receive-pack", "exec",
+                      "output-directory"}
+# Options that change something, for tools whose read options are too many to list. Long ones are matched with
+# their abbreviations (--clea is --clear to dmesg), short ones anywhere in a group (-Tc).
+DENY_OPTIONS = {
+    "ss": ("K", {"kill"}),
+    "sensors": ("s", {"set"}),
+    "sort": ("o", {"output", "compress-program"}),
+    "file": ("C", {"compile"}),
+    "dmesg": ("cCDEn", {"clear", "read-clear", "console-off", "console-on", "console-level"}),
+    "journalctl": ("", {"vacuum-size", "vacuum-time", "vacuum-files", "rotate", "flush", "sync", "setup-keys",
+                        "relinquish-var", "smart-relinquish-var", "update-catalog", "new-id128"}),
+    "lastlog": ("CS", {"clear", "set"}),
+    "date": ("s", {"set"}),
+}
+# The only options allowed, as (short, long, short taking a value, long taking a value), and what may follow
+ALLOW_OPTIONS = {
+    "awk": ("", set(), "Fv", {"field-separator", "assign"}),
+    "vulkaninfo": ("", {"summary"}, "", set()),
+    "fastfetch": ("", {"pipe"}, "", set()),  # -c loads a config, and configs can run commands
+    "zramctl": ("bn", {"bytes", "noheadings", "output-all", "raw"}, "o", {"output"}),
+    "rocm-smi": ("aitufcgpPMbv", {"json", "csv", "alldevices"}, "d", {"device"}),
+}
+NMCLI_OBJECTS = {  # object: (its read-only verbs, all its verbs; nmcli accepts any unambiguous prefix of either)
+    "general": ({"status", "permissions"}, {"status", "hostname", "permissions", "logging", "reload"}),
+    "device": ({"status", "show"}, {"status", "show", "set", "connect", "reapply", "modify", "disconnect", "delete",
+                                    "monitor", "wifi", "lldp", "up", "down", "checkpoint"}),
+    "connection": ({"show"}, {"show", "up", "down", "add", "modify", "clone", "edit", "delete", "monitor", "reload",
+                              "load", "import", "export", "migrate"}),
+}
+# ip's own object list in its own order: it takes the first one a word abbreviates ("a" is address)
+IP_ORDER = ("address", "addrlabel", "maddress", "route", "rule", "neighbor", "neighbour", "ntable", "ntbl", "link",
+            "l2tp", "fou", "ila", "macsec", "tunnel", "tuntap", "tap", "token", "tcpmetrics", "tcp_metrics", "monitor",
+            "xfrm", "mroute", "mrule", "netns", "netconf", "vrf", "sr", "nexthop", "mptcp", "ioam", "stats")
+IP_OBJECTS = {"address", "addrlabel", "maddress", "route", "rule", "neighbor", "neighbour", "link", "netconf", "tunnel"}
+IP_OPTIONS = {"-4", "-6", "-s", "-stats", "-statistics", "-d", "-details", "-br", "-brief", "-j", "-json", "-p",
+              "-pretty", "-c", "-color", "-o", "-oneline", "-h", "-human", "-human-readable"}
+SECRET_NAME_RE = re.compile(r"TOKEN|KEY|SECRET|PASS|AUTH|COOKIE|CREDENTIAL|SESSION", re.I)
 ESCALATION_COMMANDS = {"sudo", "su", "doas", "pkexec", "run0"}
-# rm and rmdir are deliberately absent: deleting always asks.
-WRITE_COMMANDS = {"mkdir", "touch", "cp", "mv"}
+# rm and rmdir are deliberately absent: deleting always asks. Only these options are allowed (no -t/--target-directory,
+# which names a destination outside the paths that are checked, and no -r/-f).
+WRITE_COMMANDS = {"mkdir": ("pv", {"parents", "verbose"}), "touch": ("cam", {"no-create"}),
+                  "cp": ("npv", {"no-clobber", "verbose"}), "mv": ("nv", {"no-clobber", "verbose"})}
+# Command wrappers: the command they run is checked for sudo and friends as well
+WRAPPERS = {"env", "xargs", "sh", "bash", "zsh", "dash", "fish", "nice", "nohup", "timeout", "setsid", "stdbuf", "time",
+            "watch", "flock", "chrt", "ionice", "taskset", "script", "unbuffer", "systemd-run", "busybox"}
 MAX_WRITE_BYTES = 200_000
 
 HOME = os.path.realpath(os.path.expanduser("~"))
 BLOCKED_PATHS = [os.path.join(HOME, p) for p in (
     ".ssh", ".gnupg", ".aws", ".kube", ".password-store", ".config/gh",
     ".config/rclone", ".local/share/keyrings", ".netrc", ".git-credentials",
+    ".docker/config.json", ".npmrc", ".pypirc", ".mozilla", ".zen", ".config/chromium", ".config/google-chrome",
+    ".config/BraveSoftware", ".config/vesktop", ".config/discord", ".bash_history", ".zsh_history",
+    ".python_history", ".local/share/fish/fish_history",
 )] + ["/etc/shadow", "/etc/gshadow", "/etc/sudoers", "/etc/sudoers.d", "/etc/ssh", "/root"]
 # Dotfiles repo: its files are the live desktop config (symlinked into ~/.config), so changes there
 # are treated like changes to a dotfile.
@@ -2550,6 +2598,8 @@ def _touches_blocked_path(argv):
         if not _is_pathlike(value):
             continue
         path = os.path.realpath(os.path.expanduser(value))
+        if re.fullmatch(r"/proc/(\d+|self|thread-self)(/task/\d+)?/environ", path):  # another program's secrets
+            return True
         for blocked in BLOCKED_PATHS:
             if path == blocked or path.startswith(blocked + "/"):
                 return True
@@ -2557,58 +2607,198 @@ def _touches_blocked_path(argv):
                 return True
     return False
 
+def _options(args, short="", long=(), short_value="", long_value=()):
+    """The positional arguments, or None when an option is not on the allow-list. Long options must be spelled out
+    in full: GNU tools also accept abbreviations, which no list of bad options can keep up with."""
+    positional, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            return positional + args[i + 1:]
+        if a.startswith("--"):
+            name, eq, _ = a[2:].partition("=")
+            if name in long_value:
+                i += 0 if eq else 1  # the value is the next argument
+            elif name not in long or eq:
+                return None
+        elif a.startswith("-") and len(a) > 1:
+            for j, ch in enumerate(a[1:]):
+                if ch in short_value:
+                    i += 1 if j == len(a) - 2 else 0  # -n5 carries its value, -n 5 takes the next argument
+                    break
+                if ch not in short:
+                    return None
+        else:
+            positional.append(a)
+        i += 1
+    return positional
+
+def _denied(args, short, long):
+    """True when an option changes something: a listed long option or any abbreviation of one, or a listed short
+    option anywhere in a group of short ones."""
+    for a in args:
+        if a == "--":
+            return False
+        if a.startswith("--"):
+            name = a[2:].split("=", 1)[0]
+            if name and any(bad.startswith(name) for bad in long):
+                return True
+        elif a.startswith("-") and set(a[1:]) & set(short):
+            return True
+    return False
+
+def _takes_next(a, short_value, long_value):
+    """True when option a takes the next argument as its value."""
+    if a.startswith("--"):
+        return "=" not in a and a[2:] in long_value
+    for j, ch in enumerate(a[1:]):
+        if ch in short_value:
+            return j == len(a) - 2
+    return False
+
+def _subcommand(base, args):
+    """The subcommand and what follows it, skipping the allowed options before it (and their values). None when an
+    option before the subcommand is not allowed, so its value is never mistaken for the subcommand."""
+    short, long, short_value, long_value = GLOBAL_OPTIONS.get(base, ("", set(), "", set()))
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if not a.startswith("-"):
+            return a, args[i + 1:]
+        if _options([a], short, long, short_value, long_value) is None:
+            return None
+        i += 2 if _takes_next(a, short_value, long_value) else 1
+    return "", []
+
+def _prefix_of(token, words):
+    """The word token abbreviates, when it abbreviates exactly one of them."""
+    hits = [w for w in words if w.startswith(token)]
+    return hits[0] if len(hits) == 1 else (token if token in words else None)
+
+def _nmcli_read_only(args):
+    if _denied(args, "s", {"show-secrets"}):  # -s prints Wi-Fi passwords
+        return False
+    short, long, short_value, long_value = "tpma", {"terse", "pretty", "ask", "wait"}, "fgmcw", {"fields", "get-values", "mode", "colors", "escape", "wait"}
+    i = 0  # options before the object are nmcli's own; the object's options (show --active) come after it
+    while i < len(args) and args[i].startswith("-"):
+        if _options([args[i]], short, long, short_value, long_value) is None:
+            return False
+        i += 2 if _takes_next(args[i], short_value, long_value) else 1
+    positional = [a for a in args[i:] if not a.startswith("-")]
+    if not positional:
+        return True
+    obj = _prefix_of(positional[0], ("general", "device", "connection", "networking", "radio", "monitor", "agent"))
+    if obj in ("networking", "radio"):  # with no more arguments they only show the state
+        return len(positional) == 1 or (len(positional) == 2 and positional[1] in ("connectivity", "all", "wifi", "wwan"))
+    if obj not in NMCLI_OBJECTS:
+        return False
+    safe, verbs = NMCLI_OBJECTS[obj]
+    if len(positional) == 1:
+        return True
+    verb = _prefix_of(positional[1], verbs)
+    if obj == "device" and verb == "wifi":  # "device wifi list" only
+        return len(positional) >= 3 and _prefix_of(positional[2], ("list", "connect", "rescan", "hotspot", "show-password")) == "list"
+    return verb in safe
+
+def _ip_read_only(args):
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        if args[i] not in IP_OPTIONS:
+            return False  # -batch runs a file of commands, -force, -netns and so on
+        i += 1
+    rest = args[i:]
+    if not rest:
+        return True
+    obj = next((o for o in IP_ORDER if o.startswith(rest[0])), None)
+    if obj not in IP_OBJECTS:
+        return False
+    # The verb must be written out: ip reads "s" as "set" for links
+    return len(rest) == 1 or rest[1] in ("show", "list", "ls", "lst", "get")
+
 def _is_read_only(argv):
     base = os.path.basename(argv[0])
     args = argv[1:]
+    if base in READ_ONLY_COMMANDS:
+        return True
     if base == "git":
-        # Ignore global options that only pick the repo or disable the pager
+        # Allow only the options that pick the repo or turn off the pager before the subcommand (-c, --exec-path,
+        # --git-dir and the rest ask)
         cleaned, skip = [], False
-        for a in args:
+        for i, a in enumerate(args):
             if skip:
                 skip = False
             elif a == "-C":
                 skip = True
-            elif a != "--no-pager":
+            elif a == "--no-pager":
+                continue
+            elif a.startswith("-") and not cleaned:
+                return False
+            else:
                 cleaned.append(a)
         args = cleaned
-    positional = [a for a in args if not a.startswith("-")]
-    if base in READ_ONLY_COMMANDS:
+        if not args or args[0] not in SAFE_SUBCOMMANDS["git"]:
+            return False
+        if _denied(args[1:], "O", GIT_FORBIDDEN_LONG) or any(a.startswith("-O") for a in args):
+            return False
+        if args[0] == "ls-remote" and _denied(args[1:], "u", set()):  # -u is --upload-pack here
+            return False
+        positional = [a for a in args[1:] if not a.startswith("-")]
+        if args[0] == "remote":
+            return all(p in ("show", "get-url") for p in positional)
+        if args[0] == "branch":
+            return not positional and not any(a in GIT_BRANCH_FORBIDDEN for a in args)
         return True
     if base in SAFE_SUBCOMMANDS:
-        if base in NO_SUBCOMMAND_OK and not positional:
-            return True
-        if not (bool(positional) and positional[0] in SAFE_SUBCOMMANDS[base]):
+        found = _subcommand(base, args)
+        if found is None:
             return False
-        if base == "git":
-            # remote add/remove/set-url, branch creation/deletion and --output=<file> would change things
-            if any(a.startswith(("--output", "--ext-diff", "--open-files-in-pager", "--textconv")) or a == "-O" or a.startswith("-O")
-                   for a in args):
-                return False
-            if positional[0] == "remote":
-                return all(p in ("show", "get-url") for p in positional[1:])
-            if positional[0] == "branch":
-                return len(positional) == 1 and not any(a in GIT_BRANCH_FORBIDDEN for a in args)
-            return True
+        sub, _rest = found
+        if not sub:
+            return base in NO_SUBCOMMAND_OK
+        return sub in SAFE_SUBCOMMANDS[base]
+    if base in DENY_OPTIONS:
+        if _denied(args, *DENY_OPTIONS[base]):
+            return False
+        if base == "date":  # a bare date and time (not +FORMAT, and not the value of -d) sets the clock
+            for i, a in enumerate(args):
+                if not a.startswith(("-", "+")) and (i == 0 or args[i - 1] not in ("-d", "--date", "-f", "--file", "-r", "--reference")):
+                    return False
         return True
-    # Commands that are read-only except for specific output/modify options
+    if base in ALLOW_OPTIONS:
+        if base == "rocm-smi":  # every --show... option only reads; argparse would refuse an ambiguous "--show"
+            args = [a for a in args if not a.startswith("--show")]
+        positional = _options(args, *ALLOW_OPTIONS[base])
+        if positional is None:
+            return False
+        if base == "awk":
+            return not any(AWK_UNSAFE_RE.search(a) for a in args)
+        return base == "rocm-smi" or not positional
     short_flags = "".join(a[1:] for a in args if a.startswith("-") and not a.startswith("--"))
+    positional = [a for a in args if not a.startswith("-")]
+    if base == "printenv":  # named variables only, and not ones that look like secrets
+        return bool(positional) and len(positional) == len(args) and not any(SECRET_NAME_RE.search(a) for a in positional)
+    if base == "lshw":  # single-dash words; -dump writes a file
+        skip = False
+        for a in args:
+            if skip:
+                skip = False
+            elif a in ("-class", "-c", "-C"):
+                skip = True
+            elif a not in ("-short", "-businfo", "-sanitize", "-numeric", "-quiet", "-json", "-notime"):
+                return False
+        return True
     if base == "find":
         return not any(a in FIND_FORBIDDEN for a in args)
     if base == "top":
         return any(a == "-b" or (a.startswith("-") and not a.startswith("--") and "b" in a) for a in args)
-    if base == "env":
-        return not positional
-    if base == "awk":
-        # -f/--file runs a script we cannot see; system ("x") with a space also runs a command
-        return not any(a in ("-i", "-f", "--file", "--include", "--load") or AWK_UNSAFE_RE.search(a) for a in args)
     if base == "xxd":
         return len(positional) <= 1 and not any(a in ("-r", "-revert") for a in args)  # a second file is written to
     if base == "tree":
         return "o" not in short_flags and not any(a.startswith("--output") for a in args)
-    if base == "rocm-smi":
-        return not any(ROCM_CHANGE_RE.match(a) for a in args)
     if base == "nmcli":
-        return not any(a in NMCLI_FORBIDDEN for a in args)
+        return _nmcli_read_only(args)
+    if base == "ip":
+        return _ip_read_only(args)
     if base == "iw":
         return not any(a in IW_FORBIDDEN for a in args)
     if base == "rfkill":
@@ -2619,26 +2809,18 @@ def _is_read_only(argv):
         return any(a in ("--show", "-s", "--summary") for a in args) and not positional
     if base == "xrandr":
         return "--query" in args or not args
-    if base == "sort":
-        return not any(a.startswith(("--output", "--compress-program")) for a in args) and "o" not in short_flags
     if base == "uniq":
         return len(positional) <= 1
-    if base == "file":
-        return not any(a in ("-C", "--compile") for a in args)
-    if base == "date":
-        return not any(a.startswith("--set") for a in args) and "s" not in short_flags
     if base == "hostname":
         return not positional
-    if base == "journalctl":
-        return not any(a.split("=", 1)[0] in JOURNALCTL_FORBIDDEN for a in args)
-    if base == "dmesg":
-        return not any(a in DMESG_FORBIDDEN for a in args)
-    if base == "ip":
-        return not any(a in IP_FORBIDDEN for a in args)
     if base == "ping":
         return "-c" in args
     if base in ("pacman", "paru"):
-        return bool(args) and (args[0].startswith("-Q") or args[0] in ("-Ss", "-Si", "-Sii", "-Sl"))
+        if not args or not (args[0].startswith("-Q") or args[0] in ("-Ss", "-Si", "-Sii", "-Sl")):
+            return False
+        if args[0].startswith("-Q") and not set(args[0][2:]) <= set("qiklostdemnecgpua"):
+            return False
+        return _options(args[1:], "qil", {"quiet", "info", "list"}, "", {"color"}) is not None
     return False
 
 # Set by /allow and cleared by /ask. Sensitive paths (keys/credentials) always still prompt.
@@ -2664,31 +2846,42 @@ def _in_home(path):
     return path.startswith(HOME + "/")
 
 def _is_protected(path):
-    """Top-level dotfiles/dot-directories in $HOME (shell rc, ~/.config, ...) and the dotfiles repo always need confirmation."""
+    """Dotfiles and anything inside a hidden folder (shell rc, ~/.config, a project's .git/config, which git runs
+    commands from) and the dotfiles repo always need confirmation."""
     if any(path == d or path.startswith(d + "/") for d in PROTECTED_DIRS):
         return True
-    return os.path.relpath(path, HOME).split(os.sep)[0].startswith(".")
+    return any(part.startswith(".") for part in os.path.relpath(path, HOME).split(os.sep))
 
 def _hard(reasons):
     return any(h in r for r in reasons for h in HARD_REASONS)
 
 def _is_safe_home_write(argv):
-    """True for file-management commands that only create/remove single non-dot files inside $HOME."""
-    if os.path.basename(argv[0]) not in WRITE_COMMANDS:
+    """True for file-management commands that only create single non-dot files inside $HOME."""
+    base = os.path.basename(argv[0])
+    if base not in WRITE_COMMANDS:
         return False
-    flags = [a for a in argv[1:] if a.startswith("-")]
-    if any(a in ("--recursive", "--force") or (not a.startswith("--") and set(a[1:]) & set("rRf")) for a in flags):
+    positional = _options(argv[1:], *WRITE_COMMANDS[base])
+    if not positional:
         return False
-    paths = [_resolve(a) for a in argv[1:] if not a.startswith("-")]
-    if not paths or any(not _in_home(p) or _is_protected(p) for p in paths):
+    paths = [_resolve(a) for a in positional]
+    if any(not _in_home(p) or _is_protected(p) for p in paths):
         return False
-    if os.path.basename(argv[0]) in ("cp", "mv") and len(paths) >= 2:
+    if base in ("cp", "mv") and len(paths) >= 2:
         dest = paths[-1]
         for src in paths[:-1]:
             target = os.path.join(dest, os.path.basename(src)) if os.path.isdir(dest) else dest
             if os.path.exists(target):
                 return False
     return True
+
+def _runs_escalation(argv):
+    """True when a command, or one it starts (sh -c "sudo ...", env sudo, xargs sudo), is sudo or similar."""
+    if os.path.basename(argv[0]) in ESCALATION_COMMANDS:
+        return True
+    if os.path.basename(argv[0]) not in WRAPPERS:
+        return False
+    words = (w.strip("'\"`$();&|{}") for a in argv[1:] for w in a.split())
+    return any(os.path.basename(w) in ESCALATION_COMMANDS for w in words)
 
 def tool_write_file(arg):
     """Writes a text file. arg is JSON: {"path": "...", "content": "...", "append": false}. Needs a yes outside safe cases."""
@@ -2717,7 +2910,7 @@ def tool_write_file(arg):
         reasons.append("a dotfile/config location (protected)")
     if os.path.exists(target):
         reasons.append("appending to an existing file" if append else "overwriting an existing file")
-    if reasons and not _confirm(f"Write {target}? ({'; '.join(reasons)})",
+    if reasons and not _confirm(f"Write {_visible(target)}? ({'; '.join(reasons)})",
                                 sensitive=any("sensitive" in r for r in reasons), auto_ok=not _hard(reasons)):
         return "Not written (declined, or no terminal available for confirmation)."
 
@@ -2777,7 +2970,7 @@ def tool_run_command(command):
         reasons.append("uses shell features")
 
     for argv in stages:
-        if os.path.basename(argv[0]) in ESCALATION_COMMANDS:
+        if _runs_escalation(argv):
             reasons.append("runs with elevated privileges")
         inspect_argv = ["x"] + command.split() if argv[0] == "bash" else argv
         # Reads count too: a key printed by cat ends up in the model's context

@@ -51,6 +51,66 @@ class ReadOnlyPolicy(unittest.TestCase):
             self.assertFalse(self.ro(*argv), argv)
 
 
+class AuditItem7(unittest.TestCase):
+    """Bypasses found in the October 2026 audit: each one ran or wrote without asking."""
+    def ro(self, *argv):
+        return a._is_read_only(list(argv))
+
+    def test_option_values_and_abbreviations_no_longer_slip_through(self):
+        for argv in (["env", "-Stouch /tmp/x"], ["env", "--split-string=touch /tmp/x"], ["env"],
+                     ["systemctl", "-H", "status", "stop", "x"], ["docker", "--context", "ps", "rm", "x"],
+                     ["git", "ls-remote", "--upload-pack=touch /tmp/x", "origin"], ["git", "ls-remote", "-u", "x", "o"],
+                     ["git", "diff", "--outp=/tmp/x"], ["git", "-c", "core.pager=sh", "log"], ["git", "log", "--ext"],
+                     ["sort", "--out=/tmp/x", "f"], ["sort", "--compress-prog=sh"], ["date", "--se=2020-01-01"],
+                     ["date", "0101000020"], ["dmesg", "-Tc"], ["dmesg", "--clea"], ["journalctl", "--vacuum-t=1s"],
+                     ["nmcli", "c", "del", "x"], ["nmcli", "-s", "-g", "802-11-wireless-security.psk", "c", "show", "x"],
+                     ["nmcli", "radio", "wifi", "off"], ["nmcli", "dev", "wifi", "connect", "x"],
+                     ["ip", "link", "s", "dev", "lo", "down"], ["ip", "-batch", "cmds"], ["ip", "netns", "exec", "x", "sh"],
+                     ["awk", "--exec=x.awk"], ["awk", "-ofile", "{print}"], ["awk", "--fi", "x.awk"],
+                     ["fastfetch", "-c", "x.jsonc"], ["vulkaninfo", "--json"], ["lshw", "-dump", "x.db"], ["ss", "-K"],
+                     ["sensors", "-s"], ["printenv"], ["printenv", "GITHUB_TOKEN"], ["zramctl", "--reset", "/dev/zram0"],
+                     ["rocm-smi", "--rese"], ["pacman", "-Qy"]):
+            self.assertFalse(self.ro(*argv), argv)
+
+    def test_everyday_reads_still_run_without_asking(self):
+        for command in ("systemctl status sshd", "systemctl -n 50 status x --no-pager", "systemctl --failed",
+                        "systemctl show -p ActiveState x", "hyprctl -j clients", "docker ps", "git -C ~/x log --oneline -5",
+                        "git log -p", "git ls-remote origin", "journalctl -b -p err -n 100 --no-pager", "dmesg -T",
+                        "sort -rh", "date +%F", "date -d tomorrow +%A", "file -i x", "nmcli", "nmcli device status",
+                        "nmcli dev wifi list", "nmcli -t -f NAME,TYPE con show", "nmcli c show --active", "ip a",
+                        "ip -br addr", "ip route get 1.1.1.1", "ip n", "awk -F: {print}", "vulkaninfo --summary",
+                        "fastfetch", "zramctl", "rocm-smi --showtemp", "ss -tulpn", "sensors -j", "lshw -class display",
+                        "printenv HOME", "pacman -Qdtq", "paru -Qua", "pacman -Ss steam"):
+            self.assertTrue(all(a._is_read_only(stage) for stage in a._parse_pipeline(command)), command)
+
+    def test_writes_cannot_name_a_destination_the_check_does_not_see(self):
+        src = write("Documents/a.txt", "x")
+        self.assertFalse(a._is_safe_home_write(["cp", src, f"--target-directory={HOME}/Documents"]))
+        self.assertFalse(a._is_safe_home_write(["mv", src, "-t", f"{HOME}/Documents"]))
+        self.assertTrue(a._is_safe_home_write(["cp", "-n", src, f"{HOME}/Documents/b.txt"]))
+
+    def test_hidden_folders_anywhere_are_protected(self):
+        self.assertTrue(a._is_protected(a._resolve(f"{HOME}/project/.git/config")))
+        self.assertFalse(a._is_protected(a._resolve(f"{HOME}/project/notes.txt")))
+        with mock.patch.object(a, "_confirm", return_value=False) as confirm:
+            self.assertIn("Not written", a.tool_write_file(json.dumps({"path": f"{HOME}/project/.git/config", "content": "x"})))
+            self.assertFalse(confirm.call_args.kwargs["auto_ok"])  # /allow does not cover it
+
+    def test_sudo_inside_a_wrapper_is_never_auto_approved(self):
+        for command in ('sh -c "sudo rm -rf /tmp/x"', "xargs sudo rm", "env /usr/bin/sudo id", "nice -n 5 doas id"):
+            with mock.patch.object(a, "_confirm", return_value=False) as confirm:
+                a.tool_run_command(command)
+                self.assertFalse(confirm.call_args.kwargs["auto_ok"], command)
+
+    def test_secrets_of_other_programs_and_browsers_ask(self):
+        for argv in (["cat", "/proc/self/environ"], ["cat", "/proc/1/environ"], ["cat", f"{HOME}/.bash_history"],
+                     ["ls", f"{HOME}/.mozilla"], ["cat", f"{HOME}/.docker/config.json"]):
+            self.assertTrue(a._touches_blocked_path(argv), argv)
+
+    def test_control_characters_are_shown_not_obeyed(self):
+        self.assertEqual(a._visible("ls\r\x1b[2Krm -rf ~"), "ls\\r\\x1b[2Krm -rf ~")
+
+
 class SensitivePaths(unittest.TestCase):
     def setUp(self):
         self.key = write(".ssh/id_rsa", "FAKE-KEY\n")
