@@ -116,3 +116,5 @@ python-recurring-ical-events
 docker
 freerdp
 winboat
+lm_sensors
+bluetui

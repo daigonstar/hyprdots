@@ -55,6 +55,18 @@ jobs:
         working-directory: .config/hypr/settings
         run: python -m unittest discover -s tests -v
 
+  installer:
+    name: Installer dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:latest   # a clean machine: no paru, multilib off, nothing installed
+    steps:
+      - run: pacman -Syu --noconfirm --needed git   # before checkout, so it is a real clone (the installer uses git ls-files)
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: ./hyprinstall.sh --dry-run
+        run: HYPR_ASSISTANT=none ./hyprinstall.sh --dry-run </dev/null
+
   packages:
     name: Install lists still exist
     runs-on: ubuntu-latest

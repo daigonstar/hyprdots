@@ -9,9 +9,9 @@ set -euo pipefail
 #   hide_apps.sh [--file PATH] [--dry-run] [--undo]
 #
 # Defaults:
-#   --file defaults to $HOME/hyprdots/install/hide.txt
+#   --file defaults to hide.txt next to this script
 
-APPS_FILE="$HOME/hyprdots/install/hide.txt"
+APPS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hide.txt"
 DRY_RUN=false
 UNDO=false
 
@@ -88,7 +88,9 @@ process_app() {
     if grep -q '^NoDisplay=true' "$user_desktop"; then
       log "Already hidden: $app"
     else
-      echo "NoDisplay=true" >> "$user_desktop"
+      # Inside the [Desktop Entry] group: appended at the end it would land in the last [Desktop Action] group
+      # (a browser's "New Window") and the app would stay visible
+      sed -i -e '/^NoDisplay=/d' -e '/^\[Desktop Entry\]/a NoDisplay=true' "$user_desktop"
       log "Hid: $app"
     fi
   fi

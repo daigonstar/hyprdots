@@ -244,11 +244,11 @@ apply_symlinks() {
   fi
 
   # Make key scripts executable (best-effort)
-  SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/scripts/first-colours.sh hypr/scripts/exo-terminal.sh hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.sh rofi/powermenu/powermenu.py rofi/launchers/launcher.sh rofi/wallpaper/wallpaper.sh)
-  for s in "${SCRIPT_FILES[@]}"; do
-    sp="$DOTFILES_DIR/$s"
-    [[ -f "$sp" ]] && chmod +x "$sp" && echo "Chmod +x $sp"
-  done
+  # Every tracked script with a #! line (a hand-kept list here fell behind the installer's)
+  local f
+  while read -r f; do
+    [[ -f "$REPO_DIR/$f" ]] && head -c2 "$REPO_DIR/$f" | grep -q '#!' && chmod +x "$REPO_DIR/$f"
+  done < <(git -C "$REPO_DIR" ls-files .config bash install)
 
   # Keep Thunar's "Open Terminal Here" working (stand-in helper in ~/.local/bin, keeps your chosen terminal)
   [[ -x "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" ]] && "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" || true

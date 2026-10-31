@@ -11,6 +11,7 @@
 # Logging: ~/.local/share/hyprinstall/hyprinstall.log
 
 set -euo pipefail
+USER="${USER:-$(id -un)}"  # unset in some containers and minimal shells
 
 # Configuration defaults
 
@@ -37,9 +38,7 @@ done
 # Logging helpers
 
 init_logging() {
-  if [[ "$DRY_RUN" == "true" ]]; then
-    mkdir -p "$(dirname "$DEFAULT_LOG")"
-  fi
+  mkdir -p "$(dirname "$DEFAULT_LOG")" 2>/dev/null || true
   if touch "$DEFAULT_LOG" >/dev/null 2>&1; then
     LOGFILE="$DEFAULT_LOG"
   else
@@ -171,13 +170,11 @@ trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/nu
 # Script start
 
 init_logging
-preflight_checks
-log "INFO" "Starting hyprinstall-final. Log: $LOGFILE"
 
 # Branch selection for repo operations (supports UPDATE_BRANCH env var or .update-branch file)
 BRANCH="${UPDATE_BRANCH:-}"
 if [[ -f "$BASE_DIR/.update-branch" ]]; then
-  BRANCH="$(<$BASE_DIR/.update-branch)"
+  BRANCH="$(<"$BASE_DIR/.update-branch")"
 fi
 if [[ -z "$BRANCH" && "$DRY_RUN" == "false" && -t 0 ]]; then
   echo "Select branch to use for repo operations:"
@@ -192,15 +189,24 @@ if [[ -z "$BRANCH" && "$DRY_RUN" == "false" && -t 0 ]]; then
   esac
 fi
 BRANCH="${BRANCH:-main}"
-log "INFO" "Using branch: $BRANCH"
 
-# If repo exists and is a git repo, attempt to check it out and update to the selected branch
-if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-  run_cmd "git -C \"$REPO_DIR\" fetch --prune origin"
-  # Best-effort checkout and pull; do not abort installer if these fail
+# Update the repo first. A pull can change this very script, so when it does, start again from the new copy rather
+# than carry on with the old one against new files.
+if [[ -z "${HYPRINSTALL_RESTARTED:-}" ]] && git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  before="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || true)"
+  # Best-effort fetch, checkout and pull; do not abort the installer if these fail
+  run_cmd "git -C \"$REPO_DIR\" fetch --prune origin" || true
   run_cmd "git -C \"$REPO_DIR\" checkout \"$BRANCH\"" || true
   run_cmd "git -C \"$REPO_DIR\" pull --ff-only origin \"$BRANCH\"" || true
+  if [[ "$DRY_RUN" == "false" && "$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || true)" != "$before" ]]; then
+    log "INFO" "The repo was updated; restarting the installer from the new copy"
+    UPDATE_BRANCH="$BRANCH" HYPRINSTALL_RESTARTED=1 exec bash "$BASE_DIR/hyprinstall.sh" "$@"
+  fi
 fi
+
+preflight_checks
+log "INFO" "Starting hyprinstall. Log: $LOGFILE"
+log "INFO" "Using branch: $BRANCH"
 
 # Steam and the 32-bit GPU libraries live in the [multilib] repo, which is
 # disabled on a fresh Arch install. Enable it before the first database sync.
@@ -249,11 +255,10 @@ fi
 run_cmd "sudo pacman -S --needed --noconfirm git base-devel"
 local tmpdir
 tmpdir="$(mktemp -d)"
-run_cmd "git clone https://aur.archlinux.org/paru.git \"$tmpdir/paru\""
-pushd "$tmpdir/paru" >/dev/null
-run_cmd "makepkg -si --noconfirm"
-popd >/dev/null
+run_cmd "git clone https://aur.archlinux.org/paru.git \"$tmpdir/paru\"" || die "Could not download paru. See $LOGFILE for details."
+run_cmd "cd \"$tmpdir/paru\" && makepkg -si --noconfirm" || die "Could not build paru. See $LOGFILE for details."
 rm -rf "$tmpdir"
+[[ "$DRY_RUN" == "true" ]] && return
 log "OK" "paru installed"
 }
 install_paru
@@ -270,7 +275,8 @@ log "INFO" "Installing official package: $pkg"
 run_cmd "sudo pacman -S --needed --noconfirm \"$pkg\"" ||
   die "Failed to install official package: $pkg. See $LOGFILE for details."
 else
-if command -v paru >/dev/null 2>&1; then
+if [[ "$DRY_RUN" == "true" ]] || command -v paru >/dev/null 2>&1; then
+# (a dry run has not really installed paru or enabled multilib, so it reports these instead of stopping)
 log "INFO" "Installing AUR package: $pkg"
 run_cmd "paru -S --needed --noconfirm \"$pkg\"" ||
   die "Failed to install AUR package: $pkg. See $LOGFILE for details."
@@ -349,7 +355,7 @@ run_cmd "flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/
   die "Failed to configure the Flathub remote. See $LOGFILE for details."
 
 for f in "${FLATPAK_PKGS[@]:-}"; do
-if flatpak list --app | grep -qw "$f"; then
+if flatpak list --app 2>/dev/null | grep -qw "$f"; then
 log "OK" "Flatpak $f already installed"
 else
 run_cmd "flatpak install -y --noninteractive --or-update flathub \"$f\"" ||
@@ -360,7 +366,19 @@ done
 # Services needed by the installed apps. (ollama is enabled by the assistant setup below,
 # only if you choose the assistant.)
 
-for svc in NetworkManager bluetooth coolercontrold docker; do
+# NetworkManager is skipped when another network manager is already in charge: two of them fight over the
+# connection and the network can drop mid-install.
+other_net=""
+for svc in systemd-networkd connman dhcpcd netctl wicd; do
+  if systemctl is-enabled --quiet "$svc.service" 2>/dev/null; then other_net="$svc"; break; fi
+done
+SERVICES=(bluetooth coolercontrold docker)
+if [[ -n "$other_net" ]] && ! systemctl is-enabled --quiet NetworkManager.service 2>/dev/null; then
+  log "WARN" "$other_net manages your network, so NetworkManager was not enabled (the bar's network menu needs it)"
+else
+  SERVICES=(NetworkManager "${SERVICES[@]}")
+fi
+for svc in "${SERVICES[@]}"; do
   run_cmd "sudo systemctl enable --now $svc.service" || log "WARN" "Could not enable $svc.service"
 done
 
@@ -442,11 +460,11 @@ run_cmd "bash \"$DOTFILES_DIR/hypr/scripts/first-colours.sh\""
 
 # Make scripts executable
 
-SCRIPT_FILES=(hypr/scripts/ai.sh hypr/scripts/browser.sh hypr/scripts/gamemode.sh hypr/scripts/game-autoworkspace.py hypr/scripts/ollama.sh hypr/scripts/stop_ollama.sh hypr/scripts/restart.sh hypr/scripts/pywall.sh hypr/scripts/rainbowb.sh hypr/scripts/refresh.sh hypr/scripts/wallust.sh hypr/scripts/first-colours.sh hypr/assistant/hypr_agent.py hypr/assistant/agent_monitor.py hypr/assistant/setup.sh hypr/scripts/settings.sh hypr/scripts/lock.sh hypr/scripts/exo-terminal.sh hypr/launcher/launcher.sh hypr/launcher/launcher.py hypr/scripts/xfce4-mime-helper rofi/powermenu/powermenu.py waybar/scripts/updates.sh waybar/scripts/popup_calendar.py rofi/powermenu/powermenu.sh rofi/launchers/launcher.sh rofi/launchers/categorized/launcher.sh rofi/launchers/categorized/category-mode.sh rofi/launchers/categorized/applist.sh hypr/cheatsheet/cheatsheet.sh hypr/cheatsheet/cheatsheet.py rofi/wallpaper/wallpaper.sh)
-for s in "${SCRIPT_FILES[@]}"; do
-sp="$DOTFILES_DIR/$s"
-[[ -f "$sp" ]] && run_cmd "chmod +x \"$sp\""
-done
+mapfile -t SCRIPT_FILES < <(git -C "$REPO_DIR" ls-files .config bash install 2>/dev/null |
+  while read -r f; do [[ -f "$REPO_DIR/$f" ]] && head -c2 "$REPO_DIR/$f" | grep -q '#!' && echo "$REPO_DIR/$f"; done)
+if [[ ${#SCRIPT_FILES[@]} -gt 0 ]]; then
+  run_cmd "chmod +x $(printf '"%s" ' "${SCRIPT_FILES[@]}")"
+fi
 
 # Thunar's "Open Terminal Here" needs a stand-in for xfce4-mime-helper (installed into ~/.local/bin)
 # and to know which terminal to open; hypr-settings re-runs this when the terminal is changed
@@ -506,7 +524,7 @@ fi
 # Cursor icons + Flatpak overrides
 
 if [[ -d "$REPO_DIR/icons/Future-cursors" ]]; then
-run_cmd "sudo cp -r \"$REPO_DIR/icons/Future-cursors\" /usr/share/icons/Future-cursors"
+run_cmd "sudo mkdir -p /usr/share/icons/Future-cursors && sudo cp -rT \"$REPO_DIR/icons/Future-cursors\" /usr/share/icons/Future-cursors"
 run_cmd "flatpak --user override --filesystem=/home/\"$USER\"/.icons/:ro"
 run_cmd "flatpak --user override --filesystem=/usr/share/icons/:ro"
 fi
@@ -514,22 +532,25 @@ fi
 # Bashrc update
 
 BASHRC_MARKER="# --- hyprinstall additions BEGIN ---"
-if ! grep -Fq "$BASHRC_MARKER" "$HOME/.bashrc" 2>/dev/null; then
-cat >> "$HOME/.bashrc" <<EOF
+if grep -Fq "$BASHRC_MARKER" "$HOME/.bashrc" 2>/dev/null; then
+log "INFO" "$HOME/.bashrc already contains hyprinstall additions; skipping"
+elif [[ "$DRY_RUN" == "true" ]]; then
+echo "[DRY RUN] Would add the update/hyprupdate aliases, starship and fastfetch to $HOME/.bashrc"
+else
+cat >> "$HOME/.bashrc" <<'BASHRC'
 
 # --- hyprinstall additions BEGIN ---
 
 alias update='paru -Syu && flatpak update'
-alias hyprupdate="$REPO_DIR/update.sh"
+# The repo is wherever ~/.config/hypr links to, so this keeps working if it moves
+alias hyprupdate='"$(readlink -f ~/.config/hypr)/../../update.sh"'
 eval "$(starship init bash)"
 command fastfetch
 
 # --- hyprinstall additions END ---
 
-EOF
+BASHRC
 log "OK" "Appended hyprinstall additions to ~/.bashrc"
-else
-log "INFO" "$HOME/.bashrc already contains hyprinstall additions; skipping"
 fi
 
 # SDDM: the login screen runs on Wayland inside Weston, on your main screen only
@@ -590,35 +611,9 @@ log "OK" "Login screen set up on Wayland${MAIN_MONITOR:+ ($MAIN_MONITOR only)}, 
 # Hide unwanted apps from launcher
 
 echo "🔧 Hiding unwanted apps from launcher..."
-APPS_FILE="$REPO_DIR/install/hide.txt"
-
-if [[ ! -f "$APPS_FILE" ]]; then
-    echo "❌ App list file not found: $APPS_FILE. Skipping app hiding."
-else
-  while IFS= read -r app; do
-      [[ -z "$app" || "$app" =~ ^# ]] && continue
-      desktop_file="/usr/share/applications/$app.desktop"
-      user_desktop_file="$HOME/.local/share/applications/$app.desktop"
-
-      echo "Processing app '$app' for hiding..."
-      if [[ -f "$desktop_file" ]]; then
-          run_cmd "mkdir -p \"$HOME/.local/share/applications\""
-          run_cmd "cp \"$desktop_file\" \"$user_desktop_file\""
-          if grep -q '^NoDisplay=true' "$user_desktop_file"; then
-              echo "✅ App '$app' is already hidden."
-          else
-              echo "Hiding '$app.desktop'"
-              run_cmd "echo \"NoDisplay=true\" >> \"$user_desktop_file\""
-          fi
-      else
-          echo "Could not find desktop file: '$desktop_file', skipping hiding for '$app'."
-      fi
-  done < "$APPS_FILE"
-fi
-
-#Git Setup
-
-
+HIDE_ARGS=(--file "$BASE_DIR/install/hide.txt")
+[[ "$DRY_RUN" == "true" ]] && HIDE_ARGS+=(--dry-run)
+bash "$BASE_DIR/install/hide.sh" "${HIDE_ARGS[@]}" | tee -a "$LOGFILE" || log "WARN" "Hiding apps failed (run install/hide.sh later)"
 
 # SDDM Configuration
 
@@ -626,14 +621,14 @@ echo "enabling SDDM"
 run_cmd "sudo systemctl enable sddm.service"
 
 echo "🎨 Installing SDDM theme..."
-run_cmd "sudo cp -R $REPO_DIR/SDDM/sugar-dark /usr/share/sddm/themes"
+run_cmd "sudo mkdir -p /usr/share/sddm/themes/sugar-dark && sudo cp -rT \"$REPO_DIR/SDDM/sugar-dark\" /usr/share/sddm/themes/sugar-dark"
 run_cmd "sudo mkdir -p /etc/sddm.conf.d" # Ensure directory exists
-run_cmd "sudo cp $REPO_DIR/SDDM/sddm.conf /etc/sddm.conf.d/sddm.conf"
+run_cmd "sudo cp \"$REPO_DIR/SDDM/sddm.conf\" /etc/sddm.conf.d/sddm.conf"
 
 # Plymouth Configuration
 
-run_cmd "sudo git clone https://github.com/krishnan793/PlymouthTheme-Cat.git /usr/share/plymouth/themes/PlymouthTheme-Cat"
-run_cmd "sudo plymouth-set-default-theme PlymouthTheme-Cat -R"
+# The theme, the plymouth hook and "quiet splash" on the kernel command line (see install/plymouth.sh)
+run_cmd "sudo bash \"$BASE_DIR/install/plymouth.sh\"" || log "WARN" "Boot splash setup failed; run sudo $BASE_DIR/install/plymouth.sh later"
 
 log "INFO" "DaigonStar Hyprdots setup completed."
 echo "DaigonStar Hyprdots setup completed."
