@@ -215,6 +215,12 @@ class Store:
                 idle.restart(path)
             except OSError as e:
                 self.warnings.append(f"Saved, but the idle settings could not be applied: {e}")
+        if any(sid.startswith("lockscreen.") for sid in self.staged):
+            from . import lockscreen  # hyprlock.local.conf is built from these settings
+            try:
+                lockscreen.write(lockscreen.local_path(self.dir), lockscreen.render(self.lock_options()))
+            except OSError as e:
+                self.warnings.append(f"Saved, but the lock screen could not be updated: {e}")
         if any(sid.startswith("cloud.") for sid in self.staged):
             from . import cloud  # mount flags come from these settings; drives use them from their next restart
             try:
@@ -227,6 +233,10 @@ class Store:
         effects = sorted(effects)
         self.staged = {}
         return effects
+
+    def lock_options(self) -> dict:
+        """The lock screen settings as they stand, including unsaved changes (the Preview button uses this)."""
+        return {s.key: self.get(s)[0] for s in SETTINGS if s.section == "lockscreen"}
 
     def write_overrides(self) -> None:
         config, apps = [], {}

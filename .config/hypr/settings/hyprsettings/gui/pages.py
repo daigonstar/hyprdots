@@ -39,7 +39,46 @@ def basic_page(win, page: str) -> Gtk.Widget:
     if page == "Hyprdots":
         startup_group(win, column)
         files_group(win, column)
+    if page == "Power & lock":
+        lock_preview_button(win, column)
     return scroller
+
+
+# ---- Power & lock ----------------------------------------------------------------------------------------------------
+PREVIEW_SECONDS = 10
+
+
+def lock_preview_button(win, column: Gtk.Box) -> None:
+    """A Preview button on the Lock screen section: shows the lock screen with the choices as they stand (saved or
+    not), with a grace period so moving the mouse brings you straight back."""
+    group = next((g for g in _children(column) if isinstance(g, Adw.PreferencesGroup) and g.get_title() == "Lock screen"), None)
+    if group is None:
+        return
+    button = Gtk.Button(label="Preview", valign=Gtk.Align.CENTER, css_classes=["pill"],
+                        tooltip_text="Show the lock screen with these choices, including ones you have not saved yet")
+
+    def preview():
+        import os
+        from pathlib import Path
+        from .. import lockscreen
+        if subprocess.run(["pidof", "hyprlock"], capture_output=True).returncode == 0:
+            return win.toast("The screen is already locked.")
+        path = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "hyprlock-preview.conf"
+        lockscreen.write(path, lockscreen.render(win.store.lock_options()))
+        subprocess.Popen(["hyprlock", "-c", str(path), "--grace", str(PREVIEW_SECONDS)], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    button.connect("clicked", lambda _b: ui.confirm(
+        win, "Preview the lock screen?",
+        f"Your screen locks for real. Move the mouse or press a key within {PREVIEW_SECONDS} seconds to come straight back; "
+        "after that, unlock with your password as usual.", "Preview", preview))
+    group.set_header_suffix(button)
+
+
+def _children(box: Gtk.Widget):
+    child = box.get_first_child()
+    while child:
+        yield child
+        child = child.get_next_sibling()
 
 
 # ---- Assistant ------------------------------------------------------------------------------------------------

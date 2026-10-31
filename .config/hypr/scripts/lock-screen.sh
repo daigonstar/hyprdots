@@ -39,7 +39,17 @@ fi
 
 pidof hyprlock >/dev/null && exit 0   # already locked
 keep=${1:-all}
+
+# Your look from the Power & lock page when you have saved one; the shipped hyprlock.conf otherwise
+args=()
+conf="$HOME/.config/hypr/hyprlock.local.conf"
+if [[ -f $conf ]]; then
+    args=(-c "$conf")
+    grace=$(sed -n 's/^# grace=\([0-9]\+\)$/\1/p' "$conf" | head -n1)
+    [[ ${grace:-0} -gt 0 ]] && args+=(--grace "$grace")
+fi
+
 mapfile -t others < <(screens_except "$keep")
 for m in "${others[@]}"; do dpms off "$m"; done
-hyprlock
+hyprlock "${args[@]}"
 for m in "${others[@]}"; do dpms on "$m"; done

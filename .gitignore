@@ -19,3 +19,4 @@ __pycache__/
 .config/hypr/assistant/private_modes/
 *.pre-modes
 /.config/hypr/hypridle.local.conf
+/.config/hypr/hyprlock.local.conf

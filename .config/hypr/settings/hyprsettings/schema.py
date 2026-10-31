@@ -82,6 +82,13 @@ KB_OPTIONS = _c(("", "None"), ("caps:escape", "Caps Lock is another Escape"), ("
                 ("caps:none", "Caps Lock does nothing"))
 ACCEL = _c(("", "Device default"), ("adaptive", "Adaptive (speeds up with faster moves)"), ("flat", "Flat (same speed always, good for games)"))
 POWER_EFFECT = "as soon as you save"
+LOCK_EFFECT = "the next time the screen locks"
+LOCK_BACKGROUNDS = _c(("wallpaper", "Your wallpaper"), ("wallpaper_blur", "Your wallpaper, blurred"),
+                      ("screenshot_blur", "What was on screen, blurred"))
+CLOCK_FORMATS = _c(("24h", "24-hour (21:30)"), ("12h", "12-hour (9:30 PM)"))
+CLOCK_WEIGHTS = _c((100, "Thin"), (200, "Extra light"), (300, "Light"), (400, "Regular"), (600, "Bold"))
+CLOCK_POSITIONS = _c(("centre", "Centre"), ("top", "Higher up"))
+PASSWORD_STYLES = _c(("underline", "A line at the bottom"), ("box", "A box under the clock"))
 LOCK_SCREENS = _c(("all", "Keep every screen on"), ("focused", "Only the screen you were using"))
 CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the server"))
 CLOUD_EFFECT = "when the cloud drives restart"
@@ -270,6 +277,43 @@ SETTINGS: list[Setting] = [
                 "Picking a screen by name always keeps that one, and the clock and password line show there."),
     Setting(POWER, "power", "lock_before_sleep", "Lock before going to sleep", "bool", True,
             "So the PC wakes up at the lock screen.", effect=POWER_EFFECT, group="When you step away"),
+    # ---- Lock screen look (written to hyprlock.local.conf, see lockscreen.py) --------------------------------
+    Setting(POWER, "lockscreen", "background", "Background", "choice", 'wallpaper',
+            'What the lock screen shows behind the clock.', choices=LOCK_BACKGROUNDS,
+            effect=LOCK_EFFECT, group="Lock screen",
+            tip='Your wallpaper follows whatever you pick with the wallpaper picker (Super+W). What was on screen shows your open windows blurred, so nothing on them can be read.'),
+    Setting(POWER, "lockscreen", "darken", "Darken the background", "int", 35,
+            'Makes the clock easier to read on a bright wallpaper. 0 leaves it as it is.', lo=0, hi=90, step=5, unit="%",
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "clock_format", "Clock", "choice", '24h',
+            'How the time is shown.', choices=CLOCK_FORMATS,
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "clock_weight", "Clock thickness", "choice", 200,
+            'Thin and light look sleek; bold is easiest to read from across the room.', choices=CLOCK_WEIGHTS,
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "clock_size", "Clock size", "int", 140,
+            'Size of the time.', lo=60, hi=240, step=10, unit="pt",
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "clock_position", "Clock position", "choice", 'centre',
+            'Where the clock and date sit.', choices=CLOCK_POSITIONS,
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "show_date", "Show the date", "bool", True,
+            'The day and date under the clock.',
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "show_user", "Show your username", "bool", False,
+            'Your user name near the password.',
+            effect=LOCK_EFFECT, group="Lock screen"),
+    Setting(POWER, "lockscreen", "password", "Password", "choice", 'underline',
+            'Where you type your password.', choices=PASSWORD_STYLES,
+            effect=LOCK_EFFECT, group="Lock screen",
+            tip='A line at the bottom only shows dots as you type, on a thin line. A box under the clock shows a rounded box with a Password hint that turns green or red when you press Enter.'),
+    Setting(POWER, "lockscreen", "grace", "Unlock without a password for", "int", 0,
+            'Seconds after locking during which moving the mouse or pressing a key unlocks again. 0 always asks.', lo=0, hi=30, unit="s",
+            effect=LOCK_EFFECT, group="Lock screen",
+            tip='Handy if you lock by accident or the idle lock catches you reading. Leave it at 0 if others use the room.'),
+    Setting(POWER, "lockscreen", "fade", "Fade in and out", "bool", True,
+            'A short fade when the lock screen appears and goes.',
+            effect=LOCK_EFFECT, group="Lock screen"),
     # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------
     Setting(CLOUD, "cloud", "cache_mode", "File cache", "choice", "full",
             "Keep a local copy of what you open (faster), or stream every file from the server (nothing kept on this PC).",

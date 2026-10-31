@@ -88,7 +88,7 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays): drag screens on the map and they snap into place; changes apply at once and undo themselves if you do not confirm |
 | Workspaces | Which screen each of the ten workspaces opens on, which one each screen starts on, names, always-shown workspaces and an app to open in an empty one, with quick layouts (alternate, split, all on one screen) |
 | Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
-| Power & lock | When the screen locks, when the screens switch off and when the PC goes to sleep, and whether it locks before sleeping |
+| Power & lock | When the screen locks, when the screens switch off and when the PC goes to sleep, which screens stay on while locked, and the lock screen's look: wallpaper or blurred background, darkening, clock style, size and position, date, username, password line or box, a grace period, with a Preview button |
 | Hyprland | Gaps, borders, rounding, blur, dimming and animations; keyboard layout, key repeat and Caps Lock options; mouse acceleration, left-handed buttons and scroll speed; touchpad tapping and clicking; hiding the pointer; and how focus, workspaces and waking the screens behave |
 | Keybinds | Change the key combo for any action: click it and press the new combo |
 | File types | Which app opens links, pictures, video, PDFs, archives and other kinds of file |
