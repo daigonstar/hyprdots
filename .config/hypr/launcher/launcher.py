@@ -410,9 +410,18 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
 
 def run(r, opts) -> None:
     """Does what the chosen result is for, detached from the launcher."""
+    # launcher.sh preloads gtk4-layer-shell for this window only; apps must not inherit it (Electron apps such as
+    # Vesktop crash on start with it loaded)
+    env = dict(os.environ)
+    preload = ":".join(p for p in env.get("LD_PRELOAD", "").split(":") if p and "gtk4-layer-shell" not in p)
+    if preload:
+        env["LD_PRELOAD"] = preload
+    else:
+        env.pop("LD_PRELOAD", None)
+
     def spawn(cmd):
         subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         stdin=subprocess.DEVNULL)
+                         stdin=subprocess.DEVNULL, env=env)
     if r.kind == "app":
         search.record_use(r.app_id)
         spawn(["gtk-launch", r.app_id])
