@@ -21,7 +21,7 @@ NOT_MODULES = {"layer", "position", "height", "width", "spacing", "margin", "mar
                "ipc", "include", "start_hidden", "modifier-reset", "reload_style_on_change", "id", *ZONES}
 
 # Old definitions nothing uses (see AUDIT.md); kept in the config but not offered
-UNUSED = {"custom/notification", "custom/endpoint", "custom/separator"}
+UNUSED: set[str] = set()  # modules defined in the config but kept off the Bar layout page
 # Friendly names and icons for the editor (anything else shows its own name)
 KNOWN = {
     "clock": ("Clock", "\U000f0954"), "custom/assistant": ("Assistant", "\U000f0674"), "hyprland/window": ("Window title", "\U000f05b5"),

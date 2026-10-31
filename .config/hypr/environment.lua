@@ -1,6 +1,7 @@
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
-hl.env("WLR_DRM_DEVICES", "/dev/dri/card0")
+-- To pick the GPU Hyprland draws with (laptops with two), set AQ_DRM_DEVICES, e.g. "/dev/dri/card1".
+-- The old WLR_DRM_DEVICES name is ignored by Hyprland 0.42 and later.
 hl.env("SDL_VIDEO_FULLSCREEN_HEAD", "0")
 hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("GDK_BACKEND", "wayland")

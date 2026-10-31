@@ -4,13 +4,9 @@
 /* This is where you can change fonts and sizes */
 
 
-/*****-- Fonts Size and Font Size -----*****/
+/* The font comes from the settings Theme page: it is written into colors.rasi, which every rofi theme imports.
+   To set one by hand anyway, uncomment this (the font has to be installed):
 configuration {
-  font: "JetBrainsMono Nerd Font SemiBold 15";
+  font: "CaskaydiaCove Nerd Font 13";
 }
-
-
-/*****-- Elements Font Size -----*****/
-element-text {
-  font: "JetBrainsMono Nerd Font SemiBold 13";
-}
+*/

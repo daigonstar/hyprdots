@@ -57,7 +57,7 @@ local binds = {
     { id = "special_move", label = "Send window to scratch workspace", keys = "SUPER + SHIFT + S", action = hl.dsp.window.move({ workspace = "special:magic" }) },
     { id = "workspace_next", label = "Next workspace (scroll down)", keys = "SUPER + mouse_down", action = hl.dsp.focus({ workspace = "e+1" }) },
     { id = "workspace_prev", label = "Previous workspace (scroll up)", keys = "SUPER + mouse_up", action = hl.dsp.focus({ workspace = "e-1" }) },
-    { id = "monitor_dp1", label = "Focus monitor DP-1", keys = "SUPER + F12", action = hl.dsp.focus({ monitor = "DP-1" }) },
+    { id = "monitor_dp1", label = "Focus the next screen", keys = "SUPER + F12", action = hl.dsp.focus({ monitor = "+1" }) },
 
     -- group: Session and system
     { id = "reload", label = "Reload Hyprland", keys = "SUPER + SHIFT + R", action = hl.dsp.exec_cmd("hyprctl reload") },

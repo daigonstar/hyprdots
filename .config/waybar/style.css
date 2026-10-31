@@ -5,11 +5,6 @@
 * {
     color: @theme_text;
 }
-.expand {
-    margin-left: 2px;
-    margin-right: 2px;
-    color: @theme_text;
-}
 /* The panels behind the modules (window#waybar, .modules-left/-center/-right) come from the Bar style in theme.css */
 #workspaces {
     padding: 0px 5px;
@@ -71,9 +66,6 @@
 #bluetooth {
     padding: 0px 6px;
     color: @theme_text;
-}
-#bluetooth-connected {
-    color: #5254e9;
 }
 
 #custom-power {

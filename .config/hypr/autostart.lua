@@ -38,9 +38,8 @@ hl.on("hyprland.start", function()
         -- Wine/Proton/gamescope wrappers (no shared window class exists
         -- across launchers) and routes them to workspace 3, fullscreen.
         "python3 " .. os.getenv("HOME") .. "/.config/hypr/scripts/game-autoworkspace.py",
-        -- `hyprctl dispatch workspace 1`/`focusmonitor DP-1` are legacy
-        -- dispatcher names and no longer work under the Lua config parser.
-        "sleep 2 && hyprctl dispatch 'hl.dsp.focus({ workspace = 1 })' && hyprctl dispatch 'hl.dsp.focus({ monitor = \"DP-1\" })'",
+        -- Start on workspace 1, on whichever screen it lives (Workspaces page)
+        "sleep 2 && hyprctl dispatch 'hl.dsp.focus({ workspace = 1 })'",
         "thunar --daemon",
     }
 
@@ -48,9 +47,10 @@ hl.on("hyprland.start", function()
         hl.exec_cmd(command)
     end
 
+    -- After the bar's tray is up, or tray apps like Vesktop start without a tray icon
     for _, app in ipairs(optional_apps) do
         if not disabled[app.id] then
-            hl.exec_cmd(app.cmd)
+            hl.exec_cmd("~/.config/hypr/scripts/after-tray.sh " .. app.cmd)
         end
     end
 end)

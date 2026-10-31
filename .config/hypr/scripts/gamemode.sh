@@ -1,7 +1,7 @@
 #!/bin/bash
 # Game Mode. Turning off all animations
 
-notif="$HOME/.config/swaync/images/ja.png"
+notif="$HOME/.config/rofi/images/ja.png"
 SCRIPTSDIR="$HOME/.config/hypr/scripts"
 
 
@@ -43,4 +43,3 @@ else
     notify-send -e -u normal -i "$notif" " Gamemode:" " disabled"
     exit
 fi
-hyprctl reload

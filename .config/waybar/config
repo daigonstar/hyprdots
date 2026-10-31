@@ -200,12 +200,6 @@
     // Custom Modules
 
 
-        "custom/notification": {
-            "tooltip": false,
-            "format": "󰎟",
-            "on-click": "swaync-client -t -sw",
-            "escape": true
-        },
         "custom/trayarrow": {
             "format": "󰅁",
             "tooltip": false
@@ -214,23 +208,12 @@
             "format": "󰅂",
             "tooltip": false
         },
-        "custom/endpoint":{
-            "format": "|",
-            "tooltip": false
-        },
-
-        "custom/separator": {
-            "format": "|",
-            "interval": "once",
-            "tooltip": false
-        },
-
         "custom/updates": {
             "exec": "~/.config/waybar/scripts/updates.sh",
             "return-type": "json",
             "interval": 1800,
             "signal": 8,
-            "on-click": "ghostty -e bash -ic 'update; pkill -RTMIN+8 waybar'"
+            "on-click": "ghostty -e bash -c 'paru -Syu && flatpak update; pkill -RTMIN+8 waybar; read -rp \"Done. Press Enter to close.\"'"
         },
 
         "custom/power": {

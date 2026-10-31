@@ -37,17 +37,17 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 
 ## Hyprland, Waybar and rofi
 
-- `autostart.lua` and the Super+F12 keybind hardcode `DP-1`; both do nothing on a laptop with `eDP-1`.
-- `environment.lua` sets `WLR_DRM_DEVICES=/dev/dri/card0`. Hyprland probably ignores it (it uses `AQ_DRM_DEVICES`), and if honoured it pins the wrong GPU on hybrid laptops.
-- `hypridle.conf` uses `hyprctl dispatch dpms on/off`, and `scripts/startup.sh` uses `closewindow`; both are legacy dispatcher forms that may not work under the Lua config. Not tested.
-- `hypridle.conf` and `gamemode.sh` point at `swaync/images/ja.png`, which does not exist (it is at `rofi/images/ja.png`).
-- `hyprpaper.conf` is dead (the setup uses awww) and contains `/home/robb/...` paths.
-- Waybar CSS names the font `ttf-cascadia-code-nerd` (an Arch package name, not a font family) and mixes in `NotoSansMono Nerd Font`, which is not installed. Rofi themes use `JetBrainsMono Nerd Font` and `feather`, also not installed.
-- Dead files: the old rofi power-menu theme (`powermenu/style.rasi`, `shared/colors.rasi`, `shared/fonts.rasi`), `rofi/colors/onedark.rasi`, and unused Waybar modules (`custom/notification`, `custom/endpoint`, `custom/separator`). Several CSS selectors match nothing (`.expand`, `#bluetooth-connected`, `#pulseaudio.format-icons`).
-- `refresh.sh` sends SIGUSR1 to Waybar after killing it, which toggles visibility; `gamemode.sh` ends with an unreachable `hyprctl reload`.
-- Waybar's update click runs `bash -ic update`, which depends on the `.bashrc` alias.
-- `wallust.toml` has orphaned templates and writes kitty and cava configs for programs that are not required.
-- Hardware-specific defaults: UK keyboard layout, an `epic-mouse-v1` device rule, and autostart entries (`openrgb ... Ice.orp`, Solaar, Nextcloud, Bitwarden) that are on by default.
+- ~~`autostart.lua` and the Super+F12 keybind hardcode `DP-1`; both do nothing on a laptop with `eDP-1`.~~ Fixed: login focuses workspace 1 wherever it lives, and Super+F12 focuses the next screen.
+- ~~`environment.lua` sets `WLR_DRM_DEVICES=/dev/dri/card0`. Hyprland probably ignores it (it uses `AQ_DRM_DEVICES`), and if honoured it pins the wrong GPU on hybrid laptops.~~ Removed, with a note on `AQ_DRM_DEVICES`.
+- ~~`hypridle.conf` uses `hyprctl dispatch dpms on/off`, and `scripts/startup.sh` uses `closewindow`; both are legacy dispatcher forms that may not work under the Lua config. Not tested.~~ Fixed: hypridle uses `hl.dsp.dpms`, and `startup.sh` was unused and is removed.
+- ~~`hypridle.conf` and `gamemode.sh` point at `swaync/images/ja.png`, which does not exist (it is at `rofi/images/ja.png`).~~ Fixed.
+- ~~`hyprpaper.conf` is dead (the setup uses awww) and contains `/home/robb/...` paths.~~ Removed.
+- ~~Waybar CSS names the font `ttf-cascadia-code-nerd` (an Arch package name, not a font family) and mixes in `NotoSansMono Nerd Font`, which is not installed. Rofi themes use `JetBrainsMono Nerd Font` and `feather`, also not installed.~~ Fixed: the bar and rofi take the Theme page font; `feather` was only in the removed rofi power-menu theme.
+- ~~Dead files: the old rofi power-menu theme (`powermenu/style.rasi`, `shared/colors.rasi`, `shared/fonts.rasi`), `rofi/colors/onedark.rasi`, and unused Waybar modules (`custom/notification`, `custom/endpoint`, `custom/separator`). Several CSS selectors match nothing (`.expand`, `#bluetooth-connected`, `#pulseaudio.format-icons`).~~ Removed, along with the old adi1090x rofi launcher (`launchers/launcher.sh`, `launchers/style.rasi`). The categorized rofi launcher stays as a fallback.
+- ~~`refresh.sh` sends SIGUSR1 to Waybar after killing it, which toggles visibility; `gamemode.sh` ends with an unreachable `hyprctl reload`.~~ Fixed. Worse than listed: the wallpaper picker runs `refresh.sh` on every change, and it started a plain `waybar` (dropping a saved Bar layout) and random rainbow borders (overriding the Theme page). It now restarts the bar and notifications through their launch scripts.
+- ~~Waybar's update click runs `bash -ic update`, which depends on the `.bashrc` alias.~~ Fixed: it runs `paru -Syu && flatpak update` itself.
+- ~~`wallust.toml` has orphaned templates and writes kitty and cava configs for programs that are not required.~~ Fixed: the kitty target and the pre-Lua Hyprland template are removed; cava is installed by the installer, so it stays.
+- Hardware-specific defaults: UK keyboard layout, an `epic-mouse-v1` device rule, and autostart entries (`openrgb ... Ice.orp`, Solaar, Nextcloud, Bitwarden) that are on by default. **Left as they are:** the layout and each startup app can be changed on the settings Hyprland and Hyprdots pages, a rule for a mouse that is not plugged in does nothing, and the installer reads the layout for the login screen. A first-run page (see the end of this file) is the place to ask.
 - ~~`.gitignore` does not cover `*.orig` and `*.rej`.~~ Fixed.
 
 ## AI assistant

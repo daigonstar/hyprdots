@@ -46,8 +46,6 @@ rofi.target = '~/.config/rofi/colors.rasi'
 waybar.template = 'colors-waybar.css'
 waybar.target = '~/.config/waybar/colors/colors.css'
 
-kitty.template = 'colors-kitty.conf'
-kitty.target = '~/.config/kitty/kitty-themes/01-Wallust.conf'
 
 swaync.template = 'colors-swaync.css'
 swaync.target = '~/.config/swaync/wallust/colors-wallust.css'
