@@ -111,6 +111,8 @@ LAUNCHER_STYLES = _c(("categories", "Categories: groups on the left, apps on the
                      ("spotlight", "Spotlight: a search bar in the middle of the screen"),
                      ("grid", "Grid: every app across the whole screen"), ("compact", "Compact: a small list under the bar"),
                      ("dock", "Dock: a strip of big icons along the bottom"))
+LAUNCHER_SIZES = _c((85, "Small"), (100, "Standard"), (115, "Large"), (130, "Extra large"))
+LAUNCHER_ICONS = _c((80, "Smaller"), (100, "Standard"), (125, "Bigger"), (150, "Biggest"))
 SEARCH_ENGINES = _c(("duckduckgo", "DuckDuckGo"), ("google", "Google"), ("brave", "Brave Search"), ("startpage", "Startpage"))
 SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
@@ -281,6 +283,25 @@ SETTINGS: list[Setting] = [
     Setting(LAUNCHER, "launcher", "style", "Style", "choice", "categories", "How the launcher looks and where it opens.",
             choices=LAUNCHER_STYLES, effect=LAUNCHER_EFFECT, group="Look",
             tip="Every style searches the same way; only the layout changes. Use Try it to see the one you picked."),
+    Setting(LAUNCHER, "launcher", "size", "Size", "choice", 100, "How big the launcher is, text and icons included.",
+            choices=LAUNCHER_SIZES, effect=LAUNCHER_EFFECT, group="Look",
+            tip="Grid always fills the screen, so for Grid this only changes the icons and text."),
+    Setting(LAUNCHER, "launcher", "icon_size", "Icon size", "choice", 100, "The app icons, on top of the size above.",
+            choices=LAUNCHER_ICONS, effect=LAUNCHER_EFFECT, group="Look"),
+    Setting(LAUNCHER, "launcher", "transparency", "Transparency", "int", 0,
+            "How much of your desktop shows through the launcher. 0 is solid.", lo=0, hi=70, step=5, unit="%",
+            effect=LAUNCHER_EFFECT, group="Look",
+            tip="Above about 30% text behind the launcher can make app names harder to read."),
+    Setting(LAUNCHER, "launcher", "dim", "Darken the screen behind", "int", 35,
+            "How much the rest of the screen darkens while the launcher is open. 0 leaves it as it is.", lo=0, hi=85,
+            step=5, unit="%", effect=LAUNCHER_EFFECT, group="Look",
+            tip="Grid covers the whole screen, so it uses Transparency instead."),
+    Setting(LAUNCHER, "launcher", "rounding", "Rounded corners", "int", 22, "0 gives square corners.", lo=0, hi=40,
+            unit="px", effect=LAUNCHER_EFFECT, group="Look"),
+    Setting(LAUNCHER, "launcher", "outline", "Outline in the accent colour", "bool", True,
+            "A thin line around the launcher in the Theme page's accent colour.", effect=LAUNCHER_EFFECT, group="Look"),
+    Setting(LAUNCHER, "launcher", "hints", "Show key hints", "bool", True,
+            "The line at the bottom: Enter opens, arrows move, Esc closes.", effect=LAUNCHER_EFFECT, group="Look"),
     Setting(LAUNCHER, "launcher", "search_engine", "Web search", "choice", "duckduckgo",
             "Where ? searches go. Type ? and then your words, for example ? arch wiki bluetooth.",
             choices=SEARCH_ENGINES, effect=LAUNCHER_EFFECT, group="Searching"),

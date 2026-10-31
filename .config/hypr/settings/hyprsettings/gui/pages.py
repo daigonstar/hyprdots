@@ -55,12 +55,15 @@ def launcher_buttons(win, column: Gtk.Box) -> None:
     look = next((g for g in _children(column) if isinstance(g, Adw.PreferencesGroup) and g.get_title() == "Look"), None)
     if look is not None:
         button = Gtk.Button(label="Try it", valign=Gtk.Align.CENTER, css_classes=["pill"],
-                            tooltip_text="Open the launcher in the style picked above, even before you save. Esc closes it.")
+                            tooltip_text="Open the launcher with the choices below, even before you save. Esc closes it.")
 
         def try_it(_b):
-            from ..schema import BY_ID
-            style = win.store.get(BY_ID["launcher.style"])[0]
-            subprocess.Popen([str(script), "--style", str(style)], start_new_session=True, stdout=subprocess.DEVNULL,
+            from ..schema import for_page
+            args = []
+            for s in for_page("Launcher"):
+                value = win.store.get(s)[0]
+                args += ["--style", str(value)] if s.key == "style" else ["--set", f"{s.key}={value}"]
+            subprocess.Popen([str(script), *args], start_new_session=True, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
         button.connect("clicked", try_it)
         look.set_header_suffix(button)

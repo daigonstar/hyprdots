@@ -31,56 +31,71 @@ STYLES = ("spotlight", "grid", "categories", "compact", "dock")
 ICON_FONT = "CaskaydiaCove Nerd Font"
 
 
+LOOK = {"size": 100, "icon_size": 100, "transparency": 0, "dim": 35, "rounding": 22, "outline": True, "hints": True}
+
+
 def settings() -> dict:
+    """The Launcher page settings. --style NAME and --set key=value (what settings' Try it passes) override them."""
     store = Store()
     get = lambda key, fallback: store.get(BY_ID[key])[0] if key in BY_ID else fallback  # noqa: E731
     out = {"style": get("launcher.style", "categories"), "engine": get("launcher.search_engine", "duckduckgo"),
            "rank": get("launcher.rank_by_use", True), "terminal": get("hyprdots.terminal", "ghostty")}
-    for i, arg in enumerate(sys.argv):
-        if arg == "--style" and i + 1 < len(sys.argv) and sys.argv[i + 1] in STYLES:
-            out["style"] = sys.argv[i + 1]
+    out.update({k: get(f"launcher.{k}", v) for k, v in LOOK.items()})
+    for i, arg in enumerate(sys.argv[:-1]):
+        value = sys.argv[i + 1]
+        if arg == "--style" and value in STYLES:
+            out["style"] = value
+        elif arg == "--set" and "=" in value:
+            key, _, raw = value.partition("=")
+            if key in LOOK:
+                out[key] = raw.lower() in ("1", "true", "yes") if isinstance(LOOK[key], bool) else int(float(raw))
     return out
 
 
-def css(style: str) -> str:
+def css(style: str, opts: dict) -> str:
     store = Store()
     o = design.theme_options(store)
     c = design.resolved(o)
     o = {**design.DEFAULTS, **o}
-    panel = design.alpha_rgba(c["base"], max(int(o["base_opacity"]), 99) / 100)
-    dim = {"categories": 0.45, "compact": 0.12, "dock": 0.25}.get(style, 0.35)
-    shade = design.alpha_rgba(c["base"], 0.93) if style == "grid" else f"rgba(0, 0, 0, {dim})"
+    solid = 1 - min(max(int(opts["transparency"]), 0), 90) / 100
+    panel = design.alpha_rgba(c["base"], solid)
+    shade = design.alpha_rgba(c["base"], min(solid, 0.95)) if style == "grid" else f"rgba(0, 0, 0, {int(opts['dim']) / 100:g})"
+    scale = int(opts["size"]) / 100
+    px = lambda n: f"{max(1, round(n * scale))}px"  # noqa: E731
+    rounding = int(opts["rounding"])
+    inner = lambda n: f"{round(n * rounding / 22)}px"  # noqa: E731  (inner corners follow the outer ones)
+    outline = design.alpha_rgba(c["accent"], 0.35) if opts["outline"] else "transparent"
     return f"""
 window, window.background {{ background: transparent; }}
-* {{ font-family: {design.font_list(o)}; color: {c['base_text']}; }}
+* {{ font-family: {design.font_list(o)}; color: {c['base_text']}; font-size: {px(14)}; }}
 .backdrop {{ background: {shade}; }}
 .panel {{
     background: {panel};
-    border: 1px solid {design.alpha_rgba(c['accent'], 0.35)};
-    border-radius: 22px;
+    border: 1px solid {outline};
+    border-radius: {rounding}px;
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
     padding: 16px;
 }}
 .panel.flat {{ border-radius: 0px; border-width: 0px; box-shadow: none; background: transparent; padding: 32px 90px; }}
 entry.search, text.search {{
-    min-height: 46px; border-radius: 14px; padding: 0 14px; font-size: 17px;
+    min-height: {px(46)}; border-radius: {inner(14)}; padding: 0 14px; font-size: {px(17)};
     background: {design.alpha_rgba(c['base_text'], 0.07)}; border: 1px solid {design.alpha_rgba(c['accent'], 0.30)};
     box-shadow: none; outline: none;
 }}
 entry.search:focus-within {{ border-color: {c['accent']}; }}
-.item {{ border-radius: 12px; padding: 6px 10px; border: 1px solid transparent; background: none; }}
+.item {{ border-radius: {inner(12)}; padding: 6px 10px; border: 1px solid transparent; background: none; }}
 .item.tile {{ padding: 12px 6px; }}
 .item:hover {{ background: {design.alpha_rgba(c['accent'], 0.12)}; }}
 .item.selected {{ background: {design.alpha_rgba(c['accent'], 0.22)}; border-color: {design.alpha_rgba(c['accent'], 0.8)}; }}
 .title {{ font-weight: 600; }}
-.subtitle {{ opacity: 0.6; font-size: 12px; }}
+.subtitle {{ opacity: 0.6; font-size: {px(12)}; }}
 .glyph {{ font-family: "{ICON_FONT}"; color: {c['accent']}; }}
-.section {{ opacity: 0.55; font-size: 12px; font-weight: 700; letter-spacing: 1px; margin: 4px 6px; }}
-.sidebar {{ background: {design.alpha_rgba(c['base_text'], 0.04)}; border-radius: 16px; padding: 8px; }}
-.cat {{ border-radius: 10px; padding: 8px 12px; }}
+.section {{ opacity: 0.55; font-size: {px(12)}; font-weight: 700; letter-spacing: 1px; margin: 4px 6px; }}
+.sidebar {{ background: {design.alpha_rgba(c['base_text'], 0.04)}; border-radius: {inner(16)}; padding: 8px; }}
+.cat {{ border-radius: {inner(10)}; padding: 8px 12px; }}
 .cat.active {{ background: {c['accent']}; }}
 .cat.active label {{ color: {c['base']}; }}
-.hint {{ opacity: 0.45; font-size: 11px; }}
+.hint {{ opacity: 0.45; font-size: {px(11)}; }}
 .empty {{ opacity: 0.5; margin: 30px; }}
 flowbox, flowboxchild, list, row {{ background: none; padding: 0; }}
 """
@@ -153,6 +168,13 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
         "categories": dict(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, width=1100, height=0.72, view="grid", icon=52, tile=128),
         "dock": dict(halign=Gtk.Align.CENTER, valign=Gtk.Align.END, width=0.86, margin_bottom=18, view="row", icon=56, tile=112),
     }[style]
+    scale, icons = int(opts["size"]) / 100, int(opts["icon_size"]) / 100
+    for key in ("width", "tile"):  # fractions of the screen stay as they are
+        if isinstance(layout.get(key), int) and layout[key] > 0:
+            layout[key] = round(layout[key] * scale * (icons if key == "tile" else 1))
+    if isinstance(layout.get("height"), float):
+        layout["height"] = min(0.92, layout["height"] * scale)
+    layout["icon"] = round(layout["icon"] * scale * icons)
 
     panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, css_classes=["panel"] + (["flat"] if layout.get("flat") else []),
                     halign=layout["halign"], valign=layout["valign"], hexpand=True, vexpand=True)
@@ -162,7 +184,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     if style in ("grid", "dock"):
         entry.set_halign(Gtk.Align.CENTER)
         entry.set_hexpand(False)
-        entry.set_size_request(560, -1)
+        entry.set_size_request(round(560 * scale), -1)
         header.set_halign(Gtk.Align.CENTER)
     panel.append(header)
 
@@ -170,7 +192,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     panel.append(body)
     sidebar = None
     if style == "categories":
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["sidebar"], width_request=210)
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["sidebar"], width_request=round(210 * scale))
         body.append(sidebar)
 
     if layout["view"] == "list":
@@ -188,6 +210,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     hint = Gtk.Label(css_classes=["hint"], label="Enter opens  ·  arrows move  ·  Esc closes"
                      + ("  ·  Tab switches category" if style == "categories" else ""))
     panel.append(hint)
+    hint.set_visible(bool(opts["hints"]))
 
     def size_panel(*_):
         surface = win.get_surface()
@@ -375,7 +398,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     backdrop.add_controller(click)
 
     provider = Gtk.CssProvider()
-    provider.load_from_string(css(style))
+    provider.load_from_string(css(style, opts))
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     if usage and style == "categories" and not entry.get_text():
         state["category"] = "All apps"
