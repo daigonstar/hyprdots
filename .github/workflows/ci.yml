@@ -24,6 +24,10 @@ jobs:
           for f in $files; do bash -n "$f" || fail=1; done
           # category-mode.sh uses coproc, which shellcheck cannot parse (bash -n above still checks it)
           shellcheck -S error $(echo "$files" | grep -v category-mode.sh) || fail=1
+          # Warnings are listed but do not fail the build yet; once they are fixed, fold them into the line above
+          echo "::group::Shellcheck warnings (not failing the build yet)"
+          shellcheck -S warning $(echo "$files" | grep -v category-mode.sh) || true
+          echo "::endgroup::"
           exit $fail
 
   tests:
