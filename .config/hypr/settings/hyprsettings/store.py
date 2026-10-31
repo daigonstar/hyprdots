@@ -207,6 +207,12 @@ class Store:
         self.local = self._safe_read(self.local_path)
         if touched_lua or not self.overrides_path.exists():
             self.write_overrides()
+        if any(sid.startswith("cloud.") for sid in self.staged):
+            from . import cloud  # mount flags come from these settings; drives use them from their next restart
+            try:
+                cloud.refresh_unit()
+            except OSError as e:
+                self.warnings.append(f"Saved, but the cloud drive service could not be updated: {e}")
         effects = {BY_ID[sid].effect for sid in self.staged if sid in BY_ID}
         if any(sid.startswith(KB_PREFIX) for sid in self.staged):
             effects.add("when Hyprland reloads")

@@ -51,6 +51,7 @@ class Setting:
     effect: str = "next time the assistant starts"
     lua: tuple = ()                    # path inside hl.config({...}) for Hyprland settings
     group: str = ""
+    tip: str = ""                      # longer explanation shown when hovering the row (GTK window)
 
     @property
     def id(self) -> str:
@@ -69,6 +70,8 @@ KB_LAYOUTS = _c(("gb", "gb - United Kingdom"), ("us", "us - United States"), ("d
                 ("es", "es - Spanish"), ("it", "it - Italian"), ("pt", "pt - Portuguese"), ("se", "se - Swedish"),
                 ("no", "no - Norwegian"), ("dk", "dk - Danish"), ("fi", "fi - Finnish"), ("pl", "pl - Polish"),
                 ("ie", "ie - Irish"), ("br", "br - Brazilian"))
+CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the server"))
+CLOUD_EFFECT = "when the cloud drives restart"
 SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "The word SUPER"))
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
@@ -179,6 +182,26 @@ SETTINGS: list[Setting] = [
             effect="when Hyprland reloads", lua=("input", "sensitivity"), group="Input"),
     Setting(HYPRLAND, "hyprland", "natural_scroll", "Natural scrolling (touchpad)", "bool", False, "Content follows your fingers, like a phone.",
             effect="when Hyprland reloads", lua=("input", "touchpad", "natural_scroll"), group="Input"),
+    # ---- Cloud drives (rclone mount flags, see cloud.mount_flags) ----------------------------------------------
+    Setting(CLOUD, "cloud", "cache_mode", "File cache", "choice", "full",
+            "Keep a local copy of what you open (faster), or stream every file from the server (nothing kept on this PC).",
+            choices=CACHE_MODES, effect=CLOUD_EFFECT, group="How files are opened",
+            tip="Keep a local copy: only the parts of a file you actually read are downloaded, then kept on disk. Opening it "
+                "again, scrubbing back in a video or jumping around a zip is instant, and recently opened files still open "
+                "offline. Uses up to the cache size below on this PC.\n\n"
+                "Stream from the server: nothing you read is kept. Every open downloads again, seeking waits on the server, and "
+                "nothing opens offline. Files you save are still staged briefly before upload, so saving stays safe.\n\n"
+                "Either way, browsing folders and opening Thunar are equally fast, and thumbnails are only made once."),
+    Setting(CLOUD, "cloud", "cache_size_gb", "Cache size per drive", "int", 10,
+            "Most disk space each drive's local copies may use. Only used when keeping a local copy.",
+            lo=1, hi=500, unit="GB", effect=CLOUD_EFFECT, group="How files are opened",
+            tip="When the cache is full, the files you opened longest ago are removed first. Bigger keeps more of what you use "
+                "instant; smaller saves disk space. Files still waiting to upload are never removed."),
+    Setting(CLOUD, "cloud", "cache_days", "Keep cached files for", "int", 30,
+            "Local copies not opened for this long are removed. Only used when keeping a local copy.",
+            lo=1, hi=365, unit="days", effect=CLOUD_EFFECT, group="How files are opened",
+            tip="Short (a day or two) means little stays on this PC, but files you come back to next week download again. "
+                "Long keeps them instant, up to the cache size."),
     # ---- Hyprdots (default apps are read by keybinds.lua through user_overrides.lua) ---------------------------
     Setting(HYPRDOTS, "hyprdots", "terminal", "Terminal", "text", "ghostty", "Opened by Super+T.", allow_custom=True,
             effect="when Hyprland reloads", group="Default apps"),

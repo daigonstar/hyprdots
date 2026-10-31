@@ -84,7 +84,7 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
 | Calendar | Add, rename or remove calendars (links stay private) |
-| Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar |
+| Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar, and whether opened files are kept on this PC (faster) or streamed from the server (nothing stored) |
 | Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays); changes apply at once and undo themselves if you do not confirm |
 | Appearance | GTK theme, icons, cursor and font, and dark mode (replaces nwg-look) |
 | Hyprland | Gaps, borders, rounding, blur, animations, layout, keyboard layout and mouse |

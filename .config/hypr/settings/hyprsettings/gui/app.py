@@ -14,7 +14,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
 from .. import theme  # noqa: E402
-from ..schema import BY_ID, PAGES  # noqa: E402
+from ..schema import BY_ID, CLOUD_EFFECT, PAGES  # noqa: E402
 from ..store import Store  # noqa: E402
 from . import pages, ui  # noqa: E402
 
@@ -147,16 +147,27 @@ class Window(Adw.ApplicationWindow):
         if not self.store.dirty:
             self.toast("Nothing to save.")
             return
+        seen = len(self.store.warnings)
         try:
             effects = self.store.save()
         except Exception as e:  # a failed write must never look like success
             return ui.message(self, "Could not save", str(e))
         self.refresh()
+        for w in self.store.warnings[seen:]:
+            self.toast(w)
+        if CLOUD_EFFECT in effects:
+            from . import cloud as cloud_page
+            rest = [e for e in effects if e != CLOUD_EFFECT]
+            return cloud_page.restart_after_save(self, lambda quiet=False: self._after_save(rest, then, quiet and not rest))
+        self._after_save(effects, then)
+
+    def _after_save(self, effects: list[str], then=None, quiet: bool = False) -> None:
         if any("Hyprland" in e for e in effects) and shutil.which("hyprctl"):
             ui.confirm(self, "Reload Hyprland now?", "Your Hyprland changes are saved. Reload now to see them? Windows stay open.",
                        "Reload", lambda: (self.reload_hyprland(), then and then()), no="Later")
             return
-        self.toast("Saved." + (" Takes effect " + ", ".join(e for e in effects) + "." if effects else ""))
+        if not quiet:  # quiet: the cloud drive step already said it was saved
+            self.toast("Saved." + (" Takes effect " + ", ".join(effects) + "." if effects else ""))
         if then:
             then()
 

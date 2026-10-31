@@ -24,7 +24,8 @@ def show(s: Setting, value: Any) -> str:
 def setting_row(win, s: Setting) -> Adw.ActionRow:
     store = win.store
     value, source = store.get(s)
-    row = Adw.ActionRow(title=s.label, subtitle=s.help, use_markup=False, tooltip_text=f"Takes effect {s.effect}.")
+    row = Adw.ActionRow(title=s.label, subtitle=s.help, use_markup=False,
+                        tooltip_text=(s.tip + "\n\n" if s.tip else "") + f"Takes effect {s.effect}.")
     pill = ui.tag(source)
     undo = Gtk.Button(icon_name="edit-undo-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"],
                       tooltip_text="Put the default back", visible=source != "default")

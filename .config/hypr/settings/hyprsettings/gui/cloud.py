@@ -15,6 +15,7 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 from .. import cloud  # noqa: E402
 from ..schema import BY_ID, PAGE_INTRO  # noqa: E402
 from . import ui  # noqa: E402
+from .rows import setting_row  # noqa: E402
 
 STATES = {"active": ("connected", "yours"), "activating": ("starting", "changed"), "reloading": ("starting", "changed"),
           "failed": ("failed", "bad")}
@@ -44,6 +45,7 @@ def build(win) -> Gtk.Widget:
     more.add(add)
     more.add(folder)
     column.append(more)
+    column.append(cache_group(win))
 
     def loaded(accounts):
         group.remove(loading)
@@ -54,6 +56,57 @@ def build(win) -> Gtk.Widget:
         return False
     threading.Thread(target=lambda: GLib.idle_add(loaded, cloud.accounts()), daemon=True).start()
     return scroller
+
+
+def cache_group(win) -> Adw.PreferencesGroup:
+    """File cache settings. Size and age only matter when keeping a local copy, so they grey out while streaming."""
+    group = Adw.PreferencesGroup(title="How files are opened",
+                                 description="Hover over an option for the trade-offs. Saved with the bar below; the drives "
+                                             "then restart to use it.")
+    mode = BY_ID["cloud.cache_mode"]
+    mode_row = setting_row(win, mode)
+    sized = [setting_row(win, BY_ID["cloud.cache_size_gb"]), setting_row(win, BY_ID["cloud.cache_days"])]
+    for row in (mode_row, *sized):
+        group.add(row)
+
+    def follow(*_a):
+        keeping = win.store.get(mode)[0] == "full"
+        for row in sized:
+            row.set_sensitive(keeping)
+    drop = next(w for w in _walk(mode_row) if isinstance(w, Gtk.DropDown))
+    drop.connect("notify::selected", follow)  # runs after the row has staged the new value
+    follow()
+    return group
+
+
+def _walk(w):
+    yield w
+    child = w.get_first_child()
+    while child:
+        yield from _walk(child)
+        child = child.get_next_sibling()
+
+
+def restart_after_save(win, then=None) -> None:
+    """After the cache settings are saved: offer to restart connected drives so they use them now."""
+    names = cloud.connected()
+    if not names:
+        win.toast("Saved. Cloud drives use the new cache settings when they next connect.")
+        return then and then(quiet=True)
+
+    def go():
+        run_task(win, "Restarting cloud drives", lambda st, c: cloud.restart_connected(st))
+        if then:
+            then(quiet=True)
+
+    def later():
+        win.toast("Saved. The cloud drives use the new cache settings from your next login.")
+        if then:
+            then(quiet=True)
+    ui.confirm(win, "Restart cloud drives now?",
+               f"The new cache settings apply when {', '.join(names)} restart. Anything open from a cloud drive is interrupted; "
+               "files still waiting to upload are kept and carry on afterwards. Otherwise they apply at your next login.",
+               "Restart", go, no="Later", on_no=later)
 
 
 def account_row(win, acct: dict) -> Adw.ActionRow:

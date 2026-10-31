@@ -38,12 +38,28 @@ TEMPLATE = "rclone-mount@.service"
 #   --vfs-refresh      lists the folders in the background right after mounting, so Thunar hits the cache
 #   --dir-cache-time   keeps listings for an hour (--poll-interval still picks up remote changes)
 #   --attr-timeout     lets the kernel cache file attributes, so repeated stat calls never reach rclone
-#   --vfs-cache-max-size  caps the on-disk file cache per drive, so a PC left on for days cannot fill the disk
-#   --vfs-cache-max-age   keeps cached files for 30 days instead of 1 hour. The first Thunar window of a session reads
-#                      every .trashinfo on the drive; uncached, that was one server round trip each (11s for 31 files)
 #   --contimeout       gives up on an unreachable server after 15s instead of a minute, so Thunar is not left waiting
-MOUNT_FLAGS = ("--vfs-cache-mode full --vfs-cache-max-size 10G --vfs-cache-max-age 720h --dir-cache-time 1h "
-               "--poll-interval 1m --vfs-refresh --attr-timeout 30s --contimeout 15s")
+BASE_FLAGS = "--dir-cache-time 1h --poll-interval 1m --vfs-refresh --attr-timeout 30s --contimeout 15s"
+
+
+def mount_flags(mode: str = "full", size_gb: int = 10, days: int = 30) -> str:
+    """rclone mount flags for the File cache settings on the Cloud drives page.
+    full:   reads fetch only the parts an app asks for and keep them on disk, capped by size and age
+    writes: reads stream from the server and keep nothing; saved files are staged briefly before upload"""
+    if mode == "writes":
+        cache = "--vfs-cache-mode writes --vfs-cache-max-age 1h"
+    else:
+        cache = f"--vfs-cache-mode full --vfs-cache-max-size {int(size_gb)}G --vfs-cache-max-age {int(days) * 24}h"
+    return f"{cache} {BASE_FLAGS}"
+
+
+def cache_settings() -> tuple[str, int, int]:
+    """(mode, size in GB, days) as saved in the settings files."""
+    from .schema import BY_ID
+    from .store import Store
+    store = Store()
+    return tuple(store.get(BY_ID[f"cloud.{k}"])[0] for k in ("cache_mode", "cache_size_gb", "cache_days"))
+
 
 _cache: dict = {"t": float("-inf"), "data": []}
 
@@ -183,7 +199,7 @@ Wants=network-online.target
 Type=notify
 ExecStartPre=-{fuse} -uz "{root}/%i"
 ExecStartPre=/usr/bin/env mkdir -p "{root}/%i"
-ExecStart={exe} mount %i: "{root}/%i" {MOUNT_FLAGS}
+ExecStart={exe} mount %i: "{root}/%i" {mount_flags(*cache_settings())}
 ExecStop={fuse} -u "{root}/%i"
 Restart=on-failure
 RestartSec=15
@@ -224,6 +240,37 @@ def block_trash(name: str) -> str:
     except OSError as e:
         return f" Could not replace its trash folder ({e.strerror or e}); Thunar may open slowly until {path} is removed."
     return ""
+
+
+def refresh_unit() -> bool:
+    """Rewrites the mount unit after the cache settings change. True when it changed; drives that are connected use
+    it from their next restart (restart_connected, or the next login)."""
+    exe, fuse = rclone(), fuse_cmd()
+    if not exe or not fuse:
+        return False
+    d = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
+    before = (d / TEMPLATE).read_text(encoding="utf-8") if (d / TEMPLATE).exists() else ""
+    ensure_unit(exe, fuse)
+    return (d / TEMPLATE).read_text(encoding="utf-8") != before
+
+
+def connected() -> list[str]:
+    return [a["name"] for a in accounts(force=True) if a["state"] in ("active", "activating", "reloading")]
+
+
+def restart_connected(status: Callable[[str], None] = lambda _t: None) -> tuple[bool, str]:
+    """Restarts every connected drive so it picks up the current unit. Files waiting to upload stay in the cache
+    and carry on uploading afterwards."""
+    names = connected()
+    failed = []
+    for name in names:
+        status(f"Restarting {name}...")
+        if _sc("restart", unit(name), timeout=90).returncode != 0:
+            failed.append(name)
+    invalidate()
+    if failed:
+        return False, f"Could not restart {', '.join(failed)}. Details: journalctl --user -u {unit(failed[0])}"
+    return True, f"Restarted {', '.join(names)} with the new cache settings." if names else "No drive was connected."
 
 
 def connect(name: str) -> tuple[bool, str]:

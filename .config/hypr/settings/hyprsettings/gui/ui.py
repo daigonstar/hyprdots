@@ -118,14 +118,14 @@ def message(parent: Gtk.Widget, title: str, body: str) -> None:
 
 
 def confirm(parent: Gtk.Widget, title: str, body: str, yes: str, on_yes: Callable[[], None],
-            destructive: bool = False, no: str = "Cancel") -> None:
+            destructive: bool = False, no: str = "Cancel", on_no: Callable[[], None] | None = None) -> None:
     d = Adw.AlertDialog(heading=title, body=body)
     d.add_response("no", no)
     d.add_response("yes", yes)
     d.set_response_appearance("yes", Adw.ResponseAppearance.DESTRUCTIVE if destructive else Adw.ResponseAppearance.SUGGESTED)
     d.set_default_response("yes")
     d.set_close_response("no")
-    d.connect("response", lambda _d, r: r == "yes" and on_yes())
+    d.connect("response", lambda _d, r: on_yes() if r == "yes" else (on_no and on_no()))
     d.present(parent)
 
 
