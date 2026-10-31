@@ -28,6 +28,8 @@ wallust-git
 
 # --- Login screen and boot splash ---
 sddm
+# Runs the SDDM login screen on Wayland (see SDDM/zz-hyprdots-wayland.conf)
+weston
 qt5-graphicaleffects
 qt5-quickcontrols2
 plymouth

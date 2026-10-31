@@ -4,7 +4,7 @@ set -euo pipefail
 # update.sh
 # Safely overwrite this repository with the remote branch state.
 # Usage: ./update.sh [remote] [branch]
-# - Defaults: remote 'origin', branch 'dev'.
+# - Defaults: remote 'origin', branch 'main'.
 # Behavior:
 # - Fetches the remote first; nothing is touched if that fails.
 # - Resets --hard to remote/branch and removes untracked files (git clean -fdx),
@@ -93,7 +93,7 @@ main() {
   recover_stranded_backup
 
   remote="${1:-origin}"
-  # Branch selection priority: UPDATE_BRANCH env > $repo_root/.update-branch file > arg2 > interactive menu > default dev
+  # Branch selection priority: UPDATE_BRANCH env > $repo_root/.update-branch file > arg2 > interactive menu > default main
   branch="${2:-}"
   if [[ -n "${UPDATE_BRANCH:-}" ]]; then
     branch="$UPDATE_BRANCH"
@@ -103,17 +103,17 @@ main() {
   # If not provided, offer an interactive menu when running in a terminal
   if [[ -z "$branch" && -t 0 ]]; then
     echo "Select branch to use:"
-    echo "  1) main (end users)"
+    echo "  1) main (recommended)"
     echo "  2) dev (unstable)"
     echo "  3) Enter branch name"
-    read -rp "Choice [1-3] (default 2): " _choice
+    read -rp "Choice [1-3] (default 1): " _choice
     case "$_choice" in
       1) branch="main" ;;
       3) read -rp "Enter branch name: " branch ;;
-      *) branch="dev" ;;
+      *) branch="main" ;;
     esac
   fi
-  branch="${branch:-dev}"
+  branch="${branch:-main}"
   timestamp="$(date +%Y%m%d-%H%M%S)"
 
   echo "Repository: $repo_root"

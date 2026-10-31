@@ -28,8 +28,8 @@ Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and de
 - `--dry-run` crashes on a machine without `paru`, because the clone is only printed and `pushd` then fails.
 - The log directory is created only in dry-run mode, so a real first run falls back to `~/hyprinstall.log`.
 - The cursor theme copy nests (`Future-cursors/Future-cursors`) on the second run. The SDDM `Xsetup.bak` is overwritten on the second run.
-- SDDM monitor detection uses `xrandr`, which needs a display; from a TTY it finds nothing.
-- The installer defaults to the unstable `dev` branch, and the pull rewrites `hyprinstall.sh` mid-run.
+- ~~SDDM monitor detection uses `xrandr`, which needs a display; from a TTY it finds nothing.~~ Fixed: the login screen now runs on Wayland in Weston; screens are read from `/sys/class/drm`, and Plymouth hands over with `--retain-splash`. (The X login screen's `xrandr` step had been adding 24 s to every boot.)
+- ~~The installer defaults to the unstable `dev` branch~~ (fixed: the installer and updater default to `main`; `dev` had not been updated since March), and the pull rewrites `hyprinstall.sh` mid-run.
 - Services are enabled unconditionally (`NetworkManager`, `docker`, and others), which can drop the network on machines using another network manager.
 - Packages used but not listed in `install/required.txt`: `lm_sensors`, `kitty`. `bluetui` and `docker-compose` need checking.
 - CI does not run the settings tests (`.config/hypr/settings/tests/` is gitignored, including `test_mime.py` and `test_displays_gtk.py`), does not run a dry-run install, and uses `shellcheck -S error`, which hides most warnings.

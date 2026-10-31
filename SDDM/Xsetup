@@ -1,9 +1,0 @@
-#!/bin/sh
-# Xsetup - run as root before the login dialog appears
-#
-# This file is generated/updated by hyprinstall.sh based on the monitor
-# chosen as the "main" display during setup. It forces the SDDM greeter
-# to only appear on that monitor, turning off all other connected outputs
-# for the duration of the login screen.
-#
-# __HYPRINSTALL_XRANDR_BLOCK__

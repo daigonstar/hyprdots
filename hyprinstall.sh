@@ -181,17 +181,17 @@ if [[ -f "$BASE_DIR/.update-branch" ]]; then
 fi
 if [[ -z "$BRANCH" && "$DRY_RUN" == "false" && -t 0 ]]; then
   echo "Select branch to use for repo operations:"
-  echo "  1) main (end users)"
+  echo "  1) main (recommended)"
   echo "  2) dev (development)"
   echo "  3) Enter branch name"
-  read -rp "Choice [1-3] (default 2): " _choice
+  read -rp "Choice [1-3] (default 1): " _choice
   case "$_choice" in
     1) BRANCH="main" ;;
     3) read -rp "Enter branch name: " BRANCH ;;
-    *) BRANCH="dev" ;;
+    *) BRANCH="main" ;;
   esac
 fi
-BRANCH="${BRANCH:-dev}"
+BRANCH="${BRANCH:-main}"
 log "INFO" "Using branch: $BRANCH"
 
 # If repo exists and is a git repo, attempt to check it out and update to the selected branch
@@ -530,69 +530,60 @@ else
 log "INFO" "~/.bashrc already contains hyprinstall additions; skipping"
 fi
 
-# SDDM: restrict the login greeter to a single monitor
+# SDDM: the login screen runs on Wayland inside Weston, on your main screen only
 #
-# Detect connected outputs via xrandr, ask the user which one is the main
-# display, then generate an Xsetup script that sets that output as primary
-# and turns every other connected output off for the greeter session only.
-# (This has no effect on Hyprland's own monitor layout at session start.)
-#
-# Output names detected here (Wayland/Xwayland, e.g. "DP-1") are used as-is:
-# the SDDM greeter's Xorg modesetting driver uses the same DRM connector names.
+# No X server, so nothing like the old xrandr step can hold it up, and Plymouth's last frame stays on screen until the
+# login screen appears (plymouth quit --retain-splash). Connected screens are read from the kernel, which works from a
+# text console too, unlike xrandr; Weston uses the same names (DP-1, HDMI-A-1). Every screen except the one you pick
+# is switched off for the login screen only: Hyprland's own layout is not affected.
 
-echo "🖥️  Configuring SDDM to only show the login screen on your main monitor..."
+echo "🖥️  Setting up the login screen..."
 
-XSETUP_FILE="/usr/share/sddm/scripts/Xsetup"
-XSETUP_TEMPLATE="$REPO_DIR/SDDM/Xsetup"
+mapfile -t CONNECTED_MONITORS < <(
+    for status in /sys/class/drm/card*-*/status; do
+        [[ -r "$status" && "$(<"$status")" == "connected" ]] || continue
+        name="$(basename "$(dirname "$status")")"
+        [[ "$name" == *-Writeback-* ]] && continue   # a virtual output inside the GPU, not a screen
+        echo "${name#card*-}"
+    done | sort -u
+)
 
-mapfile -t CONNECTED_MONITORS < <(xrandr --query 2>/dev/null | awk '/ connected/ {print $1}')
-
-if [[ "${#CONNECTED_MONITORS[@]}" -eq 0 ]]; then
-    log "WARN" "No connected monitors detected via xrandr; skipping SDDM monitor restriction."
-elif [[ "${#CONNECTED_MONITORS[@]}" -eq 1 ]]; then
-    log "INFO" "Only one connected monitor (${CONNECTED_MONITORS[0]}); skipping SDDM monitor restriction."
-else
+MAIN_MONITOR=""
+if [[ "${#CONNECTED_MONITORS[@]}" -gt 1 ]]; then
     echo "Detected connected monitors:"
     for i in "${!CONNECTED_MONITORS[@]}"; do
         printf "  %d) %s\n" "$((i + 1))" "${CONNECTED_MONITORS[$i]}"
     done
-
-    MAIN_MONITOR=""
-    if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" || ! -t 0 ]]; then
         MAIN_MONITOR="${CONNECTED_MONITORS[0]}"
-        echo "[DRY RUN] Would prompt for main monitor; assuming ${MAIN_MONITOR}"
+        log "INFO" "Not asking for the main monitor; using ${MAIN_MONITOR}"
     else
         while [[ -z "$MAIN_MONITOR" ]]; do
-            read -rp "Which monitor should show the SDDM login screen (number)? " choice
+            read -rp "Which monitor should show the login screen (number)? " choice
             if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#CONNECTED_MONITORS[@]} )); then
                 MAIN_MONITOR="${CONNECTED_MONITORS[$((choice - 1))]}"
             else
-                echo "Invalid choice, please enter a number between 1 and ${#CONNECTED_MONITORS[@]}."
+                echo "Please enter a number between 1 and ${#CONNECTED_MONITORS[@]}."
             fi
         done
     fi
-
-    log "INFO" "Selected '$MAIN_MONITOR' as the main monitor for SDDM."
-
-    XRANDR_BLOCK="xrandr --output $MAIN_MONITOR --primary --auto"
-    for mon in "${CONNECTED_MONITORS[@]}"; do
-        if [[ "$mon" != "$MAIN_MONITOR" ]]; then
-            XRANDR_BLOCK+=$'\n'"xrandr --output $mon --off"
-        fi
-    done
-
-    GENERATED_XSETUP="$(mktemp)"
-    awk -v block="$XRANDR_BLOCK" '{
-        if ($0 ~ /__HYPRINSTALL_XRANDR_BLOCK__/) print block
-        else print
-    }' "$XSETUP_TEMPLATE" > "$GENERATED_XSETUP"
-
-    run_cmd "sudo cp \"$XSETUP_FILE\" \"$XSETUP_FILE.bak\" 2>/dev/null || true"
-    run_cmd "sudo cp \"$GENERATED_XSETUP\" \"$XSETUP_FILE\""
-    run_cmd "sudo chmod +x \"$XSETUP_FILE\""
-    rm -f "$GENERATED_XSETUP"
-    log "OK" "SDDM Xsetup configured: '$MAIN_MONITOR' primary, others disabled at greeter (backup at $XSETUP_FILE.bak)."
+    log "INFO" "Selected '$MAIN_MONITOR' as the main monitor for the login screen."
 fi
+
+KB_LAYOUT="$(grep -oP 'kb_layout\s*=\s*"\K[^"]+' "$DOTFILES_DIR/hypr/input.lua" 2>/dev/null | head -n1)"
+GENERATED_WESTON_INI="$(mktemp)"
+{
+    sed "s/__KB_LAYOUT__/${KB_LAYOUT:-us}/" "$REPO_DIR/SDDM/weston.ini"
+    for mon in "${CONNECTED_MONITORS[@]}"; do
+        [[ -n "$MAIN_MONITOR" && "$mon" != "$MAIN_MONITOR" ]] && printf '\n# Not your main screen: off at the login screen\n[output]\nname=%s\nmode=off\n' "$mon"
+    done
+} > "$GENERATED_WESTON_INI"
+run_cmd "sudo install -Dm644 \"$GENERATED_WESTON_INI\" /etc/sddm/weston.ini"
+run_cmd "sudo install -Dm644 \"$REPO_DIR/SDDM/zz-hyprdots-wayland.conf\" /etc/sddm.conf.d/zz-hyprdots-wayland.conf"
+run_cmd "sudo install -Dm644 \"$REPO_DIR/SDDM/plymouth-quit-retain-splash.conf\" /etc/systemd/system/plymouth-quit.service.d/10-retain-splash.conf"
+run_cmd "sudo systemctl daemon-reload"
+rm -f "$GENERATED_WESTON_INI"
+log "OK" "Login screen set up on Wayland${MAIN_MONITOR:+ ($MAIN_MONITOR only)}, keyboard ${KB_LAYOUT:-us}."
 
 # Hide unwanted apps from launcher
 
