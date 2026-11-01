@@ -17,6 +17,9 @@ fi
 
 if hyprctl clients | grep -q "class: $class\$"; then
     hyprctl dispatch 'hl.dsp.workspace.toggle_special("agent")'
+elif python3 "$assistant/hypr_assistant_app.py" --check 2>/dev/null; then
+    # The GTK app ([assistant] interface = "app"); its app id is the same class, so the scratchpad rule applies
+    exec python3 "$assistant/hypr_assistant_app.py"
 else
     exec ghostty --class="$class" --title="Hyprland Assistant" -e python3 "$assistant/hypr_agent.py"
 fi

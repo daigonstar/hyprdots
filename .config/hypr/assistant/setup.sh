@@ -202,7 +202,8 @@ install_packages() {
     pkgs+=("$ollama_pkg")
   fi
   local p
-  for p in python-ollama python-prompt_toolkit; do
+  # vte4 gives the app window its built-in terminal
+  for p in python-ollama python-prompt_toolkit vte4; do
     pacman -Qq "$p" >/dev/null 2>&1 || pkgs+=("$p")
   done
   if ((${#pkgs[@]})); then

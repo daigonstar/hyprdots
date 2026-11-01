@@ -147,8 +147,12 @@ SETTINGS: list[Setting] = [
     Setting(ASSISTANT, "assistant", "num_ctx", "Context window", "choice", 16384,
             "How much conversation the model can see, in tokens. Bigger needs more GPU memory (about 3 GB extra at 16384 on a 14B model).",
             choices=CONTEXT, allow_custom=True, group="Performance"),
+    Setting(ASSISTANT, "assistant", "interface", "Window", "choice", "app",
+            "Where Super+C opens the assistant. The app has chat bubbles, Allow/Deny buttons, code blocks with Copy and Run, and a "
+            "terminal inside it; colours follow the Theme page. The terminal version is the original text interface.",
+            choices=_c(("app", "App window"), ("terminal", "Terminal")), group="Look"),
     Setting(ASSISTANT, "assistant", "accent", "Accent colour", "choice", "36",
-            "Colour of the prompt and banner in the chat window.", choices=ACCENTS, group="Look"),
+            "Colour of the prompt and banner in the terminal version.", choices=ACCENTS, group="Look"),
     Setting(ASSISTANT, "assistant", "animated_logo", "Animated logo", "bool", True,
             "Spin the logo in the startup banner.", group="Look"),
     Setting(ASSISTANT, "assistant", "command_timeout", "Read-only command timeout", "int", 20,

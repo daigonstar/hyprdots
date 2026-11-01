@@ -53,6 +53,7 @@ SETTINGS = usersettings.section("assistant", {
     "max_tool_steps": 15,
     "history_messages": 100,
     "accent": "36",
+    "interface": "app",          # Super+C opens hypr_assistant_app.py ("app") or this file in a terminal ("terminal")
     "animated_logo": True,
     "command_timeout": 20,
     "confirmed_command_timeout": 180,
@@ -142,6 +143,14 @@ def dim(text): return _c("2", text)
 def _prompt(code, text):
     """Colored prompt text that readline measures correctly."""
     return f"\001\033[{code}m\002{text}\001\033[0m\002" if USE_COLOR else text
+
+# The GTK app (hypr_assistant_app.py) sets this and replaces ui_tool, ui_command, ui_write, _confirm, Spinner and
+# ReasoningView with its own, so the agent shows its work and asks for approval in the window instead
+GUI = [False]
+
+def interactive():
+    """True when someone is watching the agent work: a terminal or the app."""
+    return GUI[0] or sys.stdout.isatty()
 
 def ui_tool(name, args):
     print(f"{dim('  ⚙')} {_c('1', name)} {dim((args or '').strip())}".rstrip())
@@ -586,7 +595,7 @@ class ReasoningView:
 def _reasoning_chat(model, messages, tools, options, spinner):
     """Streams a reply, showing reasoning live; returns the same shape as a non-streaming ollama.chat."""
     candidates = [_think_choice[model]] if model in _think_choice else [THINK["effort"], True, None]
-    show = THINK["show"] and sys.stdout.isatty()
+    show = THINK["show"] and interactive()
     for think in candidates:
         view, content, thinking, calls, last = ReasoningView(), [], [], [], None
         try:
@@ -2833,7 +2842,7 @@ HARD_REASONS = ("sensitive", "elevated privileges", "shell features", "outside t
 def _confirm(question, sensitive=False, auto_ok=True):
     """Asks the user on the terminal; with no terminal the answer is always no.
     /allow only skips the prompt when sensitive is False and auto_ok is True."""
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+    if not (GUI[0] or (sys.stdin.isatty() and sys.stdout.isatty())):
         return False
     if AUTO_APPROVE[0] and not sensitive and auto_ok:
         return True
@@ -2914,7 +2923,7 @@ def tool_write_file(arg):
                                 sensitive=any("sensitive" in r for r in reasons), auto_ok=not _hard(reasons)):
         return "Not written (declined, or no terminal available for confirmation)."
 
-    if sys.stdout.isatty():
+    if interactive():
         ui_write('appending to' if append else 'writing', target)
     MUTATED[0] = True
     try:
@@ -2977,7 +2986,7 @@ def tool_run_command(command):
         if _touches_blocked_path(inspect_argv):
             reasons.append("touches a sensitive path (keys/credentials)")
 
-    if sys.stdout.isatty():
+    if interactive():
         ui_command(command)
 
     needs_confirm = bool(reasons) or not all(_is_read_only(argv) or _is_safe_home_write(argv) for argv in stages)
@@ -3121,7 +3130,7 @@ Guidelines:
 18. SELF-LOAD: ollama and hypr_agent are you. Ollama is busy because it is generating your reply, so never blame it for slowness unless it is still busy when idle (check ollama ps and a fresh top sample).
 19. RECOMMENDING CHANGES: never suggest a flag, option or setting unless you have verified what it does from the man page, --help output or official docs in this conversation. Do not guess (for example -np in llama.cpp is parallel slots, not threads). Never edit files under /usr/lib or /usr/share; use a drop-in (systemctl edit unit, which writes /etc/systemd/system/unit.d/) or the user's own config. Prefer the smallest reversible change and show how to undo it. If you are not confident a change helps, say so instead of proposing it.
 20. SLOW, LAGGY, STUTTERING, HOT OR LOUD: call performance_snapshot first (one call), then at most two targeted follow-ups on whatever it shows (for example journalctl for the failing unit, or ps for one process). Aim for under 8 tool calls in total.
-21. OUTPUT FORMAT: your reply is shown in a terminal that cannot draw tables or italics. Use short paragraphs, **bold** headings, - bullets and `code` only. No markdown tables, no *single-asterisk* emphasis, no HTML.
+21. OUTPUT FORMAT: your reply may be shown in a terminal that cannot draw tables or italics. Use short paragraphs, **bold** headings, - bullets and `code` only. No markdown tables, no *single-asterisk* emphasis, no HTML. Put every command, script, config snippet or file content you suggest in a fenced code block that names its language (```bash, ```ini, ```lua ...), one block per thing the user would copy; use inline `code` only for single names inside a sentence.
 22. GENERAL ASSISTANT: you are not only a PC helper. Answer everyday questions (planning, wording, explanations, maths, how-tos) directly when the answer is stable knowledge, and use tools for anything about this PC, the user's calendar, the current date or time, or anything that can have changed. Do not drag PC topics into unrelated questions. For weekdays, dates, "how long until" and similar, call date_info instead of working it out yourself.
 23. CALENDAR: for anything about the user's schedule call calendar_events (read-only). Report only events the tool returned, with the times it showed, and say which range and calendars were checked. Never invent, infer or recall events. If the tool says no calendar is connected or a source failed, say exactly that and give the setup steps from its message instead of answering from guesswork. "Nothing scheduled" is only true for the calendars actually read, so say which. You cannot add, change or cancel events; say so if asked.
 24. HONEST REPORTING: be clear about what you checked, what you assume and what you could not confirm, but say it in passing inside the answer ("I couldn't find a confirmed UK price"), not as a separate evidence section, except in PC-problem diagnostics. Say you read a page only if you fetched it with web_fetch; for anything seen only in a search result say it comes from a snippet. Give a URL, version, figure, quote or date only if it appears in tool output or in the user's message; otherwise say you could not confirm it. If a tool failed or returned nothing, say so plainly. Never state a measurement you did not make. If sources disagree, that disagreement is the result.
@@ -3888,7 +3897,7 @@ def _process(messages, user_input, guard=None):
                     name = _get(function, 'name')
                     args = _args_text(name, _get(function, 'arguments'))
                     TOOL_COUNT[0] += 1
-                    if sys.stdout.isatty():
+                    if interactive():
                         ui_tool(name, args)
                     observation = guard.before(name, args)
                     if observation is None:
@@ -3924,7 +3933,7 @@ def _process(messages, user_input, guard=None):
 
             name, args = parsed
             TOOL_COUNT[0] += 1
-            if sys.stdout.isatty():
+            if interactive():
                 ui_tool(name, args)
 
             observation = guard.before(name, args or "")

@@ -104,6 +104,7 @@ gtk-layer-shell
 gtk4
 libadwaita
 gtk4-layer-shell
+vte4
 python
 python-gobject
 python-cairo
