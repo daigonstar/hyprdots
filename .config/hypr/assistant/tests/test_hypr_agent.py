@@ -111,6 +111,293 @@ class AuditItem7(unittest.TestCase):
         self.assertEqual(a._visible("ls\r\x1b[2Krm -rf ~"), "ls\\r\\x1b[2Krm -rf ~")
 
 
+class SystemChanges(unittest.TestCase):
+    """Changes to system config are checked against the docs first and verified after (the SDDM override loop)."""
+    def setUp(self):
+        self.saved = {k: list(v) for k, v in a.RESEARCH.items()}
+        for v in a.RESEARCH.values():
+            v.clear()
+        self.addCleanup(lambda: [a.RESEARCH[k].__setitem__(slice(None), v) for k, v in self.saved.items()])
+
+    def test_which_calls_count_as_system_changes(self):
+        change = lambda name, args: bool(a._system_change_targets(name, args))  # noqa: E731
+        self.assertTrue(change("run_command", "sudo tee /etc/systemd/system/sddm.service.d/override.conf"))
+        self.assertTrue(change("run_command", "sudo systemctl edit sddm.service"))
+        self.assertTrue(change("write_file", json.dumps({"path": "/etc/sddm.conf.d/x.conf", "content": "x"})))
+        self.assertFalse(change("run_command", "cat /etc/sddm.conf"))              # a read
+        self.assertFalse(change("run_command", "sudo pacman -S foo"))              # an install, not config
+        self.assertFalse(change("write_file", json.dumps({"path": "~/notes.txt", "content": "x"})))
+
+    def test_a_change_is_held_back_until_docs_were_read(self):
+        guard = a.LoopGuard()
+        call = "sudo tee /etc/systemd/system/sddm.service.d/override.conf"
+        self.assertTrue(guard.before("run_command", call).startswith("CHECK FIRST"))
+        guard.after("run_command", "systemctl cat sddm.service", "[Unit]\n[exit code 0]")
+        self.assertTrue(guard.before("run_command", call).startswith("CHECK FIRST"))   # reading the unit is not the docs
+        self.assertIn("without checking it against any documentation", guard.footer("ok"))
+        guard.after("run_command", "man systemd.unit | grep -A3 After=", "After=...\n[exit code 0]")
+        self.assertIsNone(guard.before("run_command", call))                       # docs read: on to the user's approval
+        self.assertNotIn("without checking", guard.footer("ok"))
+        self.assertEqual(a._not_researched_reason("run_command", call), "")
+
+    def test_unresearched_change_says_so_in_the_approval_prompt(self):
+        with mock.patch.object(a, "_confirm", return_value=False) as confirm:
+            a.tool_run_command("sudo tee /etc/sddm.conf.d/x.conf")
+        self.assertIn("not checked against any docs", confirm.call_args[0][0])
+        self.assertFalse(confirm.call_args.kwargs["auto_ok"])                     # /allow does not skip it
+
+    def test_unit_lint_catches_the_sddm_mistake(self):
+        with mock.patch.object(a, "_unit_load_state", side_effect=lambda u: "not-found" if u == "nope.service" else "loaded"):
+            problems = a._lint_unit_text("[Unit]\nAfter=-plymouth-quit.service\nWants=nope.service\nAfter=plymouth-quit.service")
+        self.assertEqual(len(problems), 2)
+        self.assertIn("leading '-'", problems[0])
+        self.assertIn("nope.service", problems[1])
+        out = a.tool_write_file(json.dumps({"path": "/etc/systemd/system/sddm.service.d/override.conf",
+                                            "content": "[Unit]\nAfter=-plymouth-quit.service\n"}))
+        self.assertTrue(out.startswith("Rejected"), out)
+
+    def test_units_found_for_the_check_after_a_change(self):
+        self.assertEqual(a._units_in("sudo tee /etc/systemd/system/sddm.service.d/override.conf"), ["sddm.service"])
+        self.assertEqual(a._units_in("sudo systemctl edit --full plymouth-quit.service"), ["plymouth-quit.service"])
+        self.assertEqual(a._units_in("sudo tee /etc/sddm.conf.d/x.conf"), [])
+
+
+class HabitualShellBits(unittest.TestCase):
+    """Reads written with 2>&1 or a "|| echo" fallback run without asking; anything else after || still asks."""
+    def test_harmless_extras_are_dropped(self):
+        for command, argv in (("systemctl status x 2>&1 | head -n 30", [["systemctl", "status", "x"], ["head", "-n", "30"]]),
+                              ("ls /etc/x.d 2>/dev/null || echo \"No overrides\"", [["ls", "/etc/x.d"]]),
+                              ("ls /x || true", [["ls", "/x"]])):
+            self.assertEqual(a._parse_pipeline(command), argv)
+
+    def test_chained_reads_run_without_asking(self):
+        self.assertTrue(a._read_only_chain("systemctl cat sddm.service && ls /etc/systemd/system 2>/dev/null || echo none"))
+        self.assertTrue(a._read_only_chain("systemctl status x --no-pager | head -15; systemctl is-active y"))
+        for command in ("ls /x && rm -rf ~/y", "ls; touch y", "ls > /tmp/x && ls", "ls && echo $(id)", "ls & ls", "cat a; (rm b)",
+                        "ls && sudo cat /etc/shadow"):
+            self.assertFalse(a._read_only_chain(command), command)
+
+    def test_real_shell_still_asks(self):
+        for command in ("ls /x || rm -rf ~", "ls /x || echo \"$(id)\"", "cat x 2>/tmp/out", "ls && rm x"):
+            with self.assertRaises(ValueError):
+                a._parse_pipeline(command)
+
+
+class Notes(unittest.TestCase):
+    def test_reworded_duplicates_are_not_saved_again(self):
+        self.assertTrue(a._same_note("User wants to connect hypr_agent.py script to Zed",
+                                     "User wants to connect hypr_agent.py script to Zed editor"))
+        self.assertFalse(a._same_note("User prefers dark themes", "User's editor is Zed"))
+
+
+class GamingMode(unittest.TestCase):
+    def test_proton_is_only_for_linux_questions(self):
+        prompt = a.agent_modes.GAMING_PROMPT
+        self.assertIn("Do not bring up Linux, Proton, ProtonDB", prompt)
+        self.assertNotIn("For Linux, give the ProtonDB rating", prompt)
+
+
+class ModelHiccups(unittest.TestCase):
+    """Failures from the log: a broken tool call, reasoning with no answer, an over-full context."""
+
+    def reply(self, content="", calls=None, thinking=""):
+        msg = {'role': 'assistant', 'content': content}
+        if calls:
+            msg['tool_calls'] = calls
+        if thinking:
+            msg['thinking'] = thinking
+        return {'message': msg, 'prompt_eval_count': 0, 'eval_count': 0}
+
+    def run_process(self, replies):
+        replies = list(replies)
+
+        def fake(model, messages, **kw):
+            r = replies.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+        with mock.patch.object(a, "chat", side_effect=fake), mock.patch.object(a, "FACT_CHECK", False):
+            out = a._process([{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'q'}], "q")
+        return out, replies
+
+    def test_broken_tool_call_is_asked_again(self):
+        err = a.ollama.ResponseError("error parsing tool call: raw='{\"command\":\"bash -lc' think", 500)
+        out, left = self.run_process([err, self.reply("The answer.")])
+        self.assertEqual(out, "The answer.")
+        self.assertFalse(left)
+
+    def test_tool_call_error_is_not_a_think_rejection(self):
+        self.assertFalse(a._rejects_think(a.ollama.ResponseError("error parsing tool call: raw='thinking'", 500)))
+        self.assertTrue(a._rejects_think(a.ollama.ResponseError("model does not support thinking", 400)))
+
+    def test_reasoning_without_answer_gets_another_step(self):
+        out, _ = self.run_process([self.reply(thinking="Let me search again"), self.reply("Found it.")])
+        self.assertEqual(out, "Found it.")
+
+    def test_answer_is_forced_without_reasoning_in_the_end(self):
+        seen = []
+        replies = [self.reply(thinking="hmm"), self.reply(thinking="hmm"), self.reply(thinking="hmm"), self.reply("Plain answer.")]
+
+        def fake(model, messages, **kw):
+            seen.append(kw.get("think"))
+            return replies.pop(0)
+        with mock.patch.object(a, "chat", side_effect=fake), mock.patch.object(a, "FACT_CHECK", False):
+            out = a._process([{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'q'}], "q")
+        self.assertEqual(out, "Plain answer.")
+        self.assertEqual(seen[-1], False)
+
+    def test_context_budget_counts_the_tool_schemas(self):
+        msgs = [{'role': 'system', 'content': 'x' * 20000}, {'role': 'user', 'content': 'q'},
+                {'role': 'tool', 'content': 'y' * 4000, 'tool_name': 't'}, {'role': 'tool', 'content': 'z' * 4000, 'tool_name': 't'},
+                {'role': 'tool', 'content': 'w' * 4000, 'tool_name': 't'}]
+        with mock.patch.object(a, "CHARS_PER_TOKEN", [3.0]):
+            self.assertIs(a._fit_context(msgs, "q"), msgs)
+            fitted = a._fit_context(msgs, "q", fixed=9000)
+        self.assertLess(sum(a._msg_size(m) for m in fitted), int(a.NUM_CTX * 0.72 * 3.0) - 9000)
+
+
+class InventedTweaks(unittest.TestCase):
+    def test_env_vars_no_source_mentioned_are_cut(self):
+        g = a.LoopGuard()
+        g.note_text("ProtonDB: PROTON_USE_WINED3D=1 fixes the black screen")
+        out = g.drop_unsourced_env("```\nDXVK_ASYNC=1 PROTON_USE_WINED3D=1 gamemoderun %command%\n```\n```ini\nGRUB_TIMEOUT=5\n```")
+        self.assertIn("PROTON_USE_WINED3D=1 gamemoderun %command%", out)
+        self.assertNotIn("DXVK_ASYNC", out)
+        self.assertIn("GRUB_TIMEOUT=5", out)  # a config line on its own is not a launch option
+        self.assertIn("DXVK_ASYNC", g.footer(out))
+
+    def test_a_block_with_nothing_left_is_dropped(self):
+        g = a.LoopGuard()
+        self.assertNotIn("```", g.drop_unsourced_env("Use:\n```\nDXVK_ASYNC=1 %command%\n```\n"))
+
+
+class NamesOnThisPC(unittest.TestCase):
+    def test_made_up_units_and_packages_are_flagged(self):
+        with mock.patch.object(a, "_unit_exists", side_effect=lambda u: u != "sddm-plymouth-quit-before.service"), \
+                mock.patch.object(a, "_in_repos", side_effect=lambda p: p != "rocm-smi"):
+            lines = a._names_on_this_pc("Check sddm-plymouth-quit-before.service and sddm.service.\n"
+                                        "```bash\nsudo pacman -Syu\nsudo pacman -S --needed rocm-smi rocm-smi-lib\n```")
+        self.assertEqual(len(lines), 2)
+        self.assertIn("sddm-plymouth-quit-before.service", lines[0])
+        self.assertNotIn("sddm.service,", lines[0])
+        self.assertIn("rocm-smi in", lines[1])
+        self.assertNotIn("sudo", lines[1])
+
+
+class AnswerChecks(unittest.TestCase):
+    def test_session_breaking_commands_are_taken_out(self):
+        g = a.LoopGuard()
+        out = g.check_answer("```bash\nsudo rmmod amdgpu\nsudo pacman -Sy rocm-smi-lib\nsudo pacman -Syu\n```\nOr `sudo systemctl restart sddm`.")
+        self.assertNotIn("rmmod", out)
+        self.assertNotIn("-Sy rocm", out)
+        self.assertIn("sudo pacman -Syu", out)
+        self.assertNotIn("restart sddm", out)
+        footer = g.footer(out)
+        self.assertIn("graphics driver", footer)
+        self.assertIn("partial upgrade", footer)
+
+    def test_unit_blocks_are_linted(self):
+        g = a.LoopGuard()
+        with mock.patch.object(a, "_unit_load_state", return_value="loaded"):
+            g.check_answer("```ini\n[Unit]\nAfter=-plymouth-quit.service\n\n[Install]\nAlias=sddm.service\n```")
+        self.assertTrue(any("leading '-'" in p for p in g.unit_problems))
+        self.assertTrue(any("Alias=sddm.service" in p for p in g.unit_problems))
+
+    def test_systemd_settings_from_memory_get_a_docs_round(self):
+        a.RESEARCH["docs"].clear()
+        g = a.LoopGuard()
+        note = g.docs_check("```ini\n[Unit]\nRequires=plymouth-quit.service\n```")
+        self.assertIn("https://man.archlinux.org/man/systemd.unit.5.txt", note)
+        self.assertIn('"find": "Requires="', note)
+        a.RESEARCH["docs"].append("https://man.archlinux.org/man/systemd.unit.5.txt")
+        self.assertIsNone(g.docs_check("```ini\n[Unit]\nRequires=plymouth-quit.service\n```"))
+        a.RESEARCH["docs"].clear()
+
+    def test_own_processes_are_marked(self):
+        out = a._annotate_processes("ps aux --sort=-%cpu | head", "USER PID %CPU\nrobb 1 99 /usr/bin/ollama runner\nrobb 2 5 firefox")
+        self.assertIn("ollama runner   <- this assistant itself", out)
+        self.assertNotIn("firefox   <-", out)
+        self.assertIn("average since each process started", out)
+
+    def test_definitions_come_first_in_find(self):
+        text = "Mention of Requires= here.\n" + "x" * 2000 + "\n       Requires=\n           The definition."
+        a_, b_ = a._find_spans(text, "Requires=")[0]
+        self.assertIn("The definition", text[a_:b_])
+
+
+class MisspeltNames(unittest.TestCase):
+    def test_a_garbled_copy_is_corrected_and_different_names_are_kept(self):
+        g = a.LoopGuard()
+        g.note_text("coolercontrol 5.1.1-1 -> 5.1.1-2\ncoolercontrold 5.1.1-1 -> 5.1.1-2\nsddm.service loaded")
+        out = g.check_answer("`cootercontrold` and `gdm.service`, version `5.1.1-3`")
+        self.assertIn("`coolercontrold`", out)
+        self.assertIn("`gdm.service`", out)
+        self.assertIn("`5.1.1-3`", out)
+        self.assertIn("cootercontrold → coolercontrold", g.footer(out))
+
+
+class CrashReport(unittest.TestCase):
+    def test_how_boots_ended(self):
+        self.assertTrue(a.CLEAN_END_RE.search("Unmounted /home."))
+        self.assertTrue(a.CLEAN_END_RE.search("Reached target System Power Off."))
+        self.assertFalse(a.CLEAN_END_RE.search("Started Thumbnailing service."))
+
+    def test_only_crash_questions_get_the_crash_note(self):
+        self.assertTrue(a.CRASH_RE.search("My PC froze last night"))
+        self.assertTrue(a.CRASH_RE.search("it rebooted by itself"))
+        self.assertFalse(a.CRASH_RE.search("What GPU do I have?"))
+
+    def test_runs(self):
+        out = a.tool_crash_report("2")
+        self.assertIn("[Boots]", out)
+        self.assertIn("[Out-of-memory kills]", out)
+
+
+class PackageCommands(unittest.TestCase):
+    def test_pacman_search_lists_commands(self):
+        with mock.patch.object(a, "_arch_package_commands", return_value="Commands this package installs (from its file list): /opt/rocm/bin/rocm-smi"):
+            out = a._annotate_packages("pacman -Ss rocm-smi", "extra/rocm-smi-lib 7.2.0-2\n    ROCm System Management Interface Library")
+        self.assertIn("extra/rocm-smi-lib: commands this package installs", out)
+        self.assertEqual(a._annotate_packages("pacman -Q", "x 1"), "x 1")
+
+
+class ResearchScope(unittest.TestCase):
+    def test_docs_count_for_this_request_and_the_next_only(self):
+        a.RESEARCH["docs"].clear()
+        a.RESEARCH_START.clear()
+        with mock.patch.object(a, "_process", return_value="ok"), mock.patch.object(a, "log_turn"), \
+                mock.patch.object(a, "_remember_turn"), mock.patch.object(a, "build_context", return_value=""):
+            a.process_prompt("one")
+            a.RESEARCH["docs"].append("https://man.archlinux.org/man/systemd.unit.5.txt")
+            a.process_prompt("two")
+            self.assertEqual(len(a.RESEARCH["docs"]), 1)
+            a.process_prompt("three")
+            self.assertEqual(a.RESEARCH["docs"], [])
+        a.HISTORY.clear()
+
+
+class UnseenFigures(unittest.TestCase):
+    def test_figures_nothing_showed_are_listed(self):
+        g = a.LoopGuard()
+        g.calls = 2
+        g.note_text("114577 99.6 1.5 10:37:57 python\nMem: 31Gi total, 20Gi available\nload 42% of capacity")
+        self.assertEqual(g.unseen_figures("640+ hours of CPU, 99.6% average, 20 GB free, 42% load, 19.8 GB used"), ["640 hours"])
+        self.assertIn("640 hours", g.footer("It used 640+ hours."))
+
+
+class DocsAreReads(unittest.TestCase):
+    def test_man_pages_are_read_only(self):
+        self.assertFalse(a._command_needs_approval("man 5 systemd.unit"))
+        self.assertFalse(a._command_needs_approval("man sddm.conf | head -100"))
+        self.assertTrue(a._command_needs_approval('man -P "rm -rf ~" ls'))
+        self.assertTrue(a._command_needs_approval("man --pager=sh ls"))
+
+    def test_a_dollar_ending_a_regex_is_not_an_expansion(self):
+        self.assertTrue(a._read_only_chain('systemctl list-unit-files | grep -E "target$" && systemctl cat graphical.target'))
+        self.assertFalse(a._read_only_chain("ls && echo $HOME"))
+        self.assertFalse(a._read_only_chain('ls && echo "$(id)"'))
+
+
 class SensitivePaths(unittest.TestCase):
     def setUp(self):
         self.key = write(".ssh/id_rsa", "FAKE-KEY\n")
