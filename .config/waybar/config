@@ -226,7 +226,7 @@
         "exec-if": "test ! -e \"${XDG_STATE_HOME:-$HOME/.local/state}/hypr_agent/disabled\"",
         "format": "󰙴",
         "on-click": "~/.config/hypr/scripts/assistant-toggle.sh",
-        "exec": "echo '{\"tooltip\": \"PC Assistant (AI): ask about your system, updates and problems\"}'",
+        "exec": "echo '{\"tooltip\": \"Hearthling: your AI helper for this PC, games, research and more\"}'",
         "return-type": "json",
         "interval": "once"
         },

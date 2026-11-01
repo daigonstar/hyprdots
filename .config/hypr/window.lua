@@ -150,7 +150,7 @@ hl.window_rule({
     match = { class = "^com\\.hyprdots\\.assistant$" },
     workspace = "special:agent",
     float = true,
-    size = { "(monitor_w*0.7)", "(monitor_h*0.8)" },
+    size = { "(monitor_w*0.8)", "(monitor_h*0.8)" },
     center = true,
     animation = "popin 85%",
 })

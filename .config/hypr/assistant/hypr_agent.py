@@ -293,70 +293,128 @@ def health_summary():
         return f"{_c('33', '⚠')} {len(lines)} issue(s) flagged by the health monitor {dim('(' + when + ') ask me about them')}"
     return f"{_c('32', '✓')} health monitor: all clear {dim('(' + when + ')')}"
 
-LOGO_WIDTH, LOGO_HEIGHT = 22, 14
-# Terminal cells are about twice as tall as wide, so the 22x14 grid spans 1.57 x 2.0 logo units
-LOGO_HALF_X = 0.786
-SHADES = "█▓▒░"
+LOGO_WIDTH, LOGO_HEIGHT = 24, 14
+# Each text row shows two square pixels (▀ with the top in the foreground colour, the bottom in the background), so
+# the picture is 24 x 28 pixels. The hearth fills the lower part; embers rise into the space above it.
+LOGO_PIXEL = 2.3 / LOGO_WIDTH       # logo units per pixel: the hearth is 2.3 units wide (the mantel)
+LOGO_TOP = -1.62                    # logo y at the top pixel row
 
-DROP_CENTER_Y, DROP_RADIUS, DROP_APEX_Y, DROP_THICKNESS = 0.4, 0.6, -1.7, 0.17
+# The same hearth as the app's logo (hypr_assistant_app.py), as kinds of pixel
+FIRE_COLOURS = {"outer": (255, 92, 31), "mid": (255, 158, 41), "core": (255, 230, 140), "ember": (255, 200, 90)}
 
-def _in_drop(x, y, radius, apex_y):
-    """Teardrop: a circle plus the cone of tangent lines up to a point at (0, apex_y)."""
-    sin_t = radius / (DROP_CENTER_Y - apex_y)
-    tangent_y = DROP_CENTER_Y - radius * sin_t
-    if y > tangent_y:
-        return x * x + (y - DROP_CENTER_Y) ** 2 <= radius * radius
-    return apex_y <= y and abs(x) <= (y - apex_y) * sin_t / math.sqrt(1 - sin_t * sin_t)
+def _noise(t, seed):
+    """Smooth wobble in [-1, 1], from a few sines at unrelated speeds."""
+    return math.sin(t * 1.7 + seed) * 0.5 + math.sin(t * 2.9 + seed * 2.3) * 0.3 + math.sin(t * 5.3 + seed * 4.1) * 0.2
 
-def _in_logo(x, y):
-    """The Hyprland-style outline: a hollow drop with a slit at the tip, cut flat at the top."""
-    if y < -1:
+def _in_flame(x, y, cx, base, width, height, lean, t, seed):
+    """A tongue of flame: round at the bottom, narrowing to a tip that sways."""
+    if y >= base:
+        return (x - cx) ** 2 + ((y - base) * 1.6) ** 2 <= width ** 2
+    u = (base - y) / max(height * (1 + 0.12 * _noise(t * 3.1, seed)), 0.01)
+    if u > 1:
         return False
-    sin_t = DROP_RADIUS / (DROP_CENTER_Y - DROP_APEX_Y)
-    inner_apex = DROP_APEX_Y + DROP_THICKNESS / sin_t
-    outer = _in_drop(x, y, DROP_RADIUS, DROP_APEX_Y)
-    inner = _in_drop(x, y, DROP_RADIUS - DROP_THICKNESS, inner_apex)
-    return outer and not inner and not (abs(x) < 0.07 and y < -0.3)
+    centre = cx + (lean + 0.25 * _noise(t * 2.2, seed + 1)) * u * u * height
+    return abs(x - centre) <= width * (1 - u) ** 0.9 * (1 + 0.5 * u * (1 - u))
 
-def _in_sparkle(x, y, size):
-    """AI twist: four-point sparkle (astroid) in the middle of the drop."""
-    return (abs(x) / size) ** (2 / 3) + (abs(y - DROP_CENTER_Y) / size) ** (2 / 3) <= 1
+def _hearth_pixel(x, y, t, lit):
+    """What is at logo point (x, y): a kind of pixel and a brightness, or None for empty."""
+    floor = 0.86
+    in_opening = abs(x) <= 0.56 and (y >= 0.18 or x * x + (y - 0.18) ** 2 <= 0.56 ** 2) and y <= 0.98
+    if -1.12 <= x <= 1.12 and -0.7 <= y <= -0.5:
+        return "mantel", 1.0
+    if -1.05 <= x <= 1.05 and 0.94 <= y <= 1.08:
+        return "hearthstone", 1.0
+    if in_opening:
+        if lit > 0.01:
+            roar = lit
+            for kind, scale in (("core", 0.42), ("mid", 0.72), ("outer", 1.0)):
+                for cx, width, height, lean, seed in ((0.0, 0.2, 0.62, 0.0, 0), (-0.21, 0.13, 0.4, -0.1, 10),
+                                                     (0.21, 0.13, 0.42, 0.1, 20)):
+                    if _in_flame(x, y, cx, floor - 0.12, width * scale * min(1, 0.4 + lit), height * roar * scale,
+                                 lean, t, seed):
+                        return kind, 1.0
+        for angle, lx in ((-0.2, -0.12), (0.2, 0.12)):
+            dx, dy = x - lx, y - (floor - 0.02)
+            along = dx * math.cos(angle) + dy * math.sin(angle)
+            across = -dx * math.sin(angle) + dy * math.cos(angle)
+            if abs(along) <= 0.4 and abs(across) <= 0.075:
+                return ("ember", 0.8) if abs(along) > 0.3 and lit > 0.3 else ("log", 1.0)
+        return "soot", min(1.0, lit * max(0.0, 1 - math.hypot(x, y - floor) / 0.9))
+    if -0.95 <= x <= 0.95 and -0.52 <= y <= 0.98:
+        course = int((y + 0.52) / 0.25)
+        brick = int((x + 0.95 + (0.2 if course % 2 else 0)) / 0.4)
+        firelight = lit * max(0.0, 1 - math.hypot(x, y - 0.7) / 1.0) * (0.85 + 0.15 * _noise(t * 2, 7))
+        return "stone", (0.86 if (course + brick) % 2 else 1.0, (y + 0.52) / 1.5, firelight)
+    return None
 
-def _gradient(x, y, brightness):
-    """Blue at the bottom left to teal at the top right, like the Hyprland logo."""
-    t = max(0.0, min(1.0, (x / LOGO_HALF_X - y + 1) / 3))
-    r, g, b = (int((0 + 0 * t) * brightness), int((150 + 80 * t) * brightness), int((255 - 45 * t) * brightness))
-    return f"\033[38;2;{r};{g};{b}m"
+def _pixel_rgb(pixel):
+    kind, value = pixel
+    if kind == "stone":
+        shade, down, firelight = value
+        r, g, b = 0, (230 - 80 * down) * shade * 0.85, (205 + 50 * down) * shade * 0.85
+        warm = FIRE_COLOURS["mid"]
+        return tuple(int(c + (w - c) * 0.45 * firelight) for c, w in zip((r, g, b), warm))
+    if kind == "mantel":
+        return (60, 235, 215)
+    if kind == "hearthstone":
+        return (10, 80, 140)
+    if kind == "log":
+        return (92, 51, 28)
+    if kind == "soot":
+        warm = FIRE_COLOURS["outer"]
+        return tuple(int(c + (w - c) * 0.55 * value) for c, w in zip((14, 8, 8), warm))
+    r, g, b = FIRE_COLOURS[kind]
+    return (int(r * value), int(g * value), int(b * value)) if kind == "ember" else (r, g, b)
 
-def logo_frame(angle, pulse=1.0):
-    """One frame of the logo rotating around its vertical axis; returns coloured rows."""
-    face = abs(math.cos(angle))
+# Without truecolor: the nearest of the 16 terminal colours (foreground code; background is the same + 10)
+_ANSI16 = {"stone": None, "hearthstone": "34", "log": "90", "soot": "30", "outer": "31", "mid": "33", "core": "93",
+           "ember": "93"}
+
+def _pixel_ansi(pixel):
+    if pixel[0] == "mantel":  # the bright version of the accent
+        return str(int(ACCENT) + 60) if ACCENT.isdigit() and 30 <= int(ACCENT) <= 37 else ACCENT
+    code = _ANSI16[pixel[0]]
+    return ACCENT if code is None else code
+
+def logo_frame(t=0.0, lit=1.0, embers=()):
+    """One frame of the hearth: the fire at time t, lit from 0 (cold) to 1 (burning), with embers as (x, y, fade)
+    points in logo units. Returns coloured rows of LOGO_WIDTH characters."""
+    def pixel(col, prow):
+        x = (col + 0.5) * LOGO_PIXEL - 1.15
+        y = LOGO_TOP + (prow + 0.5) * LOGO_PIXEL
+        for ex, ey, fade in embers:
+            if fade > 0.25 and abs(ex - x) <= LOGO_PIXEL / 2 and abs(ey - y) <= LOGO_PIXEL / 2:
+                return "ember", fade
+        return _hearth_pixel(x, y, t, lit)
+
     rows = []
     for row in range(LOGO_HEIGHT):
-        y = (row - (LOGO_HEIGHT - 1) / 2) / ((LOGO_HEIGHT - 1) / 2)
         line = ""
         for col in range(LOGO_WIDTH):
-            screen_x = (col - (LOGO_WIDTH - 1) / 2) / ((LOGO_WIDTH - 1) / 2) * LOGO_HALF_X
-            if face < 0.08:
-                lit, spark = abs(screen_x) < 0.04 and -1 <= y <= 1, False
-                x = 0
-            else:
-                x = screen_x / face
-                spark = _in_sparkle(x, y, 0.3 * pulse)
-                lit = spark or _in_logo(x, y)
-            if not lit:
+            top, bottom = pixel(col, 2 * row), pixel(col, 2 * row + 1)
+            if top is None and bottom is None:
                 line += " "
             elif not USE_COLOR:
-                line += "◆" if spark else "█"
+                kinds = {p[0] for p in (top, bottom) if p}
+                line += "▲" if kinds & {"outer", "mid", "core"} else ("*" if "ember" in kinds else
+                        " " if kinds <= {"soot"} else "█")
             elif TRUECOLOR:
-                shade = 0.45 + 0.55 * face
-                color = "\033[38;2;255;255;255m" if spark else _gradient(x, y, shade)
-                line += f"{color}█\033[0m"
+                fg = "38;2;%d;%d;%d" % _pixel_rgb(top) if top else None
+                bg = "48;2;%d;%d;%d" % _pixel_rgb(bottom) if bottom else None
+                line += _half_block(fg, bg)
             else:
-                char = "█" if spark else SHADES[min(len(SHADES) - 1, int((1 - face) * len(SHADES)))]
-                line += _c("1;37" if spark else ACCENT, char)
+                fg = _pixel_ansi(top) if top else None
+                bg = str(int(_pixel_ansi(bottom)) + 10) if bottom else None
+                line += _half_block(fg, bg)
         rows.append(line)
     return rows
+
+def _half_block(fg, bg):
+    if fg and bg:
+        return f"\033[{fg};{bg}m▀\033[0m"
+    if fg:
+        return f"\033[{fg}m▀\033[0m"
+    return f"\033[{bg.replace('48;', '38;', 1) if bg.startswith('48;') else str(int(bg) - 10)}m▄\033[0m"
 
 _ANSI_RE = re.compile(r"\033\[[0-9;?]*[A-Za-z]")
 
@@ -424,7 +482,7 @@ def _banner_text():
     return [
         "", "",
         f"  {_c('1;' + theme_code(1), greeting())} {_c('1;37', '✦')}",
-        dim("  Your Hyprland PC helper. Ask in plain English."),
+        dim("  Hearthling: your friendly AI helper. Ask in plain English."),
         "",
         _model_line("chat  ", MODEL),
         (dim("  ● vision same model as chat") if VISION_SAME else _model_line("vision", VISION_MODEL)) if VISION_ENABLED
@@ -448,8 +506,8 @@ def _welcome_extras():
     lines += ["", dim("  Tab completes · ↑ recalls earlier questions · Ctrl+C or 'exit' to leave"), ""]
     return lines
 
-def _draw_banner(angle, text, pulse=1.0):
-    rows = logo_frame(angle, pulse)
+def _draw_banner(text, t=0.0, lit=1.0, embers=()):
+    rows = logo_frame(t, lit, embers)
     return "\n".join("  " + rows[i] + text[i] for i in range(LOGO_HEIGHT))
 
 def _print_extras(animated):
@@ -469,21 +527,30 @@ def print_banner():
         _print_extras(False)
         return
     if not (USE_COLOR and SETTINGS["animated_logo"]):
-        print(_draw_banner(0, text))
+        print(_draw_banner(text))
         _print_extras(False)
         return
-    frames = 40
+    frames, step = 45, 0.04
+    embers = []
     sys.stdout.write("\033[?25l")
     try:
         for i in range(frames + 1):
-            # Ease out so the logo spins fast and settles face-on
-            progress = 1 - (1 - i / frames) ** 2
+            # The fire catches from a spark, flares past full, then settles; embers drift up out of it
+            p = i / frames
+            lit = 1 - (1 - p) ** 3 + 0.35 * math.sin(p * math.pi) * (1 - p)
+            if 0.2 < p < 0.9 and random.random() < 0.45:
+                embers.append([random.uniform(-0.15, 0.15), 0.55, random.uniform(-0.15, 0.15), random.uniform(0.9, 1.4), 0.0])
+            for e in embers:
+                e[0] += e[2] * step
+                e[1] -= e[3] * step
+                e[4] += step
+            embers = [e for e in embers if e[1] > LOGO_TOP and e[4] < 1.4]
             if i:
                 sys.stdout.write(f"\033[{LOGO_HEIGHT - 1}A\r")
-            pulse = 1 + 0.2 * math.sin(i / frames * 6 * math.pi) * (1 - i / frames)
-            sys.stdout.write(_draw_banner(2 * math.pi * 2 * progress, text, pulse).replace("\n", "\033[K\n") + "\033[K")
+            points = [(x, y, 1 - age / 1.4) for x, y, _vx, _vy, age in embers] if i < frames else []
+            sys.stdout.write(_draw_banner(text, i * step * 1.5, min(lit, 1.25), points).replace("\n", "\033[K\n") + "\033[K")
             sys.stdout.flush()
-            time.sleep(0.04)
+            time.sleep(step)
     finally:
         sys.stdout.write("\033[?25h\n")
         sys.stdout.flush()
@@ -3452,7 +3519,7 @@ DOTFILES_NOTE = (f"~/.config/hypr is a symlink to {_HYPR_REAL}, so edit the file
 
 TOOL_CAPS_TEXT = "five searches and six page fetches"  # keep in step with TOOL_CAPS below
 SYSTEM_PROMPT = f"""
-You are a capable personal assistant embedded in the user's Hyprland desktop on {OS_NAME}. Your main job is the PC: you diagnose problems, explain what is happening, research fixes, and help manage the system and desktop. You also help with everyday questions, planning and the user's calendar. The user is an experienced Linux user who wants real answers, not caution.
+You are Hearthling, a capable personal assistant embedded in the user's Hyprland desktop on {OS_NAME}. Your main job is the PC: you diagnose problems, explain what is happening, research fixes, and help manage the system and desktop. You also help with everyday questions, planning and the user's calendar. The user is an experienced Linux user who wants real answers, not caution.
 
 Current OS: {OS_NAME}
 Desktop: Hyprland
@@ -4843,7 +4910,7 @@ def interactive_loop():
             print(f"\n{render_reply(result_text)}")
             print(dim(f"  {took:.1f}s · {steps} tool call{'s' if steps != 1 else ''}"))
             print(divider() + "\n")
-            subprocess.run(['notify-send', '-a', 'Ollama Agent', '--', 'Done.', result_text])
+            subprocess.run(['notify-send', '-a', 'Hearthling', '--', 'Done.', result_text])
     except (KeyboardInterrupt, EOFError):
         print(dim("\n  Bye."))
     finally:
@@ -4867,4 +4934,4 @@ if __name__ == "__main__":
 
     # Send output as a Hyprland notification
     # This provides immediate visual feedback overlayed on the desktop
-    subprocess.run(['notify-send', '-a', 'Ollama Agent', '--', 'Agent says:', result_text])
+    subprocess.run(['notify-send', '-a', 'Hearthling', '--', 'Agent says:', result_text])

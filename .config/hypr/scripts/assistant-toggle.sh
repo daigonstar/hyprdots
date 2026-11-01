@@ -7,11 +7,11 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/hypr_agent"
 assistant="$HOME/.config/hypr/assistant"
 
 if [[ -e "$state/disabled" ]]; then
-    notify-send -a "PC Assistant" "The assistant is turned off" "Run $assistant/setup.sh to enable it."
+    notify-send -a "Hearthling" "Hearthling is turned off" "Run $assistant/setup.sh to enable it."
     exit 0
 fi
 if ! command -v ollama >/dev/null 2>&1 || ! python3 -c "import ollama" 2>/dev/null; then
-    notify-send -a "PC Assistant" "The assistant is not set up" "Run $assistant/setup.sh to install it."
+    notify-send -a "Hearthling" "Hearthling is not set up" "Run $assistant/setup.sh to install it."
     exit 1
 fi
 
@@ -21,5 +21,5 @@ elif python3 "$assistant/hypr_assistant_app.py" --check 2>/dev/null; then
     # The GTK app ([assistant] interface = "app"); its app id is the same class, so the scratchpad rule applies
     exec python3 "$assistant/hypr_assistant_app.py"
 else
-    exec ghostty --class="$class" --title="Hyprland Assistant" -e python3 "$assistant/hypr_agent.py"
+    exec ghostty --class="$class" --title="Hearthling" -e python3 "$assistant/hypr_agent.py"
 fi

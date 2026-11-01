@@ -13,7 +13,7 @@ PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives"
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
-    "Assistant": "The local AI helper you open with Super+C: which models it uses and how it behaves.",
+    "Assistant": "Hearthling, the local AI helper you open with Super+C: which models it uses and how it behaves.",
     "Assistant Monitor": "This is NOT about your screens. It is the assistant's background health monitor: every few minutes it checks "
                          "your PC (failed services, full disks, heat, pending updates) and sends a desktop notification when something is "
                          "wrong. For screen layout see the Displays page.",

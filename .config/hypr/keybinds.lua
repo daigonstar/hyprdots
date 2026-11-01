@@ -19,7 +19,7 @@ local binds = {
     -- group: Apps
     { id = "terminal", label = "Open terminal", keys = "SUPER + T", action = hl.dsp.exec_cmd(terminal) },
     { id = "store", label = "Open app store", keys = "SUPER + A", action = hl.dsp.exec_cmd(store) },
-    { id = "assistant", label = "Open the assistant", keys = "SUPER + C", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/assistant-toggle.sh") },
+    { id = "assistant", label = "Open Hearthling", keys = "SUPER + C", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/assistant-toggle.sh") },
     { id = "browser", label = "Open web browser", keys = "SUPER + B", action = hl.dsp.exec_cmd(browser) },
     { id = "obsidian", label = "Open Obsidian", keys = "SUPER + O", action = hl.dsp.exec_cmd("flatpak run md.obsidian.Obsidian") },
     { id = "file_manager", label = "Open file manager", keys = "SUPER + E", action = hl.dsp.exec_cmd(file_manager) },

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The PC assistant as a GTK4 window (Super+C). Same agent as hypr_agent.py, which still runs in a terminal:
+"""Hearthling, the PC assistant, as a GTK4 window (Super+C). Same agent as hypr_agent.py, which still runs in a terminal:
 this file only replaces how it shows its work. Chat bubbles, live reasoning (dimmed, folds away when the answer
 comes), Allow/Deny buttons for anything that changes the system, code blocks with Copy and Run in terminal, and a
 terminal inside the window (needs vte4; without it the buttons open your own terminal).
@@ -311,37 +311,64 @@ def ease_out(p):
     return 1 - (1 - p) ** 3
 
 
-# --- The logo: the terminal banner's Hyprland drop with a sparkle, drawn as vectors so it is sharp at any size ---
-DROP_CY, DROP_R, DROP_APEX, DROP_THICK = agent.DROP_CENTER_Y, agent.DROP_RADIUS, agent.DROP_APEX_Y, agent.DROP_THICKNESS
+# --- The logo: a hearth with a fire burning in it, drawn as vectors so it is sharp at any size ---
+# The stonework takes the Theme page colours; the fire stays fire-coloured whatever the theme.
+FIRE_OUTER, FIRE_MID, FIRE_CORE = (1.0, 0.36, 0.12), (1.0, 0.62, 0.16), (1.0, 0.9, 0.55)
+EMBER = (1.0, 0.55, 0.15)
+HEARTH_FLOOR = 0.86                           # where the logs sit, in logo units (y grows downwards)
+OPENING_HALF, OPENING_SPRING = 0.56, 0.18     # half width of the fire opening, and where its arch starts
 
 
-def _drop_path(cr, radius, apex):
-    sin_t = radius / (DROP_CY - apex)
-    phi = math.asin(sin_t)
-    cr.move_to(0, apex)
-    cr.line_to(radius * math.cos(phi), DROP_CY - radius * sin_t)
-    cr.arc(0, DROP_CY, radius, -phi, math.pi + phi)
+def _noise(t, seed):
+    """Smooth, never-repeating wobble in [-1, 1], from a few sines at unrelated speeds."""
+    return (math.sin(t * 1.7 + seed) * 0.5 + math.sin(t * 2.9 + seed * 2.3) * 0.3 + math.sin(t * 5.3 + seed * 4.1) * 0.2)
+
+
+def _opening_path(cr, half=OPENING_HALF, floor=HEARTH_FLOOR + 0.12):
+    cr.move_to(-half, floor)
+    cr.line_to(-half, OPENING_SPRING)
+    cr.arc(0, OPENING_SPRING, half, math.pi, 2 * math.pi)
+    cr.line_to(half, floor)
     cr.close_path()
 
 
-def _sparkle_path(cr, size, cy=DROP_CY, cx=0.0):
-    for i in range(97):
-        a = i / 96 * 2 * math.pi
-        x, y = cx + size * math.cos(a) ** 3, cy + size * math.sin(a) ** 3
-        cr.move_to(x, y) if i == 0 else cr.line_to(x, y)
+def _rounded_rect(cr, x, y, w, h, r):
+    cr.new_sub_path()
+    cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
+    cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+    cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+    cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+    cr.close_path()
+
+
+def _flame_path(cr, cx, base, width, height, lean, t, seed):
+    """One tongue of flame: a round bottom that narrows to a flickering tip."""
+    tip_x = cx + lean * height + 0.10 * width * _noise(t * 2.2, seed)
+    tip_y = base - height * (1 + 0.10 * _noise(t * 3.1, seed + 1))
+    bulge_l = 1 + 0.12 * _noise(t * 2.6, seed + 2)
+    bulge_r = 1 + 0.12 * _noise(t * 2.4, seed + 3)
+    cr.move_to(cx, base + width * 0.55)
+    cr.curve_to(cx - width * 1.15 * bulge_l, base + width * 0.5, cx - width * 1.05 * bulge_l, base - height * 0.4,
+                tip_x, tip_y)
+    cr.curve_to(cx + width * 1.05 * bulge_r, base - height * 0.4, cx + width * 1.15 * bulge_r, base + width * 0.5,
+                cx, base + width * 0.55)
     cr.close_path()
 
 
 class Logo(Gtk.DrawingArea):
-    """Spins in on start, sways gently when idle, and spins with orbiting sparks while the assistant works."""
+    """A hearth whose fire lights up on start, flickers gently when idle, and roars, throwing embers, while the
+    assistant works."""
 
     def __init__(self, size, intro=True, particles=True):
         super().__init__(content_width=size, content_height=round(size * 1.15))
+        self.size = size
         self.particles = particles
-        self.angle, self.busy, self.busy_level, self.settle = 0.0, False, 0.0, None
+        self.busy, self.busy_level = False, 0.0
+        self.lit = 0.0 if intro else 1.0      # 0 = cold hearth, 1 = fire burning
         self.started = time.monotonic() if intro else None
         self.last = time.monotonic()
-        self.clock = 0.0
+        self.clock = random.uniform(0, 100)   # so the avatars down the chat do not flicker in step
+        self.embers = []
         self.set_draw_func(self._draw)
         self.tick = self.add_tick_callback(self._tick)
 
@@ -349,123 +376,161 @@ class Logo(Gtk.DrawingArea):
         if busy and not self.tick:
             self.last = time.monotonic()
             self.tick = self.add_tick_callback(self._tick)
-        if not busy and self.busy:
-            self.settle = math.ceil(self.angle / (2 * math.pi)) * 2 * math.pi
         self.busy = busy
 
     def freeze(self):
-        """Stops animating (old answers keep a still logo); it settles face-on first."""
+        """Stops animating (old answers keep a still logo); the fire dies down to a calm flame first."""
         self.set_busy(False)
         self._freeze = True
 
     def _tick(self, _widget, _clock):
         now = time.monotonic()
         dt, self.last = min(now - self.last, 0.1), now
-        self.clock += dt
-        self.busy_level += ((1.0 if self.busy else 0.0) - self.busy_level) * min(1.0, dt * 4)
+        self.busy_level += ((1.0 if self.busy else 0.0) - self.busy_level) * min(1.0, dt * 3)
+        self.clock += dt * (1 + 0.9 * self.busy_level)
         if self.started is not None:
-            p = min(1.0, (now - self.started) / 1.7)
-            self.angle = 4 * math.pi * ease_out(p)
-            self.pulse = 1 + 0.25 * math.sin(p * 6 * math.pi) * (1 - p)
+            # Lighting the fire: a spark catches, flares past full, then settles
+            p = min(1.0, (now - self.started) / 1.6)
+            self.lit = ease_out(p) + 0.35 * math.sin(p * math.pi) * (1 - p)
             if p >= 1:
-                self.started = None
-                self.angle = 0.0
-        elif self.busy:
-            self.angle += dt * (2.2 + 1.2 * self.busy_level)
-            self.pulse = 1 + 0.18 * math.sin(self.clock * 6)
-        else:
-            if self.settle is not None:
-                self.angle += (self.settle - self.angle) * min(1.0, dt * 5)
-                if abs(self.settle - self.angle) < 0.002:
-                    self.angle, self.settle = 0.0, None
-            else:
-                self.angle = 0.22 * math.sin(self.clock * 0.9)
-            self.pulse = 1 + 0.07 * math.sin(self.clock * 2.4)
-            if getattr(self, "_freeze", False) and self.settle is None and self.busy_level < 0.02:
-                self.angle, self.pulse = 0.0, 1.0
-                self.queue_draw()
-                self.tick = None
-                return GLib.SOURCE_REMOVE
+                self.started, self.lit = None, 1.0
+        if self.particles:
+            self._move_embers(dt)
+        if getattr(self, "_freeze", False) and self.started is None and self.busy_level < 0.02 and not self.embers:
+            self.busy_level = 0.0
+            self.queue_draw()
+            self.tick = None
+            return GLib.SOURCE_REMOVE
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
+    def _move_embers(self, dt):
+        rate = (0.8 + 9 * self.busy_level) * self.lit if not getattr(self, "_freeze", False) else 0
+        if random.random() < rate * dt:
+            self.embers.append([random.uniform(-0.18, 0.18), HEARTH_FLOOR - 0.25, random.uniform(-0.12, 0.12),
+                                -random.uniform(0.45, 0.8) * (1 + 0.6 * self.busy_level), 0.0,
+                                random.uniform(1.1, 2.0), random.uniform(0, 6)])
+        for e in self.embers:
+            e[0] += (e[2] + 0.18 * math.sin(e[4] * 4 + e[6])) * dt
+            e[1] += e[3] * dt
+            e[4] += dt
+        self.embers = [e for e in self.embers if e[4] < e[5]]
+
     def _draw(self, _area, cr, w, h):
         s = min(w / 2.5, h / 2.6)
-        cr.translate(w / 2, h / 2)
+        cr.translate(w / 2, h / 2 - 0.12 * s)
         cr.scale(s, s)
-        pulse = getattr(self, "pulse", 1.0)
+        t, lit, busy = self.clock, self.lit, self.busy_level
+        small = self.size < 60
         a1, a2 = rgb(C["accent"]), rgb(C["secondary"])
+        flicker = 0.85 + 0.15 * _noise(t * 2, 7)
+        warmth = lit * (0.55 + 0.45 * busy) * flicker
 
-        # Glow behind the drop, stronger while working
-        glow = 0.20 + 0.25 * self.busy_level + 0.05 * math.sin(self.clock * 2)
-        g = cairo.RadialGradient(0, 0.25, 0.05, 0, 0.25, 1.25)
-        g.add_color_stop_rgba(0, *a1, glow)
-        g.add_color_stop_rgba(1, *a1, 0)
+        # Warm glow around the whole hearth, stronger while working
+        g = cairo.RadialGradient(0, 0.55, 0.05, 0, 0.55, 1.3)
+        g.add_color_stop_rgba(0, *FIRE_MID, 0.30 * warmth)
+        g.add_color_stop_rgba(0.5, *FIRE_OUTER, 0.10 * warmth)
+        g.add_color_stop_rgba(1, *FIRE_OUTER, 0)
         cr.set_source(g)
-        cr.arc(0, 0.25, 1.25, 0, 2 * math.pi)
+        cr.arc(0, 0.55, 1.3, 0, 2 * math.pi)
         cr.fill()
 
-        sparks = []
-        if self.particles and self.busy_level > 0.01:
-            for i in range(7):
-                a = self.clock * 1.9 + i * 2 * math.pi / 7
-                depth = math.sin(a)
-                sparks.append((depth, 1.08 * math.cos(a), 0.25 + 0.32 * depth + 0.12 * math.sin(a * 2 + i),
-                               0.035 + 0.025 * (depth + 1) / 2, self.busy_level * (0.45 + 0.55 * (depth + 1) / 2)))
-        for depth, x, y, r, alpha in sparks:
-            if depth < 0:
-                cr.set_source_rgba(*a1, alpha * 0.6)
-                cr.arc(x, y, r, 0, 2 * math.pi)
-                cr.fill()
-
-        face = math.cos(self.angle)
-        squash = max(abs(face), 0.03)
-        shade = 0.5 + 0.5 * abs(face) if face >= 0 else 0.35 + 0.4 * abs(face)
+        # Stonework: the chimney breast with the opening cut out, then the mantel shelf on top
         cr.save()
-        cr.scale(squash, 1)
-        # Cut flat at the top with a slit down from the tip, like the terminal logo
-        for x0, y0, x1 in ((-2, -1, -0.07), (0.07, -1, 2), (-0.07, -0.3, 0.07)):
-            cr.rectangle(x0, y0, x1 - x0, 3)
-        cr.clip()
         cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD)
-        _drop_path(cr, DROP_R, DROP_APEX)
-        inner_apex = DROP_APEX + DROP_THICK / (DROP_R / (DROP_CY - DROP_APEX))
-        _drop_path(cr, DROP_R - DROP_THICK, inner_apex)
-        grad = cairo.LinearGradient(-0.6, 1.0, 0.6, -1.0)
-        grad.add_color_stop_rgb(0, *(c * shade for c in a2))
-        grad.add_color_stop_rgb(1, *(c * shade for c in a1))
-        cr.set_source(grad)
+        _rounded_rect(cr, -0.95, -0.52, 1.9, 1.5, 0.08)
+        _opening_path(cr)
+        stone = cairo.LinearGradient(0, -0.52, 0, 0.98)
+        stone.add_color_stop_rgb(0, *a1)
+        stone.add_color_stop_rgb(1, *(c * 0.7 for c in a2))
+        cr.set_source(stone)
         cr.fill_preserve()
-        # A band of light sweeps over the face as it turns
-        sweep = math.sin(self.angle) * 1.4
-        band = cairo.LinearGradient(sweep - 0.5, -1, sweep + 0.5, 1)
-        band.add_color_stop_rgba(0, 1, 1, 1, 0)
-        band.add_color_stop_rgba(0.5, 1, 1, 1, 0.35 * abs(math.sin(self.angle)) + 0.06)
-        band.add_color_stop_rgba(1, 1, 1, 1, 0)
-        cr.set_source(band)
-        cr.fill()
+        cr.clip()
+        if not small:
+            # Mortar lines between the stones, staggered like real brickwork
+            cr.set_source_rgba(0, 0, 0, 0.22)
+            cr.set_line_width(0.025)
+            rows = [(-0.52 + i * 0.3) for i in range(6)]
+            for i, y in enumerate(rows):
+                cr.move_to(-1, y)
+                cr.line_to(1, y)
+                for x in [-0.95 + j * 0.42 + (0.21 if i % 2 else 0) for j in range(6)]:
+                    cr.move_to(x, y)
+                    cr.line_to(x, y + 0.3)
+            cr.stroke()
+        # Firelight on the stones around the opening
+        light = cairo.RadialGradient(0, 0.7, 0.2, 0, 0.7, 1.1)
+        light.add_color_stop_rgba(0, *FIRE_MID, 0.75 * warmth)
+        light.add_color_stop_rgba(1, *FIRE_MID, 0)
+        cr.set_source(light)
+        cr.paint()
         cr.restore()
 
-        # The sparkle in the middle, with a soft white halo
+        # The hearthstone the fire sits on, and the mantel: a shelf a little wider than the chimney breast
+        _rounded_rect(cr, -1.05, 0.94, 2.1, 0.14, 0.05)
+        cr.set_source_rgb(*(c * 0.55 for c in a2))
+        cr.fill()
+        _rounded_rect(cr, -1.12, -0.7, 2.24, 0.2, 0.06)
+        mantel = cairo.LinearGradient(0, -0.7, 0, -0.5)
+        mantel.add_color_stop_rgb(0, *(min(1, c * 1.15 + 0.08) for c in a1))
+        mantel.add_color_stop_rgb(1, *(c * 0.75 for c in a1))
+        cr.set_source(mantel)
+        cr.fill()
+
+        # Inside the opening: dark soot, lit from below by the fire
         cr.save()
-        cr.scale(squash, 1)
-        size = 0.3 * pulse
-        halo = cairo.RadialGradient(0, DROP_CY, 0, 0, DROP_CY, size * 1.6)
-        halo.add_color_stop_rgba(0, 1, 1, 1, 0.55)
-        halo.add_color_stop_rgba(1, 1, 1, 1, 0)
-        cr.set_source(halo)
-        cr.arc(0, DROP_CY, size * 1.6, 0, 2 * math.pi)
-        cr.fill()
-        _sparkle_path(cr, size)
-        cr.set_source_rgb(1, 1, 1)
-        cr.fill()
+        _opening_path(cr)
+        cr.clip()
+        cr.set_source_rgb(0.05, 0.03, 0.03)
+        cr.paint()
+        inside = cairo.RadialGradient(0, HEARTH_FLOOR, 0.05, 0, HEARTH_FLOOR, 0.9)
+        inside.add_color_stop_rgba(0, *FIRE_OUTER, 0.65 * warmth)
+        inside.add_color_stop_rgba(1, *FIRE_OUTER, 0)
+        cr.set_source(inside)
+        cr.paint()
+
+        # Two crossed logs, with glowing ends
+        for angle, x in ((-0.2, -0.12), (0.2, 0.12)):
+            cr.save()
+            cr.translate(x, HEARTH_FLOOR - 0.02)
+            cr.rotate(angle)
+            _rounded_rect(cr, -0.4, -0.07, 0.8, 0.14, 0.07)
+            cr.set_source_rgb(0.36, 0.2, 0.11)
+            cr.fill()
+            cr.set_source_rgba(*EMBER, 0.5 + 0.4 * lit * flicker)
+            cr.arc(0.33 if angle > 0 else -0.33, 0, 0.045, 0, 2 * math.pi)
+            cr.fill()
+            cr.restore()
+
+        # The fire: three tongues, each drawn in three layers from the deep red edge to the bright core
+        if lit > 0.01:
+            roar = lit * (1 + 0.3 * busy)
+            base = HEARTH_FLOOR - 0.12
+            tongues = ((0.0, 0.2, 0.62, 0.0, 0), (-0.2, 0.13, 0.4, -0.25, 10), (0.2, 0.13, 0.42, 0.25, 20))
+            for colour, scale, alpha in ((FIRE_OUTER, 1.0, 0.95), (FIRE_MID, 0.72, 0.95), (FIRE_CORE, 0.42, 1.0)):
+                for cx, width, height, lean, seed in tongues:
+                    h_now = height * roar * scale * (0.92 + 0.08 * _noise(t * 4, seed + 5))
+                    _flame_path(cr, cx, base, width * scale * min(1, 0.4 + lit), h_now, lean * 0.4, t, seed)
+                fire = cairo.LinearGradient(0, base + 0.1, 0, base - 0.8)
+                fire.add_color_stop_rgba(0, *colour, alpha)
+                fire.add_color_stop_rgba(1, *colour, alpha * 0.75)
+                cr.set_source(fire)
+                cr.fill()
         cr.restore()
 
-        for depth, x, y, r, alpha in sparks:
-            if depth >= 0:
-                cr.set_source_rgba(1, 1, 1, alpha)
-                _sparkle_path(cr, r * 2.4, y, x)
-                cr.fill()
+        # Embers drifting up out of the fire
+        for x, y, _vx, _vy, age, life, _phase in self.embers:
+            fade = (1 - age / life) * min(1, age * 4)
+            r = 0.022 + 0.018 * (1 - age / life)
+            halo = cairo.RadialGradient(x, y, 0, x, y, r * 3)
+            halo.add_color_stop_rgba(0, *FIRE_MID, 0.5 * fade)
+            halo.add_color_stop_rgba(1, *FIRE_MID, 0)
+            cr.set_source(halo)
+            cr.arc(x, y, r * 3, 0, 2 * math.pi)
+            cr.fill()
+            cr.set_source_rgba(*FIRE_CORE, fade)
+            cr.arc(x, y, r, 0, 2 * math.pi)
+            cr.fill()
 
 
 # --- Light markdown to widgets ---
@@ -1204,7 +1269,7 @@ class Assistant(Adw.Application):
         provider.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
-        self.window = Adw.ApplicationWindow(application=self, title="Hyprland Assistant", default_width=900,
+        self.window = Adw.ApplicationWindow(application=self, title="Hearthling", default_width=900,
                                             default_height=760, css_classes=["assistant"])
         self.toasts = Adw.ToastOverlay()
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -1247,7 +1312,7 @@ class Assistant(Adw.Application):
         self.header_logo = Logo(30, intro=True, particles=False)
         title.append(self.header_logo)
         words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
-        words.append(Gtk.Label(label="Hyprland Assistant", xalign=0, css_classes=["title-main"]))
+        words.append(Gtk.Label(label="Hearthling", xalign=0, css_classes=["title-main"]))
         self.subtitle = Gtk.Label(xalign=0, css_classes=["title-sub"])
         words.append(self.subtitle)
         title.append(words)
@@ -1283,7 +1348,7 @@ class Assistant(Adw.Application):
         self.big_logo.set_halign(Gtk.Align.CENTER)
         box.append(self.big_logo)
         box.append(Gtk.Label(label=agent.greeting(), css_classes=["greeting"], justify=Gtk.Justification.CENTER, wrap=True))
-        box.append(Gtk.Label(label="Your Hyprland PC helper. Ask in plain English.", css_classes=["tagline"],
+        box.append(Gtk.Label(label="Your friendly AI helper for this PC and beyond. Ask in plain English.", css_classes=["tagline"],
                              justify=Gtk.Justification.CENTER, wrap=True))
         self.status_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4, column_spacing=8,
                                       row_spacing=8, margin_top=14, halign=Gtk.Align.CENTER)
@@ -1872,7 +1937,7 @@ class Assistant(Adw.Application):
         self._update_send()
         self.refresh_status()
         if not is_slash and not self.window.is_active():
-            subprocess.Popen(["notify-send", "-a", "PC Assistant", "--", "Done.", reply[:600]])
+            subprocess.Popen(["notify-send", "-a", "Hearthling", "--", "Done.", reply[:600]])
 
     def _busy(self, busy):
         self.header_logo.set_busy(busy)
@@ -1898,7 +1963,7 @@ class Assistant(Adw.Application):
 
     def attention(self, title, body):
         if not self.window.is_active():
-            subprocess.Popen(["notify-send", "-a", "PC Assistant", "-u", "critical", "--", title, body[:300]])
+            subprocess.Popen(["notify-send", "-a", "Hearthling", "-u", "critical", "--", title, body[:300]])
 
     def clear(self):
         if self.worker:
@@ -1920,6 +1985,7 @@ APP = Assistant()
 
 
 def main():
+    GLib.set_application_name("Hearthling")  # shown by the file picker and other system dialogs
     install_hooks()
     return APP.run([sys.argv[0]])
 

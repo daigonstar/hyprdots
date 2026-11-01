@@ -24,7 +24,7 @@ NOT_MODULES = {"layer", "position", "height", "width", "spacing", "margin", "mar
 UNUSED: set[str] = set()  # modules defined in the config but kept off the Bar layout page
 # Friendly names and icons for the editor (anything else shows its own name)
 KNOWN = {
-    "clock": ("Clock", "\U000f0954"), "custom/assistant": ("Assistant", "\U000f0674"), "hyprland/window": ("Window title", "\U000f05b5"),
+    "clock": ("Clock", "\U000f0954"), "custom/assistant": ("Hearthling", "\U000f0674"), "hyprland/window": ("Window title", "\U000f05b5"),
     "hyprland/workspaces": ("Workspaces", "\U000f0570"), "cava": ("Music bars", "\U000f075a"), "pulseaudio": ("Sound", "\U000f057e"),
     "bluetooth": ("Bluetooth", "\U000f00af"), "custom/updates": ("Updates", "\U000f03d7"), "battery": ("Battery", "\U000f0079"),
     "network": ("Network", "\U000f0200"), "custom/power": ("Power menu", "\U000f0425"), "custom/noti": ("Notifications", "\U000f009a"),
