@@ -118,10 +118,10 @@
             "format-wifi": "󰖩",
             "format-ethernet":"󰈀",
             "format-disconnected": "",
-            "tooltip-format-disconnected": "Error",
-            "tooltip-format-wifi": "{essid} ({signalStrength}%) ",
-            "tooltip-format-ethernet": "{ifname} 󰈀 ",
-            "on-click": "ghostty -e nmtui"
+            "tooltip-format-disconnected": "Not connected\nClick for network settings",
+            "tooltip-format-wifi": "{essid} ({signalStrength}%) \n{ipaddr}\nClick for network settings",
+            "tooltip-format-ethernet": "{ifname} 󰈀  {ipaddr}\nClick for network settings",
+            "on-click": "~/.config/hypr/scripts/settings.sh --page=Network"
         },
 
         "bluetooth": {

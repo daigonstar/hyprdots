@@ -4,7 +4,9 @@
 Run it to open the calendar under the bar; run it again (or click outside,
 press Escape / q) to close it. Colours come from waybar's wallust theme.
 Keys: arrows / h l = month, k j or PageUp/PageDown = year, t or Home = today,
-r = refresh events.
+r = refresh events, a = add an event to the selected day (kept on this PC).
+`popup_calendar.py --refresh` downloads every calendar
+again without opening the popup (and reloads an open one); Settings uses it.
 
 Settings and calendar links live in ~/.config/hypr/user_settings.toml
 ([calendar]); put private iCal links (Google Calendar "Secret address in iCal
@@ -15,6 +17,7 @@ import calendar
 import datetime
 import hashlib
 import os
+import signal
 import sys
 import threading
 import time
@@ -28,6 +31,7 @@ from gi.repository import Gdk, GLib, Gtk, GtkLayerShell
 
 COLORS = os.path.expanduser("~/.config/waybar/colors/colors.css")
 sys.path.insert(0, os.path.expanduser("~/.config/hypr/assistant"))
+import localcal  # noqa: E402
 import usersettings  # noqa: E402
 
 CFG = usersettings.section("calendar", {
@@ -102,6 +106,17 @@ window { background: transparent; }
 .ev-title { font-size: 13px; color: @foreground; }
 .ev-note { font-size: 12px; color: @color4; }
 .sep { background: alpha(@color10, 0.5); min-height: 1px; }
+.nav.small { font-size: 12px; padding: 0 8px; min-height: 0; }
+.nav.add { color: @color12; }
+.nav.primary { background: alpha(@color10, 0.55); color: @foreground; }
+entry {
+    background: alpha(@color0, 0.35); color: @foreground; caret-color: @foreground;
+    border: 1px solid alpha(@color10, 0.6); border-radius: 8px; padding: 4px 8px; box-shadow: none;
+}
+entry:focus { border-color: @color12; }
+entry:disabled { color: alpha(@foreground, 0.35); }
+check { border-radius: 4px; }
+checkbutton label { color: @color7; font-size: 13px; }
 """
 
 
@@ -143,8 +158,10 @@ def fetch_source(url, force=False):
 
 
 def load_events(force=False):
-    """Returns ({date: [(sort_key, time_text, title, calname)]}, status_text)."""
-    sources = read_sources()
+    """Returns ({date: [(sort_key, time_text, title, calname, uid)]}, status_text). uid is set only for events kept
+    on this PC (they can be deleted here); feeds are read-only."""
+    remote = read_sources()
+    sources = remote + ([(localcal.NAME, None)] if os.path.exists(localcal.PATH) else [])
     if not sources:
         return {}, "no_sources"
     try:
@@ -160,7 +177,11 @@ def load_events(force=False):
     failed = 0
     for name, url in sources:
         try:
-            cal = icalendar.Calendar.from_ical(fetch_source(url, force))
+            if url is None:
+                with open(localcal.PATH, "rb") as f:
+                    cal = icalendar.Calendar.from_ical(f.read())
+            else:
+                cal = icalendar.Calendar.from_ical(fetch_source(url, force))
             found = recurring_ical_events.of(cal).between(window_start, window_end)
         except Exception:
             failed += 1
@@ -172,6 +193,7 @@ def load_events(force=False):
             end_prop = ev.get("DTEND")
             end = end_prop.dt if end_prop else start
             title = str(ev.get("SUMMARY", "(no title)"))
+            uid = str(ev.get("UID", "")) if url is None else None
             if isinstance(start, datetime.datetime):
                 start = start.astimezone() if start.tzinfo else start
                 end = end.astimezone() if isinstance(end, datetime.datetime) and end.tzinfo else end
@@ -186,16 +208,16 @@ def load_events(force=False):
                         text = start.strftime(TIME_FMT) + " →"
                     else:
                         text = "continues"
-                    days.setdefault(day, []).append((start.strftime("%H:%M") if offset == 0 else "00:00", text, title, name))
+                    days.setdefault(day, []).append((start.strftime("%H:%M") if offset == 0 else "00:00", text, title, name, uid))
             else:
                 first = start
                 last = (end - datetime.timedelta(days=1)) if isinstance(end, datetime.date) and end > start else start
                 for offset in range((last - first).days + 1):
                     day = first + datetime.timedelta(days=offset)
-                    days.setdefault(day, []).append(("00:00", "All day", title, name))
+                    days.setdefault(day, []).append(("00:00", "All day", title, name, uid))
     for items in days.values():
         items.sort(key=lambda e: (e[1] != "All day", e[0], e[2]))
-    status = "sync_failed" if failed == len(sources) else ("partial" if failed else "ok")
+    status = "sync_failed" if failed and failed == len(remote) else ("partial" if failed else "ok")
     return days, status
 
 
@@ -207,6 +229,8 @@ class CalendarPopup(Gtk.Window):
         self.selected = today
         self.events = {}
         self.status = "loading"
+        self.form = None  # the add-an-event widgets while the form is open
+        self.armed = None  # uid of the event whose delete button was clicked once
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
@@ -262,6 +286,8 @@ class CalendarPopup(Gtk.Window):
         self.tick()
         GLib.timeout_add_seconds(1, self.tick)
         self.refresh_events()
+        # `--refresh` signals an open popup once it has downloaded fresh copies
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, lambda: self.refresh_events() or True)
 
     def refresh_events(self, force=False):
         def work():
@@ -324,6 +350,8 @@ class CalendarPopup(Gtk.Window):
         return True
 
     def render_events(self):
+        if self.form:
+            return
         for child in self.events_box.get_children():
             self.events_box.remove(child)
         today = datetime.date.today()
@@ -346,7 +374,7 @@ class CalendarPopup(Gtk.Window):
             "partial": "Some calendars failed to sync.",
         }
         items = self.events.get(self.selected, [])
-        for _key, when, text, _cal in items[:MAX_LISTED]:
+        for _key, when, text, _cal, uid in items[:MAX_LISTED]:
             row = Gtk.Box(spacing=10)
             t = self.label(when, "ev-time")
             t.set_xalign(0)
@@ -357,6 +385,9 @@ class CalendarPopup(Gtk.Window):
             name.set_max_width_chars(28)
             row.pack_start(t, False, False, 0)
             row.pack_start(name, True, True, 0)
+            if uid:
+                row.pack_start(self.button("delete?" if self.armed == uid else "×", lambda u=uid: self.delete(u), "small"),
+                               False, False, 0)
             self.events_box.pack_start(row, False, False, 0)
         if len(items) > MAX_LISTED:
             self.events_box.pack_start(self.note(f"+{len(items) - MAX_LISTED} more"), False, False, 0)
@@ -364,7 +395,82 @@ class CalendarPopup(Gtk.Window):
             self.events_box.pack_start(self.note("No events"), False, False, 0)
         if self.status in notes:
             self.events_box.pack_start(self.note(notes[self.status]), False, False, 0)
+        add = self.button("+ Add event", self.open_form, "small", "add")
+        add.set_halign(Gtk.Align.START)
+        self.events_box.pack_start(add, False, False, 2)
         self.events_box.show_all()
+
+    def button(self, text, fn, *classes):
+        b = Gtk.Button(label=text)
+        for c in ("nav", *classes):
+            b.get_style_context().add_class(c)
+        b.set_relief(Gtk.ReliefStyle.NONE)
+        b.connect("clicked", lambda _b: fn())
+        return b
+
+    # ---- events kept on this PC ----------------------------------------------------------------------------
+    def delete(self, uid):
+        """First click asks (the button turns into "delete?"), the second removes every repeat of the event."""
+        if self.armed != uid:
+            self.armed = uid
+            return self.render_events()
+        self.armed = None
+        localcal.remove(uid)
+        self.refresh_events()
+
+    def open_form(self):
+        for child in self.events_box.get_children():
+            self.events_box.remove(child)
+        head = self.label("New event · " + self.selected.strftime("%A %d %B"))
+        head.set_name("events-title")
+        head.set_xalign(0)
+        title = Gtk.Entry(placeholder_text="What is it?")
+        all_day = Gtk.CheckButton(label="All day")
+        times = Gtk.Box(spacing=6)
+        start, end = Gtk.Entry(text="09:00", width_chars=6), Gtk.Entry(text="10:00", width_chars=6)
+        times.pack_start(start, False, False, 0)
+        times.pack_start(self.label("to", "ev-time"), False, False, 0)
+        times.pack_start(end, False, False, 0)
+        all_day.connect("toggled", lambda w: times.set_sensitive(not w.get_active()))
+        repeats = list(localcal.REPEATS)
+        repeat = self.button("Repeat: Never", lambda: None, "small")
+        repeat.set_halign(Gtk.Align.START)
+
+        def cycle(_b):
+            self.form["repeat"] = repeats[(repeats.index(self.form["repeat"]) + 1) % len(repeats)]
+            repeat.set_label("Repeat: " + localcal.REPEATS[self.form["repeat"]])
+        repeat.connect("clicked", cycle)
+        error = self.note("")
+        actions = Gtk.Box(spacing=6)
+        actions.pack_end(self.button("Add", self.save_form, "small", "primary"), False, False, 0)
+        actions.pack_end(self.button("Cancel", self.close_form, "small"), False, False, 0)
+        for entry in (title, start, end):
+            entry.connect("activate", lambda _e: self.save_form())
+        for w in (head, title, all_day, times, repeat, error, actions):
+            self.events_box.pack_start(w, False, False, 0)
+        self.form = {"title": title, "all_day": all_day, "start": start, "end": end, "repeat": "", "error": error}
+        self.events_box.show_all()
+        error.hide()
+        title.grab_focus()
+
+    def save_form(self):
+        f = self.form
+        try:
+            if f["all_day"].get_active():
+                localcal.add(f["title"].get_text(), self.selected, repeat=f["repeat"])
+            else:
+                localcal.add(f["title"].get_text(), self.selected, localcal.parse_time(f["start"].get_text()),
+                             localcal.parse_time(f["end"].get_text()), repeat=f["repeat"])
+        except (ValueError, OSError) as e:
+            f["error"].set_text(str(e))
+            f["error"].show()
+            return
+        self.close_form()
+        self.refresh_events()
+
+    def close_form(self):
+        self.form = None
+        self.render_events()
 
     def note(self, text):
         lbl = self.label(text, "ev-note")
@@ -387,7 +493,14 @@ class CalendarPopup(Gtk.Window):
 
     def on_key(self, _w, event):
         key = Gdk.keyval_name(event.keyval)
-        if key in ("Escape", "q"):
+        if self.form:  # typing goes to the form; Escape closes it instead of the popup
+            if key == "Escape":
+                self.close_form()
+                return True
+            return False
+        if key == "a":
+            self.open_form()
+        elif key in ("Escape", "q"):
             self.close_popup()
         elif key in ("Left", "h"):
             self.shift(-1)
@@ -416,6 +529,24 @@ class CalendarPopup(Gtk.Window):
         Gtk.main_quit()
 
 
+def refresh_now():
+    """Downloads every calendar again, tells an open popup to reload, and prints how it went."""
+    _days, status = load_events(force=True)
+    try:
+        with open(LOCK) as f:
+            os.kill(int(f.read().strip()), signal.SIGUSR1)
+    except (OSError, ValueError):
+        pass
+    print({
+        "ok": f"Calendars refreshed ({len(read_sources())}).",
+        "partial": "Some calendars could not be downloaded; the others are refreshed.",
+        "sync_failed": "Could not download the calendars. Check the links and your connection.",
+        "no_sources": "There are no calendar links to refresh.",
+        "no_libs": "Install python-recurring-ical-events first.",
+    }[status])
+    return 0 if status == "ok" else 1
+
+
 def toggle_existing():
     """Second launch closes the open popup instead of stacking another."""
     try:
@@ -433,6 +564,8 @@ def toggle_existing():
 
 
 def main():
+    if "--refresh" in sys.argv[1:]:
+        return refresh_now()
     if toggle_existing():
         return 0
     with open(LOCK, "w") as f:

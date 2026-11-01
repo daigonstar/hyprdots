@@ -18,10 +18,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 import copy
+import datetime
 
-from . import cloud, displays, mimeapps, models
+from . import cloud, displays, mimeapps, models, network
 from .schema import BY_ID, PAGE_INTRO, PAGES, Setting, for_page
 from .store import RESET, STARTUP_ID, Store
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "assistant"))
+import localcal  # noqa: E402  (shared with the clock popup and the assistant)
 
 MENU_W = 20
 STYLE = {
@@ -41,9 +45,22 @@ def assistant_disabled() -> bool:
     return (state_dir() / "disabled").exists()
 
 
+def refresh_calendars() -> tuple[bool, str]:
+    """Downloads the saved calendars again now, instead of waiting for the clock popup's cache to run out."""
+    script = Path.home() / ".config/waybar/scripts/popup_calendar.py"
+    if not script.exists():
+        return False, f"{script} is missing."
+    try:
+        done = subprocess.run([sys.executable, str(script), "--refresh"], capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        return False, "Refreshing the calendars took too long. Check your connection."
+    lines = (done.stdout or done.stderr).strip().splitlines()
+    return done.returncode == 0, lines[-1] if lines else "Could not refresh the calendars."
+
+
 @dataclass
 class Row:
-    kind: str                     # header | note | setting | startup | source | keybind | cloud | action
+    kind: str                     # header | note | setting | startup | source | event | keybind | cloud | action
     label: str = ""
     value: str = ""
     tag: str = ""                 # default | yours | changed | connected | failed | off
@@ -114,7 +131,20 @@ class App:
             out.append(Row("action", "+ Add a calendar...", ref="add_calendar",
                            help="Paste the private iCal link (Google Calendar: Settings > your calendar > Integrate calendar > "
                                 "Secret address in iCal format), or a path to a .ics file or folder."))
+            out.append(Row("action", "Refresh calendars now", ref="refresh_calendars",
+                           help="Download every calendar again now, so changes you made to it show up in the clock popup "
+                                "straight away instead of within 15 minutes."))
+            out.append(Row("note", ""))
+            out.append(Row("header", "Events on this PC"))
+            for ev in self._local_events():
+                out.append(Row("event", ev["title"], localcal.describe(ev), ref=ev["uid"],
+                               help="Enter to remove this event. Events here are kept only on this PC, in " + localcal.PATH))
+            out.append(Row("action", "+ Add an event...", ref="add_event",
+                           help="An event kept only on this PC. It shows in the clock popup and the assistant can read it. "
+                                "You can also add one from the clock popup: click the clock, pick a day and press a."))
             return out
+        if page == "Network":
+            return self._network_rows(out)
         if page == "Cloud drives":
             return self._cloud_rows(out)
         if page == "Displays":
@@ -355,6 +385,138 @@ class App:
     # ---- cloud drives --------------------------------------------------------------------------------------
     CLOUD_TAGS = {"active": "connected", "activating": "starting", "reloading": "starting", "failed": "failed"}
 
+    # ---- network ---------------------------------------------------------------------------------------------
+    def _network_rows(self, out: list[Row]) -> list[Row]:
+        st = network.state()
+        out.append(Row("header", f"Connections (run by {network.MANAGER_LABELS[st['manager']]}; Enter to set address, DNS, routes)"))
+        for i in st["interfaces"]:
+            label = {"ethernet": "Wired", "wifi": "Wi-Fi"}.get(i["kind"], "Network")
+            on = i["up"] and bool(i["ipv4"])
+            out.append(Row("netif", f"{label} ({i['name']})", network.summary(i), "connected" if on else "off", ref=i["name"],
+                           help="Enter to choose automatic or fixed (static) address, DNS servers, extra routes and IPv6. "
+                                "Applied straight away; system files ask for your password."))
+        if not st["interfaces"]:
+            out.append(Row("note", "  No network cards found."))
+        if any(i["kind"] == "wifi" for i in st["interfaces"]):
+            out.append(Row("header", "Wi-Fi" + (f" (through {network.WIFI_LABELS[st['wifi']]})" if st["wifi"] else "")))
+            if not st["wifi"]:
+                out.append(Row("note", "  No Wi-Fi service is running. Start iwd: sudo systemctl enable --now iwd"))
+            else:
+                out.append(Row("action", "Wi-Fi", "on" if st["wifi_on"] else "off", "yours" if st["wifi_on"] else "off", ref="wifi_toggle",
+                               help="Enter to switch Wi-Fi on or off."))
+                for n in st["networks"][:25]:
+                    bits = [x for x in ("connected" if n["active"] else "saved" if n["known"] else "", "secured" if n["secure"] else "open",
+                                        f"{n['signal']}%" if n["signal"] is not None else "") if x]
+                    out.append(Row("wifi", n["ssid"], " · ".join(bits), "connected" if n["active"] else "", ref=n["ssid"],
+                                   help="Enter to join, disconnect or forget this network."))
+                out.append(Row("action", "Scan again", ref="wifi_scan", help="Looks for networks nearby."))
+                out.append(Row("action", "+ Join a hidden network...", ref="wifi_hidden", help="For networks that do not show their name."))
+        out.append(Row("header", "DNS in use"))
+        out.append(Row("note", "  " + (", ".join(st["dns"]) or "none")))
+        out.append(Row("action", "Look again", ref="net_refresh", help="Reads the network state again."))
+        return out
+
+    def _net_done(self, result: tuple[bool, str]) -> tuple[bool, str]:
+        network.invalidate()
+        return result
+
+    def _wifi_connect(self, backend: str, ssid: str, password: str, hidden: bool, ident: str) -> None:
+        if not ssid:
+            raise ValueError("enter the network's name")
+        if password and not 8 <= len(password) <= 63:
+            raise ValueError("a Wi-Fi password is 8 to 63 characters")
+        self.run_task(f"Connecting to {ssid}", lambda s, c: self._net_done(network.connect(backend, ssid, password, hidden, ident)))
+
+    def wifi_menu(self, ssid: str) -> None:
+        st = network.state()
+        n = next((x for x in st["networks"] if x["ssid"] == ssid), None)
+        if not n:
+            return
+        backend = st["wifi"]
+        items = ([("off", "Disconnect", "")] if n["active"] else [("join", "Join", "")]) + \
+                ([("forget", "Forget", "and its saved password")] if n["known"] else [])
+
+        def chosen(v):
+            if v == "join":
+                if n["secure"] and not n["known"]:
+                    self.ask(f"Password for {ssid}", "", lambda pw: self._wifi_connect(backend, ssid, pw, False, n["id"]), secret=True)
+                else:
+                    self._wifi_connect(backend, ssid, "", False, n["id"])
+            elif v == "off":
+                self.run_task(f"Disconnecting from {ssid}", lambda s, c: self._net_done(network.disconnect(backend, ssid, n["id"])))
+            elif v == "forget":
+                self.confirm("Forget this network?", [f"Forget '{ssid}' and its password?"], "yn",
+                             lambda k: k == "y" and self.run_task(f"Forgetting {ssid}", lambda s, c: self._net_done(network.forget(backend, ssid, n["id"]))))
+        self.popup = Popup("choose", ssid, [], items, 0, on_select=chosen)
+
+    def netif_menu(self, iface: str, cfg: dict | None = None) -> None:
+        """A menu over a working copy of the interface's setup; nothing changes until 'Apply'."""
+        manager = network.state()["manager"]
+        if cfg is None:
+            cfg = network.ip_config(manager, iface)
+            if cfg.get("error"):
+                return self.message(iface, [cfg["error"]])
+        again = lambda: self.netif_menu(iface, cfg)  # noqa: E731
+
+        def setter(key, parse):
+            def done(text):
+                value = parse(text)
+                network.check_config({**cfg, key: value, "method": "auto"} if key != "addresses" else {**cfg, key: value})
+                cfg[key] = value
+                again()
+            return done
+        manual = cfg["method"] == "manual"
+        items = [("method", "Address: " + ("fixed (static)" if manual else "automatic (DHCP)"), "Enter to switch")]
+        if manual:
+            items += [("addresses", "IP address: " + (", ".join(cfg["addresses"]) or "(none)"), "like 192.168.1.50/24"),
+                      ("gateway", "Gateway: " + (cfg["gateway"] or "(none)"), "your router, like 192.168.1.1")]
+        items.append(("dns", "DNS: " + (" ".join(cfg["dns"]) or "from the router"), ""))
+        if not cfg.get("no_routes"):
+            items.append(("routes", f"Extra routes: {len(cfg['routes'])}", "add or remove"))
+            if manager != "netctl":
+                items.append(("metric", "Route priority: " + ("automatic" if cfg["metric"] is None else str(cfg["metric"])), "lower wins"))
+        items += [("ipv6", "IPv6: " + ("off" if cfg["ipv6"] == "off" else "automatic"), "Enter to switch"),
+                  ("apply", "Apply changes", "the connection may drop for a moment"), ("cancel", "Cancel", "")]
+
+        def chosen(v):
+            if v == "method":
+                cfg["method"] = "auto" if manual else "manual"
+                again()
+            elif v == "ipv6":
+                cfg["ipv6"] = "auto" if cfg["ipv6"] == "off" else "off"
+                again()
+            elif v == "addresses":
+                self.ask("IP address(es)", ", ".join(cfg["addresses"]), setter("addresses", lambda t: t.replace(",", " ").split()))
+            elif v == "gateway":
+                self.ask("Gateway", cfg["gateway"], setter("gateway", str.strip))
+            elif v == "dns":
+                self.ask("DNS servers (empty: from the router)", " ".join(cfg["dns"]), setter("dns", lambda t: t.replace(",", " ").split()))
+            elif v == "metric":
+                self.ask("Route priority (empty: automatic)", "" if cfg["metric"] is None else str(cfg["metric"]),
+                         setter("metric", lambda t: int(t) if t.strip() else None))
+            elif v == "routes":
+                self._routes_menu(iface, cfg)
+            elif v == "apply":
+                self.run_task(f"Applying to {iface}", lambda s, c: self._net_done(network.set_ip_config(manager, iface, cfg)))
+        self.popup = Popup("choose", f"{iface}" + (f" ({cfg['profile']})" if cfg["profile"] else ""), cfg["notes"], items, 0,
+                           on_select=chosen)
+
+    def _routes_menu(self, iface: str, cfg: dict) -> None:
+        items = [(i, f"Remove {d}" + (f" via {v}" if v else "") + (f" metric {m}" if m is not None else ""), "")
+                 for i, (d, v, m) in enumerate(cfg["routes"])] + [("add", "+ Add a route...", "like 10.0.0.0/8 via 192.168.1.254"),
+                                                                   ("back", "Back", "")]
+
+        def chosen(v):
+            if v == "add":
+                def done(text):
+                    cfg["routes"] = cfg["routes"] + network.check_config({"routes": [network.parse_route(text)]})["routes"]
+                    self.netif_menu(iface, cfg)
+                return self.ask("Route (network via gateway [metric])", "", done)
+            if isinstance(v, int):
+                cfg["routes"] = cfg["routes"][:v] + cfg["routes"][v + 1:]
+            self.netif_menu(iface, cfg)
+        self.popup = Popup("choose", "Extra routes", [], items, 0, on_select=chosen)
+
     def _cloud_rows(self, out: list[Row]) -> list[Row]:
         if not cloud.rclone():
             out.append(Row("header", "rclone is not installed"))
@@ -516,6 +678,13 @@ class App:
             return self.action(row.ref)
         if row.kind == "source":
             return self.source_menu(row.ref)
+        if row.kind == "netif":
+            return self.netif_menu(row.ref)
+        if row.kind == "wifi":
+            return self.wifi_menu(row.ref)
+        if row.kind == "event":
+            return self.confirm("Remove event?", [f"Remove '{row.label}' ({row.value})? Every repeat of it goes too."], "yn",
+                                lambda k: k == "y" and localcal.remove(row.ref))
         if row.kind == "keybind":
             return self.rebind(row.ref)
         if row.kind == "cloud":
@@ -844,6 +1013,65 @@ class App:
                 self.ask("Calendar link or path", "", lambda link: self._add_calendar(n, link),
                          ["Paste the private iCal address (https://...) or a path to a .ics file or folder."])
             self.ask("Calendar name (for example Personal)", "", got_name)
+        if name == "wifi_toggle":
+            st = network.state()
+            on = not st["wifi_on"]
+            return self.run_task("Switching Wi-Fi " + ("on" if on else "off"), lambda s, c: self._net_done(network.set_wifi_enabled(st["wifi"], on)))
+        if name == "wifi_scan":
+            return self.run_task("Scanning for Wi-Fi networks", lambda s, c: (network.state(rescan=True), (True, "Scanned."))[1])
+        if name == "wifi_hidden":
+            backend = network.state()["wifi"]
+            return self.ask("Hidden network name", "", lambda ssid: self.ask(
+                "Password (leave empty if open)", "", lambda pw: self._wifi_connect(backend, ssid.strip(), pw, True, ""), secret=True))
+        if name == "net_refresh":
+            network.invalidate()
+            self.notice, self.notice_error = "Refreshed.", False
+            return
+        if name == "add_event":
+            return self.add_event()
+        if name == "refresh_calendars":
+            if "calendar.sources" in self.store.staged:
+                return self.message("Save first", ["Save your calendar changes (Ctrl+S) first, then refresh."])
+            return self.run_task("Refreshing calendars", lambda st, c: refresh_calendars())
+
+    @staticmethod
+    def _local_events() -> list[dict]:
+        """Events kept on this PC that are still to come (repeating ones always), soonest first."""
+        today = datetime.date.today()
+        def last(ev):
+            end = ev["end"] or ev["start"]
+            return end.date() if hasattr(end, "date") else end
+        return [ev for ev in localcal.events() if ev["repeat"] or last(ev) >= today]
+
+    def add_event(self) -> None:
+        """Name, then day, then time, then how often it repeats."""
+        def got_title(title):
+            if not title.strip():
+                raise ValueError("give the event a name")
+            self.ask("Which day?", "today", lambda d: got_day(title, localcal.parse_date(d)),
+                     ["For example today, tomorrow, 3 Nov, 3/11/2026 or 2026-11-03."])
+
+        def got_day(title, day):
+            self.ask("What time?", "all day", lambda t: got_time(title, day, *self._parse_times(t)),
+                     ["all day, 14:00 (one hour), or a range such as 09:00-10:30 or 2pm-3pm."])
+
+        def got_time(title, day, start, end):
+            def chosen(repeat):
+                try:
+                    localcal.add(title, day, start, end, repeat)
+                except (ValueError, OSError) as e:
+                    return self.message("Could not add the event", [str(e)])
+                self.notice, self.notice_error = f"Added '{title.strip()}'.", False
+            self.popup = Popup("choose", "Repeat?", [], [(k, v, "") for k, v in localcal.REPEATS.items()], 0, on_select=chosen)
+        self.ask("Event name", "", got_title)
+
+    @staticmethod
+    def _parse_times(text: str):
+        text = text.strip().lower()
+        if text in ("", "all day", "allday", "all-day"):
+            return None, None
+        first, _, second = text.partition("-")
+        return localcal.parse_time(first), localcal.parse_time(second) if second.strip() else None
 
     def _add_calendar(self, name: str, link: str) -> None:
         link = link.strip()

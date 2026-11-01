@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import datetime
 import shutil
 import subprocess
+import threading
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from ..schema import PAGE_INTRO, for_page  # noqa: E402
 from ..store import STARTUP_ID  # noqa: E402
-from ..tui import App as TuiApp, assistant_disabled, state_dir  # noqa: E402
+from ..tui import App as TuiApp, assistant_disabled, localcal, refresh_calendars, state_dir  # noqa: E402
 from . import ui  # noqa: E402
 from .rows import setting_row  # noqa: E402
 
@@ -208,7 +210,109 @@ def calendar_group(win, column: Gtk.Box) -> None:
                     "A path to a .ics file or folder works too.", ok="Add")
     add.connect("activated", adding)
     group.add(add)
+
+    refresh = Adw.ButtonRow(title="Refresh calendars now", start_icon_name="view-refresh-symbolic",
+                            tooltip_text="Download every calendar again, so changes you made show up in the clock popup straight away")
+
+    def refreshing(row):
+        if "calendar.sources" in store.staged:
+            win.toast("Save your calendar changes first, then refresh.")
+            return
+        row.set_sensitive(False)
+        row.set_title("Refreshing…")
+
+        def done(ok, msg):
+            row.set_sensitive(True)
+            row.set_title("Refresh calendars now")
+            win.toast(msg)
+        threading.Thread(target=lambda: GLib.idle_add(done, *refresh_calendars()), daemon=True).start()
+    refresh.connect("activated", refreshing)
+    group.add(refresh)
     column.append(group)
+    column.append(local_events_group(win))
+
+
+def local_events_group(win) -> Adw.PreferencesGroup:
+    """Events kept on this PC. Applied straight away, like the clock popup's own + Add event."""
+    group = Adw.PreferencesGroup(title="Events on this PC",
+                                 description="Shown in the clock popup and readable by the assistant, but never sent anywhere. "
+                                             "Past events are hidden here.")
+    for ev in TuiApp._local_events():
+        row = Adw.ActionRow(title=ev["title"], subtitle=localcal.describe(ev) + (f"\n{ev['notes']}" if ev["notes"] else ""),
+                            use_markup=False)
+        b = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Remove", valign=Gtk.Align.CENTER, css_classes=["flat"])
+
+        def remove(_b, ev=ev):
+            def yes():
+                localcal.remove(ev["uid"])
+                win.refresh()
+            more = " Every repeat of it goes too." if ev["repeat"] else ""
+            ui.confirm(win, "Remove event?", f"Remove '{ev['title']}' ({localcal.describe(ev)})?{more}", "Remove", yes, destructive=True)
+        b.connect("clicked", remove)
+        row.add_suffix(b)
+        group.add(row)
+    add = Adw.ButtonRow(title="Add an event…", start_icon_name="list-add-symbolic")
+    add.connect("activated", lambda _r: add_event(win))
+    group.add(add)
+    return group
+
+
+def add_event(win) -> None:
+    dialog = Adw.Dialog(title="Add an event", content_width=440)
+    view = Adw.ToolbarView()
+    header = Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False)
+    cancel = Gtk.Button(label="Cancel")
+    cancel.connect("clicked", lambda _b: dialog.close())
+    save = Gtk.Button(label="Add", css_classes=["suggested-action"])
+    header.pack_start(cancel)
+    header.pack_end(save)
+    view.add_top_bar(header)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin_top=12, margin_bottom=18, margin_start=18, margin_end=18)
+    what = Adw.PreferencesGroup()
+    title = Adw.EntryRow(title="Name")
+    notes = Adw.EntryRow(title="Notes (optional)")
+    what.add(title)
+    what.add(notes)
+    box.append(what)
+
+    cal = Gtk.Calendar(css_classes=["card"])
+    box.append(cal)
+
+    when = Adw.PreferencesGroup()
+    all_day = Adw.SwitchRow(title="All day")
+    start = Adw.EntryRow(title="Starts", text="09:00")
+    end = Adw.EntryRow(title="Ends", text="10:00")
+    repeat = Adw.ComboRow(title="Repeat", model=Gtk.StringList.new(list(localcal.REPEATS.values())))
+    for row in (all_day, start, end, repeat):
+        when.add(row)
+    all_day.connect("notify::active", lambda w, _p: (start.set_sensitive(not w.get_active()), end.set_sensitive(not w.get_active())))
+    box.append(when)
+    error = Gtk.Label(wrap=True, xalign=0, css_classes=["error-text"], visible=False)
+    box.append(error)
+
+    def add(*_a):
+        d = cal.get_date()
+        day = datetime.date(d.get_year(), d.get_month(), d.get_day_of_month())
+        try:
+            if all_day.get_active():
+                localcal.add(title.get_text(), day, repeat=list(localcal.REPEATS)[repeat.get_selected()], notes=notes.get_text())
+            else:
+                localcal.add(title.get_text(), day, localcal.parse_time(start.get_text()), localcal.parse_time(end.get_text()),
+                             list(localcal.REPEATS)[repeat.get_selected()], notes.get_text())
+        except (ValueError, OSError) as e:
+            error.set_label(str(e))
+            error.set_visible(True)
+            return
+        dialog.close()
+        win.toast(f"Added '{title.get_text().strip()}'.")
+        win.refresh()
+    save.connect("clicked", add)
+    title.connect("entry-activated", add)
+    view.set_content(Gtk.ScrolledWindow(child=box, propagate_natural_height=True, hscrollbar_policy=Gtk.PolicyType.NEVER))
+    dialog.set_child(view)
+    dialog.present(win)
+    title.grab_focus()
 
 
 # ---- Hyprdots -------------------------------------------------------------------------------------------------------

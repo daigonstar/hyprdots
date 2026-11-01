@@ -43,6 +43,7 @@ from html.parser import HTMLParser
 
 # --- Configuration (edit ~/.config/hypr/user_settings.toml) ---
 import usersettings
+import localcal
 import agent_modes
 SETTINGS = usersettings.section("assistant", {
     "model": "gpt-oss:20b",
@@ -2394,7 +2395,8 @@ def _calendar_setup_help(prefix=""):
             'the same list), for example: sources = ["Personal|https://example.com/private-link.ics"]. '
             "Google Calendar calls its private link 'Secret address in iCal format' (calendar settings, Integrate calendar). "
             "Never put the link in user_settings.toml, because that file is committed to the dotfiles repository. "
-            "The assistant can only read the calendar; it cannot add or change events.")
+            "The assistant can only read the calendar; it cannot add or change events. Events can be kept on this PC "
+            "without any link: click the clock on the bar and choose + Add event, or use Settings > Calendar.")
 
 def _calendar_sources():
     """[{name, kind, value}] from calendar_sources.txt, else common sync folders that actually contain .ics files."""
@@ -2424,12 +2426,13 @@ def _calendar_sources():
         if not name:
             name = f"calendar {len(sources) + 1}" if kind == "url" else (os.path.basename(os.path.expanduser(value).rstrip("/")) or value)
         sources.append({"name": name, "kind": kind, "value": value})
-    if sources:
-        return sources
-    for base in CALENDAR_AUTODETECT:
-        path = os.path.expanduser(base)
-        if os.path.isdir(path) and glob.glob(os.path.join(path, "**", "*.ics"), recursive=True)[:1]:
-            sources.append({"name": os.path.basename(base.rstrip("/")), "kind": "path", "value": base})
+    if not sources:
+        for base in CALENDAR_AUTODETECT:
+            path = os.path.expanduser(base)
+            if os.path.isdir(path) and glob.glob(os.path.join(path, "**", "*.ics"), recursive=True)[:1]:
+                sources.append({"name": os.path.basename(base.rstrip("/")), "kind": "path", "value": base})
+    if os.path.isfile(localcal.PATH):  # events added from the clock popup or Settings
+        sources.append({"name": localcal.NAME, "kind": "path", "value": localcal.PATH})
     return sources
 
 def _short_error(e):
@@ -3484,7 +3487,7 @@ Guidelines:
 20. SLOW, LAGGY, STUTTERING, HOT OR LOUD: call performance_snapshot first (one call), then at most two targeted follow-ups on whatever it shows (for example journalctl for the failing unit, or ps for one process). Aim for under 8 tool calls in total.
 21. OUTPUT FORMAT: your reply may be shown in a terminal that cannot draw tables or italics. Use short paragraphs, **bold** headings, - bullets and `code` only. No markdown tables, no *single-asterisk* emphasis, no HTML. Put every command, script, config snippet or file content you suggest in a fenced code block that names its language (```bash, ```ini, ```lua ...), one block per thing the user would copy; use inline `code` only for single names inside a sentence.
 22. GENERAL ASSISTANT: you are not only a PC helper. Answer everyday questions (planning, wording, explanations, maths, how-tos) directly when the answer is stable knowledge, and use tools for anything about this PC, the user's calendar, the current date or time, or anything that can have changed. Do not drag PC topics into unrelated questions. For weekdays, dates, "how long until" and similar, call date_info instead of working it out yourself.
-23. CALENDAR: for anything about the user's schedule call calendar_events (read-only). Report only events the tool returned, with the times it showed, and say which range and calendars were checked. Never invent, infer or recall events. If the tool says no calendar is connected or a source failed, say exactly that and give the setup steps from its message instead of answering from guesswork. "Nothing scheduled" is only true for the calendars actually read, so say which. You cannot add, change or cancel events; say so if asked.
+23. CALENDAR: for anything about the user's schedule call calendar_events (read-only). Report only events the tool returned, with the times it showed, and say which range and calendars were checked. Never invent, infer or recall events. If the tool says no calendar is connected or a source failed, say exactly that and give the setup steps from its message instead of answering from guesswork. "Nothing scheduled" is only true for the calendars actually read, so say which. You cannot add, change or cancel events; say so if asked, and tell the user they can add one themselves by clicking the clock on the bar (+ Add event) or in Settings > Calendar; those events stay on this PC and show up here as the "This PC" calendar.
 24. HONEST REPORTING: be clear about what you checked, what you assume and what you could not confirm, but say it in passing inside the answer ("I couldn't find a confirmed UK price"), not as a separate evidence section, except in PC-problem diagnostics. Say you read a page only if you fetched it with web_fetch; for anything seen only in a search result say it comes from a snippet. Give a URL, version, figure, quote or date only if it appears in tool output or in the user's message; otherwise say you could not confirm it. If a tool failed or returned nothing, say so plainly. Never state a measurement you did not make. If sources disagree, that disagreement is the result.
 25. LONG PAGES: web_fetch returns the main text of a page in parts. Its header says how much was shown. If the answer is probably further down, call it again with start set to the next offset, or with find set to a distinctive word, instead of fetching other pages. If it warns that a page is blocked, empty or built by JavaScript, say so and try one different source rather than retrying.
 26. VERIFY, DO NOT RECALL: your built-in knowledge of products, specs, prices, versions and release details is often wrong or out of date, and it mixes up similar models. Before answering any question about a specific product, comparison, upgrade or purchase, look up EACH item involved (web_search, then web_fetch an independent review or spec page) and base every spec on what you read. This includes the item the user already owns. Never describe how something works (for example its motion system, chipset or connector) from memory.

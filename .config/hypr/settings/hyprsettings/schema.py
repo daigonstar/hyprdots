@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Theme",
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Theme",
          "Bar layout", "Launcher", "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
@@ -18,6 +18,9 @@ PAGE_INTRO = {
                          "your PC (failed services, full disks, heat, pending updates) and sends a desktop notification when something is "
                          "wrong. For screen layout see the Displays page.",
     "Calendar": "Calendars shown in the clock popup and readable by the assistant. Links stay private on this computer.",
+    "Network": "Wi-Fi, and how each connection gets its address: automatically or fixed (static), its DNS servers and extra "
+               "routes. Changes apply straight away through the network manager this PC already uses (NetworkManager, "
+               "systemd-networkd, ConnMan, dhcpcd or netctl). Changing system network files asks for your password.",
     "Cloud drives": "Your online accounts (Google Drive, OneDrive, Dropbox, Nextcloud, ownCloud, WebDAV) shown as normal folders in "
                     "Thunar. Each one appears in the Thunar sidebar and under ~/Cloud, and reconnects by itself when you log in. "
                     "Passwords and tokens are kept by rclone, never in these settings files.",
@@ -117,7 +120,7 @@ SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "Th
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, HYPRLAND, KEYBINDS, FILETYPES, \
+ASSISTANT, MONITOR, CALENDAR, NETWORK, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, HYPRLAND, KEYBINDS, FILETYPES, \
     HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [

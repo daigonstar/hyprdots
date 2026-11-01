@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .. import theme  # noqa: E402
 from ..schema import BY_ID, CLOUD_EFFECT, PAGES  # noqa: E402
@@ -23,10 +23,11 @@ APP_ID = "com.hyprdots.settings"
 
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import barlayout, cloud, displays, filetypes, keybinds, workspaces
+    from . import barlayout, cloud, displays, filetypes, keybinds, network, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
     out.update({"Keybinds": keybinds.build, "File types": filetypes.build,
-                "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build})
+                "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build,
+                "Network": network.build})
     return out
 
 
@@ -228,6 +229,15 @@ def main(argv: list[str]) -> int:
     page = next((a.split("=", 1)[1] for a in argv if a.startswith("--page=")), None)
     app = Adw.Application(application_id=APP_ID)
 
+    def show_page(_action, param):
+        # A second launch (the bar's network button, say) brings the open window to the front on its page
+        wins = app.get_windows()
+        if wins and param.get_string() in PAGES:
+            wins[0].sidebar_list.select_row(wins[0]._row_for(param.get_string()))
+    action = Gio.SimpleAction.new("show-page", GLib.VariantType.new("s"))
+    action.connect("activate", show_page)
+    app.add_action(action)
+
     def activate(a):
         # A second launch brings the open window to the front instead of opening another
         if a.get_windows():
@@ -239,4 +249,7 @@ def main(argv: list[str]) -> int:
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         Window(a, Store(), page).present()
     app.connect("activate", activate)
+    app.register(None)
+    if app.get_is_remote() and page:
+        app.activate_action("show-page", GLib.Variant("s", page))
     return app.run([sys.argv[0]])
