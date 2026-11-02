@@ -385,6 +385,78 @@ class UnseenFigures(unittest.TestCase):
         self.assertIn("640 hours", g.footer("It used 640+ hours."))
 
 
+class AlreadyInEffect(unittest.TestCase):
+    def setUp(self):
+        self.show = mock.patch.object(a, "_sh", return_value="After=systemd-user-sessions.service plymouth-quit.service")
+        self.show.start()
+
+    def tearDown(self):
+        self.show.stop()
+
+    def test_a_drop_in_that_repeats_the_unit_is_rejected(self):
+        with mock.patch.object(a, "_confirm", return_value=True) as confirm:
+            out = a.tool_write_file(json.dumps({"path": "/etc/systemd/system/sddm.service.d/10.conf",
+                                                "content": "[Unit]\nAfter=plymouth-quit.service\n"}))
+        self.assertIn("would change nothing", out)
+        confirm.assert_not_called()
+
+    def test_a_new_line_is_not_a_no_op(self):
+        reason, everything = a._noop_reason("[Unit]\nAfter=plymouth-quit.service\nWants=foo.service\n", "sddm.service")
+        self.assertIn("After=plymouth-quit.service", reason)
+        self.assertFalse(everything)
+
+    def test_the_answer_says_so_too(self):
+        g = a.LoopGuard()
+        g.check_answer("Create /etc/systemd/system/sddm.service.d/10.conf:\n```ini\n[Unit]\nAfter=plymouth-quit.service\n```")
+        self.assertTrue(any("changes nothing" in p for p in g.unit_problems))
+
+
+class PacmanFlags(unittest.TestCase):
+    def test_wrong_descriptions_are_corrected(self):
+        self.assertTrue(a._pacman_flag_errors("paru -Qdtq    # shows outdated packages"))
+        self.assertTrue(a._pacman_flag_errors("User prefers pacman install commands to include the -y flag for automatic confirmation"))
+        self.assertFalse(a._pacman_flag_errors("sudo pacman -Syu  # full upgrade"))
+        self.assertFalse(a._pacman_flag_errors("pacman -Qdtq # orphans"))
+
+    def test_a_wrong_note_is_not_saved(self):
+        with mock.patch.object(a, "_note_from_user", return_value=True), mock.patch.object(a, "_write_memory") as write:
+            out = a.tool_remember("User prefers pacman commands with -y for automatic confirmation")
+        self.assertIn("Not saved", out)
+        write.assert_not_called()
+
+
+class MissingCommands(unittest.TestCase):
+    def test_commands_not_on_this_pc_are_named(self):
+        with mock.patch.object(a.shutil, "which", side_effect=lambda c: None if c in ("mkfs.swap", "amdsim") else "/usr/bin/" + c):
+            found = a._missing_commands("```bash\nsudo mkfs.swap /swapfile && sudo swapon /swapfile\nFOO=1 amdsim | head\ncd ~\n```")
+        self.assertEqual(found, ["mkfs.swap", "amdsim"])
+
+
+class RevisionRound(unittest.TestCase):
+    def test_a_draft_with_checked_problems_gets_one_rewrite(self):
+        seen = []
+        replies = [{'message': {'role': 'assistant', 'content': "Fix it:\n```bash\nsudo rmmod amdgpu\n```"}},
+                   {'message': {'role': 'assistant', 'content': "Reboot to reset the GPU; nothing else is needed."}}]
+
+        def fake(model, messages, **kw):
+            seen.append(messages[-1]['content'])
+            return replies.pop(0)
+        with mock.patch.object(a, "chat", side_effect=fake), mock.patch.object(a, "FACT_CHECK", False):
+            out = a._process([{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'q'}], "q")
+        self.assertEqual(out, "Reboot to reset the GPU; nothing else is needed.")
+        self.assertIn("graphics driver", seen[-1])
+
+
+class FactCheckNoise(unittest.TestCase):
+    def test_hedges_and_quoted_settings_are_not_flagged(self):
+        reply = ("Pinned | VERDICT\nI couldn't pinpoint exactly why | UNBACKED\nSDDM already has `After=plymouth-quit.service` | UNBACKED\n"
+                 "Ender 3 V2 typical speed is 60-80mm/s | UNBACKED")
+        with mock.patch.object(a, "FACT_CHECK", True), mock.patch.object(a, "_evidence", return_value="After=a.service plymouth-quit.service"), \
+                mock.patch.object(a, "chat", return_value={'message': {'content': reply}}):
+            problems = a.fact_check([], "q", "x" * 400)
+        self.assertEqual([p[0] for p in problems], ["Ender 3 V2 typical speed is 60-80mm/s"])
+
+
 class DocsAreReads(unittest.TestCase):
     def test_man_pages_are_read_only(self):
         self.assertFalse(a._command_needs_approval("man 5 systemd.unit"))

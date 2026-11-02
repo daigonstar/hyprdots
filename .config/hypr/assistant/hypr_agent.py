@@ -1564,8 +1564,8 @@ def tool_web_fetch(arg=""):
     except urllib.error.HTTPError as e:
         hint = _HTTP_HINTS.get(e.code)
         return f"web_fetch failed: HTTP {e.code} {e.reason}" + (f" ({hint})" if hint else "")
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return f"web_fetch failed: {e}"
+    except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as e:
+        return f"web_fetch failed: {type(e).__name__ if isinstance(e, http.client.HTTPException) else e} (try again once, or another page)"
 
     text, total = page["text"], len(page["text"])
     head = [WEB_NOTICE.rstrip(), f"URL: {page['url']}" + (f" ({page['note']})" if page["note"] else "")]
@@ -1812,8 +1812,9 @@ def tool_web_search(query=""):
         for engine, future in zip(SEARCH_ENGINES, futures):
             try:
                 found = future.result(timeout=SEARCH_TIMEOUT * 2 + 3)
-            except (ValueError, urllib.error.URLError, TimeoutError, OSError, concurrent.futures.TimeoutError) as e:
-                errors.append(f"{engine.__name__.removeprefix('_search_')}: {e}")
+            except (ValueError, urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException,
+                    concurrent.futures.TimeoutError) as e:  # one engine cutting off a reply (IncompleteRead) skips that engine
+                errors.append(f"{engine.__name__.removeprefix('_search_')}: {type(e).__name__}")
                 continue
             lists.append(found)
             lead = lead or (engine is _search_searxng and len(found) >= 4)
@@ -1919,6 +1920,35 @@ def _same_note(old, new):
     a, b = _note_words(old), _note_words(new)
     return bool(a and b) and len(a & b) / len(a | b) >= 0.7
 
+# What pacman's query and sync flags do, for catching the descriptions small models get wrong (and then save as notes)
+PACMAN_FLAG_FACTS = [
+    # (flags that must all be present, description that contradicts them, the truth)
+    ("y", r"confirm|\byes\b|without (?:asking|prompt)|non-?interactive|automatic(?:ally)? (?:accept|answer)",
+     "-y refreshes the package lists; it does not answer prompts (that is --noconfirm). And never use -Sy <package> on its own: "
+     "that is a partial upgrade; use -Syu"),
+    ("Qdt", r"outdated|out of date|updat|upgrad|newer version", "-Qdt lists orphans (installed as dependencies, no longer needed), not outdated packages; -Qu lists upgradable ones"),
+    ("Qu", r"orphan|unused|no longer needed", "-Qu lists packages with an update available, not orphans; -Qdt lists orphans"),
+    ("Qm", r"\bofficial|from the repos|outdated|updat", "-Qm lists foreign packages (AUR or installed by hand), not official or outdated ones"),
+    ("Qe", r"orphan|dependenc(?:y|ies) only|outdated", "-Qe lists explicitly installed packages"),
+    ("Sc", r"remove[sd]? (?:the )?package|uninstall", "-Sc cleans the package cache; it does not uninstall anything"),
+]
+PACMAN_CMD_RE = re.compile(r"\b(?:sudo\s+)?(pacman|paru|yay)\s+(-[A-Za-z]+)")
+
+def _pacman_flag_errors(text):
+    """Corrections for lines that describe a pacman/paru/yay command as doing something its flags do not do."""
+    out = []
+    for line in str(text).splitlines():
+        for m in PACMAN_CMD_RE.finditer(line):
+            flags, rest = m.group(2)[1:], line[m.end():]
+            for need, wrong, truth in PACMAN_FLAG_FACTS:
+                if all(f in flags for f in need) and (need != "y" or "u" not in flags) and re.search(wrong, rest, re.I):
+                    out.append(f"`{m.group(1)} {m.group(2)}`: {truth}.")
+    # "pacman ... the -y flag for automatic confirmation", with the flag on its own
+    if re.search(r"\b(?:pacman|paru|yay)\b", str(text), re.I) and \
+            re.search(r"(?<![\w-])-y\b[^.\n]{0,60}?(?:confirm|\byes\b|without (?:asking|prompt))", str(text), re.I):
+        out.append(f"-y: {PACMAN_FLAG_FACTS[0][2]}.")
+    return list(dict.fromkeys(out))
+
 def tool_remember(note=""):
     """Saves a short fact about the user's PC for future conversations."""
     note = re.sub(r"\s+", " ", (note or "").strip())[:500]
@@ -1926,6 +1956,9 @@ def tool_remember(note=""):
         return "Usage: remember(short fact worth keeping)"
     if SECRET_RE.search(note):
         return "Not saved: notes must not contain passwords, tokens or keys."
+    wrong = _pacman_flag_errors(note)
+    if wrong:
+        return "Not saved: the note describes a pacman option wrongly. " + " ".join(wrong) + " Tell the user, and save a corrected note if they want one."
     # A note that does not echo the user's own message may have come from web content or a file
     if not _note_from_user(note) and not _confirm(f"Save this note? (not from your message) {note}", auto_ok=False):
         return "Not saved: the note does not match what the user said, and was not approved."
@@ -3193,6 +3226,46 @@ def _lint_unit_text(text):
                 problems.append(f"{m[1]}={unit}: there is no unit called {unit} on this system")
     return problems
 
+def _already_in_effect(text, unit):
+    """(no-op lines, whether that is every setting in the text) for dependency and ordering lines the unit already has:
+    a small model asked to "make X wait for Y" adds After=Y even when the unit already says it, and calls that a fix."""
+    if not unit:
+        return [], False
+    settings = [m for m in (re.match(r"\s*(\w+)\s*=\s*(.*)", line) for line in str(text).splitlines()) if m]
+    deps = [m for m in settings if m[1] in DEP_KEYS and m[2].strip()]
+    if not deps:
+        return [], False
+    shown = _sh(["systemctl", "show", unit, "-p", ",".join(sorted({m[1] for m in deps}))], timeout=10)
+    current = {k: set(v.split()) for k, _, v in (line.partition("=") for line in shown.splitlines())}
+    noop = [f"{m[1]}={m[2].strip()}" for m in deps if set(m[2].split()) <= current.get(m[1], set())]
+    return noop, len(noop) == len(settings)
+
+def _noop_reason(text, unit):
+    noop, everything = _already_in_effect(text, unit)
+    if not noop:
+        return "", False
+    where = f"(systemctl show {unit} -p {','.join(sorted({n.split('=')[0] for n in noop}))})"
+    return f"{unit} already has {', '.join(noop)} {where}", everything
+
+NOOP_REJECT = ("Rejected: not {verb}, because it would change nothing: {reason}. The current setup already does this. Tell the "
+               "user so, and if they still see the problem, look for its real cause instead of repeating settings that are in place.")
+
+def _unit_block_problems(answer):
+    """Lint and no-op findings for each unit file block in an answer; the unit is taken from the drop-in path or
+    systemctl edit named before the block."""
+    problems = []
+    for block in _unit_blocks(answer):
+        problems += _lint_unit_text(block)
+        before = answer[:answer.find(block)]
+        named = re.findall(r"/etc/systemd/system/([\w@:.\\-]+?)\.d/|systemctl\s+edit\s+(?:--\S+\s+)*([\w@:.\\-]+)", before)
+        if named:
+            unit = next(x for x in named[-1] if x)
+            unit = unit if "." in unit else unit + ".service"
+            reason, everything = _noop_reason(block, unit)
+            if reason:
+                problems.append(("this whole block changes nothing: " if everything else "") + reason)
+    return list(dict.fromkeys(problems))
+
 def _units_in(text):
     units = set(UNIT_PATH_RE.findall(text))
     units |= {m[2] for m in SYSTEMCTL_CHANGE_RE.finditer(text)}
@@ -3241,12 +3314,17 @@ def tool_write_file(arg):
     if os.path.isdir(target):
         return "Rejected: the path is a directory."
 
+    noop_note = ""
     if UNIT_PATH_RE.search(target + " "):
         problems = _lint_unit_text(content)
         if problems:
             return "Rejected: not written, because this unit file has lines that would not work:\n- " + "\n- ".join(problems) + \
                 "\nCheck https://man.archlinux.org/man/systemd.unit.5.txt (web_fetch with find set to the directive) and fix them first."
-    reasons = []
+        reason, everything = _noop_reason(content, UNIT_PATH_RE.search(target + " ").group(1))
+        if everything:
+            return NOOP_REJECT.format(verb="written", reason=reason)
+        noop_note = f"some lines are already in effect: {reason}" if reason else ""
+    reasons = [noop_note] if noop_note else []
     if not _in_home(target):
         reasons.append("outside the home directory")
     unresearched = _not_researched_reason("write_file", arg)
@@ -3365,6 +3443,13 @@ def _annotate_processes(command, output):
                    "is 608 minutes, about 10 hours.]")
     return output
 
+def _annotate_units(command, output):
+    """systemctl status prints "enabled; preset: disabled", which small models read as "not enabled"."""
+    if re.search(r"\bsystemctl\b.*\bstatus\b", command) and re.search(r"Loaded: .*; (?:enabled|disabled|static|masked)", output):
+        output += ("\n[note: in the Loaded line, the first word after the path (enabled/disabled/static) is whether the unit "
+                   "starts at boot now; 'preset' is only the distribution's default and does not change that]")
+    return output
+
 PACMAN_QUERY_RE = re.compile(r"(?:^|[|;&]\s*)(?:sudo\s+)?pacman\s+-S[si]\b")
 
 def _annotate_packages(command, output):
@@ -3408,6 +3493,10 @@ def tool_run_command(command):
         if problems:
             return "Rejected: not run, because the unit text in this command has lines that would not work:\n- " + \
                 "\n- ".join(problems) + "\nCheck https://man.archlinux.org/man/systemd.unit.5.txt (web_fetch with find set to the directive) and fix them first."
+        unit = (UNIT_PATH_RE.search(command + " ") or SYSTEMCTL_CHANGE_RE.search(command)).group(1 if UNIT_PATH_RE.search(command + " ") else 2)
+        reason, everything = _noop_reason(command.replace("\\n", "\n"), unit)
+        if everything:
+            return NOOP_REJECT.format(verb="run", reason=reason)
     unresearched = _not_researched_reason("run_command", command)
     if unresearched:
         reasons.append(unresearched)
@@ -3475,7 +3564,7 @@ def tool_run_command(command):
         err.seek(0)
         stderr_text = err.read(MAX_OUTPUT_BYTES).decode(errors="replace").strip()
 
-    result = _annotate_packages(command, _annotate_processes(command, out.decode(errors="replace").strip()))
+    result = _annotate_units(command, _annotate_packages(command, _annotate_processes(command, out.decode(errors="replace").strip())))
     if stderr_text:
         result += f"\n[stderr]\n{stderr_text}"
     footer = f"[{'; '.join(notes)}]" if notes else f"[exit code {procs[-1].returncode}]"
@@ -3946,11 +4035,36 @@ def _in_repos(package):
     except (OSError, subprocess.SubprocessError):
         return True
 
+SHELL_WORDS = {"cd", "export", "source", ".", "echo", "printf", "if", "then", "else", "elif", "fi", "for", "do", "done", "while",
+               "case", "esac", "function", "set", "unset", "alias", "read", "exit", "return", "eval", "exec", "test", "[", "[[",
+               "true", "false", "local", "declare", "type", "command", "builtin", "trap", "wait", "sleep", "time", "{", "}", "(", ")"}
+BASH_FENCE_RE = re.compile(r"```(?:bash|sh|shell|zsh|console)\s*\n(.*?)```", re.S)
+
+def _missing_commands(answer, request=""):
+    """Programs that suggested bash commands start but that are not on this PC (mkfs.swap for mkswap, amdsim)."""
+    missing = []
+    for block in BASH_FENCE_RE.findall(answer):
+        for line in block.splitlines():
+            for part in re.split(r"&&|\|\||;|\|", line.split(" #")[0]):
+                words = part.strip().lstrip("$ ").split()
+                while words and (words[0] in ("sudo", "env", "nohup", "doas") or re.match(r"^[A-Z_][A-Z0-9_]*=", words[0])):
+                    words.pop(0)
+                if not words:
+                    continue
+                cmd = words[0]
+                if cmd.startswith(("#", "-", "/", "~", ".", "$", "<", ">", "'", '"')) or cmd in SHELL_WORDS or "=" in cmd or cmd in request:
+                    continue
+                if re.fullmatch(r"[\w.+-]+", cmd) and not shutil.which(cmd):
+                    missing.append(cmd)
+    return list(dict.fromkeys(missing))[:6]
+
 def _names_on_this_pc(answer, request=""):
     """Footer lines for systemd units and repo packages the answer names that do not exist here: a small model will
     confidently tell the user to check or install something it made up, and the PC can say so for certain."""
     lines = []
-    units = [u for u in dict.fromkeys(ANSWER_UNIT_RE.findall(answer)) if u not in request and "@." not in u][:8]
+    # org.freedesktop.Notifications.service and the like are D-Bus service names, not systemd units
+    units = [u for u in dict.fromkeys(ANSWER_UNIT_RE.findall(answer))
+             if u not in request and "@." not in u and not re.match(r"(?:org|com|net|io|ca|de)\.\w+\.", u)][:8]
     missing = [u for u in units if not _unit_exists(u)]
     if missing:
         lines.append("There is no unit called " + ", ".join(missing) + " on this PC (not installed, or the name is wrong).")
@@ -3958,6 +4072,9 @@ def _names_on_this_pc(answer, request=""):
     for m in PACMAN_INSTALL_RE.finditer(answer):
         packages += [p for p in m.group(1).split() if not p.startswith("-") and p not in request]
     absent = [p for p in list(dict.fromkeys(packages))[:8] if not _in_repos(p)]
+    missing = [c for c in _missing_commands(answer, request) if c not in packages]
+    if missing:
+        lines.append("Not installed on this PC (or misspelt): " + ", ".join(missing) + ". The commands that use them will fail as written.")
     if absent:
         lines.append("pacman cannot find " + ", ".join(absent) + " in the Arch repos, so that install command would fail "
                      "(it may be in the AUR, or the name is wrong).")
@@ -3974,7 +4091,8 @@ SESSION_BREAKERS = [
      "ends your desktop session"),
     (re.compile(r"\bpacman\s+(?:--\S+\s+)*-Sy(?![a-z]*u)[a-z]*\s+(?:--\S+\s+)*[\w@.+]"),
      "is a partial upgrade (refreshing the package lists without upgrading everything), which Arch does not support and can break the system; use pacman -Syu"),
-    (re.compile(r"\bmkfs(?:\.\w+)?\s|\bdd\b[^\n`]*\bof=/dev/(?:sd|nvme|vd|mmcblk|hd)"), "overwrites a drive"),
+    (re.compile(r"\bmkfs(?:\.\w+)?\s+(?:-\S+\s+(?:\S+\s+)?)*/dev/|\bdd\b[^\n`]*\bof=/dev/(?:sd|nvme|vd|mmcblk|hd)"),
+     "formats or overwrites a drive"),
     (re.compile(r"\brm\s+-[a-zA-Z]*[rR][a-zA-Z]*\s+(?:--no-preserve-root\s+)?(?:/|~/?|\$HOME/?)(?=\s|$|`)"), "deletes everything in it"),
 ]
 
@@ -4007,11 +4125,18 @@ def _unit_directives(answer):
 def _systemd_docs_read(since=0):
     return any(SYSTEMD_DOCS_RE.search(d) for d in RESEARCH["docs"][since:])
 
+REVISE_NOTE = ("Your draft answer (above) was checked against this PC and against everything you read, and these parts are "
+               "wrong or unsupported:\n{problems}\nFix each one: correct it from the tool output, check it with a tool, or "
+               "remove it. If a change would do nothing because the setup already does it, tell the user that instead of "
+               "suggesting it. Keep the rest of the answer. Do not mention this check. Then give the full corrected answer.")
+
 SYSTEMD_CHECK_NOTE = ("Your answer suggests systemd settings ({names}) but you have not read the systemd documentation for "
                       "them. Before answering, look each one up, for example: {example}. Fix anything the man page "
                       "contradicts (for instance, what each directive does and does not do to start-up order). If the "
                       "current setup already does what the user wants, say so and suggest no change. Then give your answer.")
 
+LOCAL_URL_RE = re.compile(r"https?://(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|"
+                          r"172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|[\w-]+\.(?:local|lan|home\.arpa))(?:[:/]|$)", re.I)
 IDENT_RE = re.compile(r"[A-Za-z0-9][\w.+@-]{5,}")
 FIGURE_RE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s*\+?\s*(hours?|hrs?|minutes?|mins?|days?|weeks?|GiB|GB|MiB|MB|TiB|TB|%|°C|MHz|GHz|W|fps|FPS|ms|RPM|rpm)(?![\w])")
 
@@ -4062,7 +4187,8 @@ class LoopGuard:
         self.figures = set()  # every number seen in the prompt, the user's message and tool results
         self.names, self.renamed = set(), []  # identifiers seen in any text, and misspelt ones corrected in the answer
         self.env_known, self.env_dropped = set(), []  # environment variable names seen in any text, and ones cut from the answer
-        self.docs_round, self.docs_at_start = 0, len(RESEARCH["docs"])  # one extra round to check suggested systemd settings
+        self.docs_round, self.docs_at_start = 0, len(RESEARCH["docs"])
+        self.revise_round = 0  # one round to fix what the checks found in a draft  # one extra round to check suggested systemd settings
         self.cut_commands, self.unit_problems = [], []
 
     @staticmethod
@@ -4131,9 +4257,29 @@ class LoopGuard:
             return m.group(0) if line == m.group(1) else "(command left out, see below)"
         answer = re.sub(r"(?<!`)`([^`\n]+)`(?!`)", fix_inline, answer)
         answer = re.sub(r"(?<!`)`([A-Za-z0-9][\w.+@-]{5,})`(?!`)", self._fix_name, answer)
-        for block in _unit_blocks(answer):
-            self.unit_problems += _lint_unit_text(block)
+        self.unit_problems += _unit_block_problems(answer)
         return answer
+
+    def draft_problems(self, answer):
+        """What the checks would flag in a draft, worded for the model to fix before the user sees it."""
+        found = []
+        for line in answer.splitlines():
+            for pattern, why in SESSION_BREAKERS:
+                if pattern.search(line):
+                    found.append(f"`{line.strip()[:80]}` {why}: leave it out or give a safe alternative")
+        found += [f"unit file: {p}" for p in _unit_block_problems(answer)]
+        if agent_modes.is_local():
+            found += _names_on_this_pc(answer, CURRENT_USER_TEXT[0])
+        found += _pacman_flag_errors(answer)
+        links = [u for u in dict.fromkeys(URL_RE.findall(answer)) if not LOCAL_URL_RE.match(u) and _norm_url(u) and
+                 not any(k == _norm_url(u) or k.startswith(_norm_url(u) + "/") or k.startswith(_norm_url(u) + "?") for k in self.known)]
+        if links:
+            found.append("these links appear in nothing you read: " + ", ".join(links[:4]) + " (use a link from your results, or none)")
+        figures = self.unseen_figures(answer) if (self.calls or self.opened) else []
+        if figures:
+            found.append("these figures appear in nothing you measured or read: " + ", ".join(figures) +
+                         " (use the exact figure from the tool output, or say you could not measure it)")
+        return found
 
     def _fix_name(self, m):
         """A name in `code` that no text in the conversation contains but that is one or two letters off exactly one
@@ -4261,6 +4407,8 @@ class LoopGuard:
         lines, unverified = [], []
         for url in dict.fromkeys(URL_RE.findall(answer)):
             norm = _norm_url(url)
+            if LOCAL_URL_RE.match(url):
+                continue  # this PC or the home network (a local web UI found with ss), not a page on the web
             if norm and not any(k == norm or k.startswith(norm + "/") or k.startswith(norm + "?") for k in self.known):
                 unverified.append(url.rstrip(".,;:!?*)]}>\"'`"))
         if unverified:
@@ -4274,6 +4422,8 @@ class LoopGuard:
         figures = self.unseen_figures(answer) if (self.calls or self.opened) else []
         if figures:
             lines.append("These figures are not in anything I measured or read (worked out or guessed), so check them: " + ", ".join(figures) + ".")
+        for fix in _pacman_flag_errors(answer):
+            lines.append("Correction: " + fix)
         if self.renamed:
             lines.append("Corrected a misspelt name: " + ", ".join(f"{a} → {b}" for a, b in dict.fromkeys(self.renamed)) + ".")
         for command, why in dict.fromkeys(self.cut_commands):
@@ -4461,7 +4611,7 @@ def fact_check(messages, user_input, draft):
             rest = [fields[0].split(":", 1)[1].strip()]
         if not rest or (found != "misread" and _echoes_request(rest[0], user_input)):
             continue
-        if found == "unbacked" and _numbers_found(rest[0], evidence):
+        if found == "unbacked" and (_numbers_found(rest[0], evidence) or _code_found(rest[0], evidence) or HEDGED_RE.search(rest[0])):
             continue
         problems.append((rest[0], found, " ".join(rest[1:])))
     return problems[:MAX_FACT_PROBLEMS]
@@ -4473,6 +4623,17 @@ def _numbers_found(claim, evidence):
     "unbacked" because it dislikes how it is described, and a figure that was looked up should not be flagged."""
     figures = {f for f in NUMBER_RE.findall(claim.replace(",", "")) if len(f) >= 2}  # a lone digit is on every page
     return bool(figures) and figures <= set(NUMBER_RE.findall(evidence.replace(",", "")))
+
+# A claim that already says it is uncertain, or describes the assistant's own attempt, is not an unchecked fact
+HEDGED_RE = re.compile(r"\b(?:I )?(?:could(?:n't| not)|was(?:n't| not) able|can(?:'t|not) (?:confirm|tell|be sure)|unconfirmed|"
+                       r"not (?:sure|certain|confirmed|clear)|may|might|possibly|probably|likely|unclear|unknown|assum\w*|"
+                       r"I (?:attempted|tried|checked|looked|searched|ran|read|found no)|best guess|if (?:you|it|that))\b", re.I)
+
+def _code_found(claim, evidence):
+    """True when the claim's `code` names (a setting, a unit, a command) all appear in the evidence word for word: the
+    checker often calls a quoted config line unbacked because it is phrased differently from the output."""
+    names = re.findall(r"`([^`]{3,}?)(?:`|$)", claim)  # the closing backtick may have been stripped with the table cell
+    return bool(names) and all(all(part in evidence for part in re.split(r"[=\s]+", n) if part) for n in names)
 
 def _echoes_request(claim, request):
     """A short claim that only repeats the user's own words (usually a product name) is not worth checking."""
@@ -4639,6 +4800,15 @@ def _process(messages, user_input, guard=None):
                     content = _final_text(messages, user_input, "Give your final answer to the user now in plain text, based on what you found so far.")
                     if not content:
                         return describe_failure(EMPTY_REPLY, messages, user_input, response)
+                problems_found = [] if guard.revise_round else guard.draft_problems(content)
+                if problems_found and not guard.halted and not guard.out_of_time():
+                    # Facts the code checked against this PC and the sources contradict the draft: one round to fix them
+                    guard.revise_round += 1
+                    draft = {'role': 'assistant', 'content': content}
+                    nudge = {'role': 'system', 'content': REVISE_NOTE.format(problems="\n".join(f"- {p}" for p in problems_found))}
+                    messages += [draft, nudge]
+                    guard.internal.update((id(draft), id(nudge)))
+                    continue
                 docs_note = guard.docs_check(content)
                 if docs_note and not guard.halted and not guard.out_of_time():
                     # Systemd settings suggested from memory: one round to check them in the man page first

@@ -75,7 +75,7 @@ def old_dates(reply, days=7):
     import datetime
     today = datetime.date.today()
     found = re.findall(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(" + "|".join(MONTHS) + r")[a-z]*\b", reply, re.I)
-    found += [(d, m) for m, d in re.findall(r"\b(" + "|".join(MONTHS) + r")[a-z]*\s+(\d{1,2})\b", reply, re.I)]
+    found += [(d, m) for m, d in re.findall(r"\b(" + "|".join(MONTHS) + r")[a-z]*\s+(\d{1,2})\b(?![:.]\d)", reply, re.I)]
     old = []
     for d, m in found:
         try:
@@ -179,6 +179,8 @@ CASES = [
         "says it is already set up": lambda c, r: bool(re.search(r"already", r, re.I)) and "plymouth-quit" in r,
         # Requires= does not order anything and Alias= renames; neither makes SDDM wait
         "suggests no Requires=/Alias= line": lambda c, r: not re.search(r"^\s*(Requires|Alias)\s*=", r, re.M),
+        "names no unit that does not exist": lambda c, r: "There is no unit called" not in r,
+        "suggests no unit file (nothing needs changing)": lambda c, r: not re.search(r"^\s*\[Unit\]", r, re.M) and not proposed_changes(c),
     }),
     # Facts about this PC come from the PC, not from memory
     ("gpu", "What graphics card do I have?", {
@@ -192,7 +194,7 @@ CASES = [
     }),
     # Says "not there" instead of making something up
     ("not_installed", "Which version of zorbletools do I have installed?", {
-        "says it is not installed": lambda c, r: bool(re.search(r"(?:not|n't)\s+(?:\w+\s+){0,2}installed|no package|not found|doesn't (seem to )?exist|could not find|couldn't find", r, re.I)),
+        "says it is not installed": lambda c, r: bool(re.search(r"(?:not|n['’]t)\s+(?:\w+\s+){0,2}installed|no package|not found|doesn't (seem to )?exist|could not find|couldn't find", r, re.I)),
         "no made-up version": lambda c, r: not re.search(r"zorbletools\S*\s+v?\d+\.\d+", r, re.I),
     }),
     ("already_done", "Make the bluetooth service start automatically at boot.", {
@@ -249,8 +251,8 @@ def run_case(name, prompt, checks):
     a.execute_tool = record
     a.HISTORY.clear()
     for key in ("docs", "reads"):  # each case is a new conversation: nothing read for an earlier case counts
-        a.RESEARCH[key].clear()
-    a.RESEARCH_START.clear()
+        getattr(a, "RESEARCH", {}).get(key, []).clear()
+    getattr(a, "RESEARCH_START", {}).clear()
     mode = "local"
     if prompt.startswith("/"):  # "/gaming question": ask in that mode
         mode, _, prompt = prompt[1:].partition(" ")
@@ -272,7 +274,7 @@ def run_case(name, prompt, checks):
             results[label] = False
             error = error or f"check '{label}' raised {e}"
     # What the code-level checks caught and flagged under the answer: made-up names, links and tweaks
-    caught = re.findall(r"^— ((?:There is no unit|pacman cannot find|I left out|Treat these links as unverified|These figures are not|Corrected a misspelt|I took out|Problems in the suggested unit)[^\n]*)", reply, re.M)
+    caught = re.findall(r"^— ((?:There is no unit|pacman cannot find|I left out|Treat these links as unverified|These figures are not|Corrected a misspelt|I took out|Problems in the suggested unit|Correction: |Not installed on this PC)[^\n]*)", reply, re.M)
     return {"name": name, "prompt": prompt, "secs": round(time.time() - started, 1), "calls": calls,
             "reply": reply, "error": error, "checks": results, "caught": caught}
 
