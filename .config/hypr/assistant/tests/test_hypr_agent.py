@@ -274,7 +274,8 @@ class InventedTweaks(unittest.TestCase):
 class NamesOnThisPC(unittest.TestCase):
     def test_made_up_units_and_packages_are_flagged(self):
         with mock.patch.object(a, "_unit_exists", side_effect=lambda u: u != "sddm-plymouth-quit-before.service"), \
-                mock.patch.object(a, "_in_repos", side_effect=lambda p: p != "rocm-smi"):
+                mock.patch.object(a, "_in_repos", side_effect=lambda p: p != "rocm-smi"), \
+                mock.patch.object(a.shutil, "which", return_value="/usr/bin/found"):  # the test machine may not have pacman
             lines = a._names_on_this_pc("Check sddm-plymouth-quit-before.service and sddm.service.\n"
                                         "```bash\nsudo pacman -Syu\nsudo pacman -S --needed rocm-smi rocm-smi-lib\n```")
         self.assertEqual(len(lines), 2)
