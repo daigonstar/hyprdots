@@ -21,6 +21,12 @@ I have added some wallpapers I've collected (will probably add more as I go)
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + N = Refresh waybar  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> SHIFT + N = Launch waybar (used if waybar crashes)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + W = Launch wallpaper selecter  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + TAB = See all workspaces, with live window pictures  
+ALT + TAB = Switch windows  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + . = Emoji picker  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> SHIFT + C = Pick a colour on screen  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> ALT + R = Record this screen (again to stop). <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> ALT + SHIFT + R records an area  
+PRINT = Screenshot this screen. CTRL + SHIFT + S a region, CTRL + ALT + S a window  
 
 ### Default Desktop
 ![image](screens/desktop.png)
@@ -34,6 +40,13 @@ I have added some wallpapers I've collected (will probably add more as I go)
 ### App launcher
 Super+Space. Type to find an app; it also works out sums (`12*7`, Enter copies the answer), runs commands in your terminal (`> htop`), searches the web (`? arch wiki bluetooth`) and offers lock, sleep, log out, reboot and shut down (the last four ask for a second Enter). Apps you open often come first. Five styles, picked on the settings Launcher page: Categories, Spotlight, Grid, Compact and Dock. Colours and font follow the Theme page.
 ![image](screens/launcher.png)
+
+### Quick tray
+The bar's bell opens one panel, like a phone's: quick settings (Wi-Fi, Bluetooth, do not disturb, stay awake, game mode, recording, night light, system sounds), volume and microphone with a device picker, what is playing, shortcuts, a system monitor with two-minute graphs, drive space with a button to eject USB drives, the batteries of wireless mice and keyboards, and your notifications at the bottom, one line until you click them.
+
+Anything your PC lacks is left out, so battery, brightness, touchpad and airplane mode only show on a laptop. The same background process (`.config/hypr/tray/`) draws the volume popup, Alt+Tab and the overview, warns when a battery runs low, and puts the PC to sleep at 3%. swaync is still the notification daemon behind it. Notification buttons such as Reply work on the popups, not in the tray.
+
+USB drives mount when you plug them in, with a notification to open them, and drives inside the PC are left alone (`.config/hypr/udiskie.yml`). When a screen comes back, its workspaces return to it.
 
 ### Powermenu
 Full screen, with a PC (a laptop when a battery is found) in the middle and the options in a ring around it. Arrow keys, the first letter of an option, or the mouse.
@@ -88,6 +101,7 @@ Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`)
 | Cloud drives | Google Drive, OneDrive, Dropbox, Nextcloud and other WebDAV accounts shown as folders in Thunar, and whether opened files are kept on this PC (faster) or streamed from the server (nothing stored) |
 | Displays | Resolution, refresh rate, scale, rotation and position of each screen (replaces nwg-displays): drag screens on the map and they snap into place; changes apply at once and undo themselves if you do not confirm |
 | Workspaces | Which screen each of the ten workspaces opens on, which one each screen starts on, names, always-shown workspaces and an app to open in an empty one, with quick layouts (alternate, split, all on one screen) |
+| Window rules | What happens when a window opens: which workspace or screen it goes to, whether it floats or opens fullscreen, and more. Switch off or change the built-in rules, and add your own with a step-by-step wizard. Yours are kept in `window_rules_local.lua` (git-ignored), so updates leave them alone |
 | Theme | One look for the desktop, built from your wallpaper: which wallust colour each part of the bar uses (panels, text, accent, workspaces, icons, notifications), panel opacity, the bar's style (islands, solid strip, floating bar, bubbles or minimal), and its font and size. Apps follow too: GTK apps such as Thunar and the settings window take the same colours (dark or light to match), with their icons, mouse cursor and font (this replaces nwg-look) |
 | Bar layout | Start from one of five ready-made layouts (Classic, Two sides, Centre pill, Full strip, Bottom dock), put the bar at the top or bottom, drag its modules between left, centre and right, reorder them, or take them off and put them back. Extra modules to add: now playing, keep awake, keyboard layout, disk space, screen brightness and a privacy indicator |
 | Power & lock | When the screen locks, when the screens switch off and when the PC goes to sleep, which screens stay on while locked, and the lock screen's look: wallpaper or blurred background, darkening, clock style, size and position, date, username, password line or box, a grace period, with a Preview button |

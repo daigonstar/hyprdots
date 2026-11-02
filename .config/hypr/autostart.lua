@@ -16,6 +16,13 @@ local optional_apps = {
 }
 -- STARTUP-APPS-END
 
+-- Puts the wallpaper and workspaces right when a screen comes or goes
+for _, event in ipairs({ "monitor.added", "monitor.removed" }) do
+    hl.on(event, function()
+        hl.exec_cmd("~/.config/hypr/scripts/monitor-changed.sh")
+    end)
+end
+
 hl.on("hyprland.start", function()
     local commands = {
         "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP QT_QPA_PLATFORMTHEME",
@@ -30,6 +37,8 @@ hl.on("hyprland.start", function()
         "~/.config/waybar/launch.sh",  -- puts the default theme.css in place first if there is none
         "~/.config/swaync/launch.sh",  -- puts the default theme.css in place first if there is none
         "python3 ~/.config/hypr/tray/quick_tray.py",  -- opens and closes with the notification centre
+        "udiskie -c ~/.config/hypr/udiskie.yml",  -- mounts USB drives, with a notification to open them
+        "python3 ~/.config/hypr/welcome/welcome.py",  -- only at the first login
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
         -- hypr-settings (Power & lock page) writes hypridle.local.conf; without it the shipped hypridle.conf is used

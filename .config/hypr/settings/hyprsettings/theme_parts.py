@@ -234,7 +234,8 @@ def kde_colours(o: dict) -> str:
                 "ForegroundPositive": accent, "DecorationFocus": accent, "DecorationHover": accent}
         return f"[Colors:{name}]\n" + "".join(f"{k}={triple(v)}\n" for k, v in keys.items()) + "\n"
     base, shaded, card = g["window_bg_color"], g["theme_base_color"], g["card_bg_color"]
-    return (group("Window", base, shaded) + group("View", shaded, card) + group("Button", card, base)
+    button = theme.mix(base, fg, 0.14)  # on a black wallpaper palette, anything fainter hides the button
+    return (group("Window", base, shaded) + group("View", shaded, card) + group("Button", button, card)
             + group("Header", base, shaded) + group("Tooltip", g["popover_bg_color"], base)
             + group("Complementary", base, shaded) + group("Selection", accent, accent, on_accent, on_accent))
 

@@ -11,6 +11,7 @@ mode only on a laptop. popups.py and overview.py have the volume level, Alt+Tab 
 import fcntl
 import json
 import os
+import shlex
 import shutil
 import signal
 import socket
@@ -37,6 +38,9 @@ from popups import Meter, Osd, Switcher, label  # noqa: E402
 import sysinfo  # noqa: E402
 
 THEME = HERE / "theme.css"
+SOUND_OFF = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quick-tray/sounds-off"
+SOUND_DIR = Path("/usr/share/sounds/freedesktop/stereo")
+SOUNDLESS_APPS = ("Screenshot", "Screen recording", "Colour picker")  # they have their own sound, or you just asked for them
 LOCK = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "quick-tray.lock"
 SCRIPTS = "~/.config/hypr/scripts"
 EDGE = 10  # from the top and right of the screen; the panel's own 10px margin (room for its shadow) comes on top
@@ -58,7 +62,7 @@ ICON = {
     "device": "\U000f0079",
     "close": "\U000f0156", "clear": "\U000f00e2", "previous": "\U000f04ae", "play_pause": "\U000f040e", "next": "\U000f04ad",
     "music": "\U000f075a", "record": "\U000f044a", "colour": "\U000f03d8", "emoji": "\U000f01f5",
-    "overview": "\U000f0570",
+    "overview": "\U000f0570", "sounds": "\U000f009e", "eject": "\U000f01ea",
 }
 
 # Used until the settings app has written theme.css
@@ -165,6 +169,13 @@ def icon_button(icon, tooltip, action, css="round"):
     b.connect("clicked", lambda _b: action())
     hand_cursor(b)
     return b
+
+
+def play(name):
+    """A system sound, unless they are switched off (Settings tile) or the theme is not installed."""
+    path = SOUND_DIR / f"{name}.oga"
+    if path.exists() and not SOUND_OFF.exists():
+        subprocess.Popen(["pw-play", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def recording_since():
@@ -380,6 +391,8 @@ class Tray(Gtk.Window):
         self.poll_timer = None
         self.previous = None  # last CPU and network counters
         self.disk_rows = {}
+        self.battery_reached = None
+        self.peripherals_warned = {}
         self.notes = []  # newest first
         self.notes_open = False
         self.notes_expanded = set()  # the ones showing all their text
@@ -443,6 +456,7 @@ class Tray(Gtk.Window):
         self.game = Tile(ICON["game"], "Game mode", self.toggle_game)
         self.awake = Tile(ICON["awake"], "Stay awake", self.toggle_awake)
         self.night = Tile(ICON["night"], "Night light", self.toggle_night)
+        self.sounds = Tile(ICON["sounds"], "System sounds", self.toggle_sounds)
         self.record = Tile(ICON["record"], "Record screen", lambda: self.launch(f"{SCRIPTS}/record.sh screen", 0.4))
         self.profile = Tile(ICON["profile"], "Power profile", self.next_profile)
         self.airplane = Tile(ICON["airplane"], "Airplane mode", self.toggle_airplane)
@@ -456,7 +470,7 @@ class Tray(Gtk.Window):
         tiles.set_row_spacing(8)
         tiles.set_can_focus(False)
         for tile in (self.wifi, self.ethernet, self.bluetooth, self.vpn, self.dnd_tile, self.awake, self.game,
-                     self.record, self.night, self.profile, self.airplane, self.touchpad):
+                     self.record, self.sounds, self.night, self.profile, self.airplane, self.touchpad):
             tiles.add(tile)
             tile.get_parent().set_can_focus(False)
         panel.pack_start(tiles, False, False, 0)
@@ -568,6 +582,8 @@ class Tray(Gtk.Window):
         self.ethernet.present(False)
         self.bluetooth.present(sysinfo.has_bluetooth())
         self.record.present(False)
+        self.sounds.present(SOUND_DIR.is_dir())
+        self.sounds.show_state(not SOUND_OFF.exists(), "Off" if SOUND_OFF.exists() else "On")
         self.media.set_visible(False)
 
     # ---- opening and closing --------------------------------------------------------------------------------------
@@ -666,6 +682,15 @@ class Tray(Gtk.Window):
                  "tail", f"--pid={os.getpid()}", "-f", "/dev/null"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.poll()
+
+    def toggle_sounds(self):
+        if SOUND_OFF.exists():
+            SOUND_OFF.unlink()
+            play("audio-volume-change")
+        else:
+            SOUND_OFF.parent.mkdir(parents=True, exist_ok=True)
+            SOUND_OFF.touch()
+        self.sounds.show_state(not SOUND_OFF.exists(), "Off" if SOUND_OFF.exists() else "On")
 
     def toggle_night(self):
         if self.state.get("night"):
@@ -813,6 +838,8 @@ class Tray(Gtk.Window):
 
     # ---- notifications ----------------------------------------------------------------------------------------------
     def _note_added(self, note_id, note):
+        if not self.dnd and note["app"] not in SOUNDLESS_APPS:
+            play("dialog-warning" if note["critical"] else "message-new-instant")
         if not note["transient"]:  # swaync only shows those as a popup, and keeps no history of them
             replaced = note["replaces"]
             self.notes = [n for n in self.notes if n["id"] not in (note_id, replaced)]
@@ -959,9 +986,9 @@ class Tray(Gtk.Window):
     def _read_sample(self, visible):
         s = {"cpu": sysinfo.cpu_times(), "memory": sysinfo.memory(), "net": sysinfo.net_bytes(), "at": time.monotonic(),
              "visible": visible}
+        s.update(peripherals=sysinfo.peripherals(), battery=sysinfo.system_battery())
         if visible:
-            s.update(cpu_temp=sysinfo.cpu_temp(), gpu=sysinfo.gpu(), disks=sysinfo.disks(), uptime=sysinfo.uptime(),
-                     peripherals=sysinfo.peripherals(), battery=sysinfo.system_battery())
+            s.update(cpu_temp=sysinfo.cpu_temp(), gpu=sysinfo.gpu(), disks=sysinfo.disks(), uptime=sysinfo.uptime())
         return s
 
     def _show_sample(self, s):
@@ -982,6 +1009,7 @@ class Tray(Gtk.Window):
         self.cpu.add(cpu, f"{cpu:.0f}%", temp, peak(self.cpu, cpu, pct))
         self.ram.add(memory, f"{memory:.0f}%", f"{sysinfo.fmt_bytes(used)} of {sysinfo.fmt_bytes(total)}", peak(self.ram, memory, pct))
         self.net.add(down, rate(down), f"Sending {rate(up)}", peak(self.net, down, rate))
+        self._check_batteries(s["battery"], s["peripherals"])
         if s["visible"]:
             self.uptime.set_text(f"Up {sysinfo.fmt_uptime(s['uptime'])}")
             for when, then in self.note_times:
@@ -999,6 +1027,24 @@ class Tray(Gtk.Window):
             self._fit_to_screen()
         return False
 
+    def _check_batteries(self, battery, peripherals):
+        """Runs while the tray is closed too: this is the only thing watching them."""
+        if battery:
+            alert, self.battery_reached = sysinfo.battery_alert(battery["capacity"], battery["status"], self.battery_reached)
+            left = f"{battery['capacity']}% left."
+            if alert == "low":
+                spawn(f"notify-send -a Battery -i battery-low 'Battery low' '{left} Time to find the charger.'")
+            elif alert == "critical":
+                spawn(f"notify-send -u critical -a Battery -i battery-caution 'Battery very low' '{left} The PC will sleep at 3%.'")
+            elif alert == "sleep":
+                spawn("notify-send -u critical -a Battery -i battery-empty 'Going to sleep' 'The battery is nearly empty.'; "
+                      "sleep 5; systemctl suspend")
+        for device in peripherals:
+            model = device["model"]
+            say, self.peripherals_warned[model] = sysinfo.peripheral_alert(device["capacity"], self.peripherals_warned.get(model, False))
+            if say:
+                spawn(f"notify-send -a Battery -i battery-low {shlex.quote(model + ' battery low')} '{device['capacity']}% left.'")
+
     def _show_disks(self, disks):
         wanted = {d["mount"] for d in disks}
         for mount in list(self.disk_rows):
@@ -1007,7 +1053,8 @@ class Tray(Gtk.Window):
         for disk in disks:
             if disk["mount"] not in self.disk_rows:
                 row = Gtk.Box(spacing=10)
-                name = label(disk["mount"], "dim", ellipsize=True)
+                # A USB drive's mount point is long and only its last part says which one it is
+                name = label(os.path.basename(disk["mount"]) if disk["removable"] else disk["mount"], "dim", ellipsize=True)
                 name.set_width_chars(11)
                 name.set_max_width_chars(11)
                 meter = Meter()
@@ -1017,6 +1064,8 @@ class Tray(Gtk.Window):
                 row.pack_start(name, False, False, 0)
                 row.pack_start(meter, True, True, 0)
                 row.pack_start(text, False, False, 0)
+                if disk["removable"]:
+                    row.pack_start(icon_button(ICON["eject"], "Safely remove", lambda m=disk["mount"]: self.eject(m), "icon-button"), False, False, 0)
                 row.show_all()
                 self.disks_box.pack_start(row, False, False, 0)
                 self.disk_rows[disk["mount"]] = (row, meter, text)
@@ -1024,6 +1073,17 @@ class Tray(Gtk.Window):
             fraction = disk["used"] / disk["total"]
             meter.show_fraction(fraction, fraction * 100 >= ATTENTION_DISK)
             text.set_text(f"{sysinfo.fmt_bytes(disk['used'])} / {sysinfo.fmt_bytes(disk['total'])}")
+
+    def eject(self, mount):
+        def job():
+            out = subprocess.run(["udiskie-umount", "--detach", mount], capture_output=True, text=True, timeout=30)
+            return out.returncode == 0
+        name = os.path.basename(mount)
+
+        def done(ok):
+            title, body = ("Safe to remove", name) if ok else ("Could not remove it", f"Something is still using {name}.")
+            subprocess.Popen(["notify-send", "-a", "Drives", "-i", "drive-removable-media", title, body])
+        background(job, done)
 
     def _show_peripherals(self, peripherals):
         for child in self.peripherals_box.get_children():
@@ -1084,6 +1144,8 @@ class Tray(Gtk.Window):
             # Nothing on start-up or when the device itself changes, and the panel's sliders already show their value
             if before and before[0] == device and before[1] != level and level and not self.get_visible():
                 self.osd.flash(icons[1] if level[1] else icons[0], level[0], level[1])
+                if key == "output" and not self.dnd:
+                    play("audio-volume-change")
         return False
 
     def brightness_changed(self):

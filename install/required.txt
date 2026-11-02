@@ -108,6 +108,9 @@ gpu-screen-recorder
 rofimoji
 wtype
 noto-fonts-emoji
+udiskie
+sound-theme-freedesktop
+btop
 gtk-layer-shell
 gtk4
 libadwaita

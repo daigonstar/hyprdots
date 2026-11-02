@@ -55,6 +55,17 @@ jobs:
         working-directory: .config/hypr/settings
         run: python -m unittest discover -s tests -v
 
+  tray:
+    name: Quick tray tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1
+      - name: Unit tests
+        working-directory: .config/hypr/tray
+        run: /usr/bin/python3 -m unittest discover -s tests -v
+
   installer:
     name: Installer dry run
     runs-on: ubuntu-latest

@@ -178,10 +178,20 @@ def reset_layout() -> None:
         p.unlink(missing_ok=True)
 
 
+def with_recording(layout: dict, config: dict) -> dict:
+    """The REC dot in a layout saved before it existed, or the tray's Record tile would give no sign on the bar. It only
+    shows while recording, so it costs a layout nothing."""
+    if "custom/recording" not in config or any("custom/recording" in layout.get(z, []) for z in ZONES):
+        return layout
+    right = list(layout.get("modules-right", []))
+    right.insert(right.index("custom/power") if "custom/power" in right else len(right), "custom/recording")
+    return {**layout, "modules-right": right}
+
+
 def generate() -> Path:
     """Writes config.generated.json: the tracked config with your layout. Raises if either cannot be read."""
     config = read_config()
-    merged = {**config, **read_layout(config)}
+    merged = {**config, **with_recording(read_layout(config), config)}
     out = waybar_dir() / "config.generated.json"
     tmp = out.with_name(out.name + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

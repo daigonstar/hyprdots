@@ -153,8 +153,9 @@ class App:
             return self._mime_rows(out)
         if page == "Keybinds":
             return self._keybind_rows(out)
-        if page in ("Workspaces", "Bar layout"):
-            where = self.store.dir / "workspaces.lua" if page == "Workspaces" else "~/.config/waybar/layout.json"
+        if page in ("Workspaces", "Window rules", "Bar layout"):
+            where = {"Workspaces": self.store.dir / "workspaces.lua", "Window rules": self.store.dir / "window_rules_local.lua",
+                     "Bar layout": "~/.config/waybar/layout.json"}[page]
             out.append(Row("note", f"This is set up in the settings window, or by editing {where}."))
             out.append(Row("action", "Open the settings window on this page", ref=f"gui:{page}",
                            help="Starts the settings window (it needs a desktop session, so not over SSH)."))

@@ -1,0 +1,15 @@
+# USB drives and memory cards: mounted when you plug them in, with a notification to open them. Drives inside the PC are
+# left alone, so one you keep unmounted on purpose stays that way.
+device_config:
+  # The 3.7TB backup drive mounted at /mnt/backup: its SATA port counts as hot-pluggable, so it looks external
+  - id_uuid: 5aa498b8-97a0-4b93-814d-81135896f36f
+    ignore: true
+  - is_external: false
+    ignore: true
+program_options:
+  automount: true
+  notify: true
+  tray: false
+  file_manager: xdg-open
+notifications:
+  timeout: 6

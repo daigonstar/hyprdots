@@ -14,6 +14,8 @@ PORTABLE_CHASSIS = {"8", "9", "10", "11", "14", "30", "31", "32"}  # SMBIOS: por
 LOCAL_FILESYSTEMS = {"ext2", "ext3", "ext4", "btrfs", "xfs", "f2fs", "ntfs", "ntfs3", "vfat", "exfat", "zfs", "bcachefs"}
 VIRTUAL_NET = ("lo", "docker", "br-", "veth", "virbr", "vmnet", "vboxnet", "tun", "tap", "wg")
 CPU_SENSORS = ("k10temp", "zenpower", "coretemp")
+BATTERY_STEPS = ((3, "sleep"), (5, "critical"), (15, "low"))  # percent, lowest first
+PERIPHERAL_LOW = 10
 
 
 def _read(path: Path, default: str = "") -> str:
@@ -48,6 +50,25 @@ def system_battery(sys: Path = SYS) -> dict | None:
 
 def peripherals(sys: Path = SYS) -> list[dict]:
     return [b for b in batteries(sys) if b["scope"] == "Device" and b["capacity"] is not None]
+
+
+def battery_alert(capacity: int | None, status: str, reached: int | None) -> tuple[str | None, int | None]:
+    """What to say about the PC's own battery now, and the step to remember: (alert, reached). Each step speaks once as
+    the battery runs down, and plugging in starts over."""
+    if capacity is None or status != "Discharging":
+        return None, None
+    for percent, alert in BATTERY_STEPS:
+        if capacity <= percent:
+            return (alert, percent) if reached is None or percent < reached else (None, reached)
+    return None, None
+
+
+def peripheral_alert(capacity: int, warned: bool) -> tuple[bool, bool]:
+    """(say it now, remember it) for a wireless mouse or keyboard. Readings wobble, so it has to recover before it can
+    warn again."""
+    if capacity <= PERIPHERAL_LOW:
+        return not warned, True
+    return False, warned and capacity <= PERIPHERAL_LOW + 5
 
 
 def is_laptop(sys: Path = SYS) -> bool:
@@ -148,7 +169,7 @@ def _nvidia() -> dict | None:
 
 
 def disks(proc: Path = PROC, limit: int = 4) -> list[dict]:
-    """Mounted local drives, once each (a btrfs drive is mounted many times), fullest first."""
+    """Mounted local drives, once each (a btrfs drive is mounted many times)."""
     seen, found = set(), []
     for line in _read(proc / "mounts").splitlines():
         device, mount, fstype, *_ = line.split()
@@ -162,8 +183,10 @@ def disks(proc: Path = PROC, limit: int = 4) -> list[dict]:
             continue
         total = st.f_blocks * st.f_frsize
         if total:
-            found.append({"mount": mount, "used": total - st.f_bavail * st.f_frsize, "total": total})
-    return sorted(found, key=lambda d: d["used"] / d["total"], reverse=True)[:limit]
+            found.append({"mount": mount, "used": total - st.f_bavail * st.f_frsize, "total": total,
+                          "removable": mount.startswith("/run/media/")})
+    # Removable drives first, so one you can eject never falls off the list
+    return sorted(found, key=lambda d: (not d["removable"], -d["used"] / d["total"]))[:limit]
 
 
 def uptime(proc: Path = PROC) -> float:

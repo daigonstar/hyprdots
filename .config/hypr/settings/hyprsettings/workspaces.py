@@ -114,10 +114,31 @@ def apply(rules: dict[str, dict]) -> tuple[bool, str]:
         screens = {m["name"] for m in json.loads(_hyprctl("monitors", "-j").stdout or "[]")}
     except (OSError, ValueError, subprocess.SubprocessError) as e:
         return False, f"Could not talk to Hyprland: {e}"
+    moved = _send_home(rules, open_ws, screens)
+    return True, (f"Applied. Moved workspace {', '.join(moved)} to its screen." if moved else "Applied.")
+
+
+def _send_home(rules: dict[str, dict], open_ws: dict[str, str], screens: set[str]) -> list[str]:
+    """Moves open workspaces to the screen their rule names, if it is connected. Returns those moved."""
     moved = []
     for ws, opts in rules.items():
         want = opts.get("monitor")
         if ws in open_ws and want in screens and open_ws[ws] != want:
             _hyprctl("dispatch", f"hl.dsp.workspace.move({{ workspace = {lua_value(ws)}, monitor = {lua_value(want)} }})")
             moved.append(ws)
-    return True, (f"Applied. Moved workspace {', '.join(moved)} to its screen." if moved else "Applied.")
+    return moved
+
+
+def go_home() -> None:
+    """After a screen is plugged back in (scripts/monitor-changed.sh)."""
+    import json
+    rules = read(Path.home() / ".config/hypr/workspaces.lua")
+    open_ws = {str(w["id"]): w["monitor"] for w in json.loads(_hyprctl("workspaces", "-j").stdout or "[]") if "id" in w}
+    screens = {m["name"] for m in json.loads(_hyprctl("monitors", "-j").stdout or "[]")}
+    _send_home(rules, open_ws, screens)
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["home"]:
+        go_home()

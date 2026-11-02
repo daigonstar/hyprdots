@@ -103,61 +103,36 @@ hl.layer_rule({ name = "quick-tray-level", match = { namespace = "^quick-tray-os
 hl.layer_rule({ name = "quick-tray-overview", match = { namespace = "^quick-tray-overview$" }, animation = "fade" })
 hl.layer_rule({ name = "quick-tray-switcher", match = { namespace = "^quick-tray-switcher$" }, animation = "popin 95%" })
 
+-- Rules from the settings Window rules page (see window_rules.lua). Yours replace a built-in one of the same name.
+local has_local, local_rules = pcall(require, "window_rules_local")
+if not has_local or type(local_rules) ~= "table" then
+    local_rules = {}
+end
+local rules_off, rules_replaced = {}, {}
+for _, name in ipairs(local_rules.off or {}) do
+    rules_off[name] = true
+end
+for _, rule in ipairs(local_rules.rules or {}) do
+    rules_replaced[rule.name] = true
+end
+for _, rule in ipairs(require("window_rules")) do
+    if not rules_off[rule.name] and not rules_replaced[rule.name] then
+        hl.window_rule(rule)
+    end
+end
+for _, rule in ipairs(local_rules.rules or {}) do
+    if not rules_off[rule.name] then
+        hl.window_rule(rule)
+    end
+end
+
+-- The desktop depends on these, so they are not on that page
 hl.window_rule({
-    name = "chat-workspace",
-    match = { class = "^(discord|WebCord|Vesktop)$" },
-    workspace = "2",
-})
-hl.window_rule({
-    name = "steam-workspace",
-    match = { class = "^steam_app_.*$" },
-    workspace = "3",
-})
-hl.window_rule({
-    name = "steam-fullscreen",
-    match = { class = "^steam_app_.*$" },
-    fullscreen = true,
-})
-hl.window_rule({
-    name = "steam-immediate",
-    match = { class = "^steam_app_.*$" },
-    immediate = true,
-})
-hl.window_rule({
-    name = "steam-ui",
-    match = { class = "^steam$" },
-    workspace = "1",
-})
-hl.window_rule({
-    name = "lutris",
-    match = { title = "^Lutris$" },
-    workspace = "1",
-})
-hl.window_rule({
-    name = "heroic",
-    match = { class = "^com.heroicgameslauncher.hgl$" },
-    workspace = "5",
-})
-hl.window_rule({
-    name = "remmina",
-    match = { class = "^Remmina$" },
-    workspace = "4",
-    fullscreen = true,
-})
-hl.window_rule({
-    name = "vesktop-silent",
-    match = { class = "^(vesktop)$" },
-    workspace = "2 silent",
-})
-hl.window_rule({
-    name = "bitwarden-silent",
-    match = { class = "^(com.bitwarden.desktop)$" },
-    workspace = "3 silent",
-})
-hl.window_rule({
-    name = "solaar-silent",
-    match = { class = "^(solaar)$" },
-    workspace = "5 silent",
+    name = "welcome",
+    match = { class = "^com\\.hyprdots\\.welcome$" },
+    float = true,
+    center = true,
+    size = { 560, 680 },
 })
 hl.window_rule({
     name = "assistant-scratchpad",
@@ -167,9 +142,4 @@ hl.window_rule({
     size = { "(monitor_w*0.8)", "(monitor_h*0.8)" },
     center = true,
     animation = "popin 85%",
-})
-hl.window_rule({
-    name = "spotify-magic",
-    match = { class = "^(spotify)$" },
-    workspace = "special:magic silent",
 })

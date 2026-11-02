@@ -57,6 +57,38 @@ class Hardware(unittest.TestCase):
         self.assertEqual(sysinfo.gpu(self.root), {"busy": 8, "used": 1073741824, "total": 17163091968, "temp": 52.0})
 
 
+class Alerts(unittest.TestCase):
+    def run_down(self, levels, status="Discharging"):
+        said, reached = [], None
+        for level in levels:
+            alert, reached = sysinfo.battery_alert(level, status, reached)
+            said.append(alert)
+        return said
+
+    def test_each_step_speaks_once_on_the_way_down(self):
+        self.assertEqual(self.run_down([20, 15, 14, 5, 4, 3, 2]), [None, "low", None, "critical", None, "sleep", None])
+
+    def test_opening_at_a_low_level_says_the_lowest_only(self):
+        self.assertEqual(self.run_down([4, 4]), ["critical", None])
+
+    def test_charging_stays_quiet_and_starts_over(self):
+        self.assertEqual(self.run_down([3, 2], "Charging"), [None, None])
+        alert, reached = sysinfo.battery_alert(10, "Discharging", None)
+        self.assertEqual(alert, "low")
+        self.assertEqual(sysinfo.battery_alert(10, "Charging", reached), (None, None))
+        self.assertEqual(sysinfo.battery_alert(10, "Discharging", None)[0], "low")
+
+    def test_unknown_capacity(self):
+        self.assertEqual(sysinfo.battery_alert(None, "Discharging", 15), (None, None))
+
+    def test_peripheral_warns_once_and_must_recover(self):
+        said, warned = [], False
+        for level in (12, 10, 9, 11, 10, 20, 8):
+            now, warned = sysinfo.peripheral_alert(level, warned)
+            said.append(now)
+        self.assertEqual(said, [False, True, False, False, False, False, True])
+
+
 class Numbers(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()

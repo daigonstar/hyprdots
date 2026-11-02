@@ -35,6 +35,7 @@ PRESERVE=(
   .config/waybar/layout.json
   .config/swaync/theme.css
   .config/hypr/tray/theme.css
+  .config/hypr/window_rules_local.lua
   .config/hypr/theme.lua
   .config/hypr/hypridle.local.conf
   .config/hypr/hyprlock.local.conf
@@ -250,6 +251,18 @@ apply_symlinks() {
   while read -r f; do
     [[ -f "$REPO_DIR/$f" ]] && head -c2 "$REPO_DIR/$f" | grep -q '#!' && chmod +x "$REPO_DIR/$f"
   done < <(git -C "$REPO_DIR" ls-files .config bash install)
+
+  # Only a new install should see the first-run welcome
+  mkdir -p "$HOME/.local/state/hyprdots" && touch "$HOME/.local/state/hyprdots/welcomed"
+
+  # What runs in the background picks up the update now, rather than at the next login
+  if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+    pkill -f '^python3? .*[h]ypr/tray/quick_tray' || true
+    sleep 0.3
+    (setsid python3 "$HOME/.config/hypr/tray/quick_tray.py" >/dev/null 2>&1 </dev/null &)
+    swaync-client -R -sw >/dev/null 2>&1 || true
+    pgrep -f '[u]diskie -c' >/dev/null || { command -v udiskie >/dev/null && (setsid udiskie -c "$HOME/.config/hypr/udiskie.yml" >/dev/null 2>&1 </dev/null &); }
+  fi
 
   # Keep Thunar's "Open Terminal Here" working (stand-in helper in ~/.local/bin, keeps your chosen terminal)
   [[ -x "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" ]] && "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh" || true

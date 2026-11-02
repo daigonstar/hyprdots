@@ -13,6 +13,10 @@ esac
 hyprshot "${mode[@]}" -s -o "$dir" -f "$(basename "$file")"
 [[ -f "$file" ]] || exit 0  # you pressed Escape
 
+# The tray's System sounds tile
+[[ -e "${XDG_STATE_HOME:-$HOME/.local/state}/quick-tray/sounds-off" ]] ||
+    pw-play /usr/share/sounds/freedesktop/stereo/camera-shutter.oga 2>/dev/null &
+
 actions=(-A open=Open -A folder="Show in folder")
 command -v satty >/dev/null && actions=(-A edit=Edit "${actions[@]}")
 choice="$(timeout 60 notify-send -a Screenshot -i "$file" "${actions[@]}" --wait "Screenshot saved" "Copied to the clipboard")"

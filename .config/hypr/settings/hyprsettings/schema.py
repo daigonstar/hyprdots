@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives", "Displays", "Workspaces", "Power & lock", "Theme",
+PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives", "Displays", "Workspaces", "Window rules", "Power & lock", "Theme",
          "Bar layout", "Launcher", "Hyprland", "Keybinds", "File types", "Hyprdots"]
 
 # One short explanation shown at the top of each page
@@ -26,6 +26,8 @@ PAGE_INTRO = {
                     "Passwords and tokens are kept by rclone, never in these settings files.",
     "Displays": "Your screens: resolution, refresh rate, scale, rotation and where each one sits. Changes apply straight away and you "
                 "get a few seconds to confirm, so a bad choice undoes itself. Remembered in monitors.lua.",
+    "Window rules": "Decide what happens when a window opens: which workspace or screen it goes to, whether it floats, and more. "
+                    "Rules apply to windows opened after you save.",
     "Workspaces": "Super+1 to Super+0 switch between ten workspaces. Choose which screen each one opens on, which one a screen "
                   "starts on, and give it a name or an app to open. Saved to workspaces.lua when you press Save: Hyprland reloads "
                   "and open workspaces move to their screen.",
@@ -120,7 +122,7 @@ SUPER_LOGOS = _c(("arch", "Arch logo"), ("tux", "Tux the penguin"), ("text", "Th
 FOLLOW = _c((0, "0 - Click to focus"), (1, "1 - Focus follows the mouse"), (2, "2 - Follows, but cursor is not moved"),
             (3, "3 - Follows and the cursor is independent"))
 
-ASSISTANT, MONITOR, CALENDAR, NETWORK, CLOUD, DISPLAYS, WORKSPACES, POWER, THEME, BAR_LAYOUT, LAUNCHER, HYPRLAND, KEYBINDS, FILETYPES, \
+ASSISTANT, MONITOR, CALENDAR, NETWORK, CLOUD, DISPLAYS, WORKSPACES, WINDOW_RULES, POWER, THEME, BAR_LAYOUT, LAUNCHER, HYPRLAND, KEYBINDS, FILETYPES, \
     HYPRDOTS = PAGES
 
 SETTINGS: list[Setting] = [

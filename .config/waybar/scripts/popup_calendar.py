@@ -2,7 +2,7 @@
 """Popup calendar for the waybar clock (GTK3 + layer-shell, no extra packages).
 
 Run it to open the calendar under the bar; run it again (or click outside,
-press Escape / q) to close it. Colours come from waybar's wallust theme.
+press Escape / q) to close it. Colours come from the settings Theme page.
 Keys: arrows / h l = month, k j or PageUp/PageDown = year, t or Home = today,
 r = refresh events, a = add an event to the selected day (kept on this PC).
 `popup_calendar.py --refresh` downloads every calendar
@@ -29,7 +29,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GtkLayerShell", "0.1")
 from gi.repository import Gdk, GLib, Gtk, GtkLayerShell
 
-COLORS = os.path.expanduser("~/.config/waybar/colors/colors.css")
+THEME = os.path.expanduser("~/.config/hypr/tray/theme.css")  # the settings Theme page's colours, shared with the quick tray
 sys.path.insert(0, os.path.expanduser("~/.config/hypr/assistant"))
 import localcal  # noqa: E402
 import usersettings  # noqa: E402
@@ -54,74 +54,65 @@ FIRST_WEEKDAY = CFG["first_weekday"] % 7
 LOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "waybar-calendar.pid")
 
 CSS = """
-@define-color foreground #F9F8F9;
-@define-color background #1B1A1B;
-@define-color color0 #808080;
-@define-color color1 #808080;
-@define-color color2 #808080;
-@define-color color3 #808080;
-@define-color color4 #808080;
-@define-color color5 #808080;
-@define-color color6 #808080;
-@define-color color7 #808080;
-@define-color color8 #808080;
-@define-color color9 #808080;
-@define-color color10 #808080;
-@define-color color11 #808080;
-@define-color color12 #808080;
-@define-color color13 #808080;
-@define-color color14 #808080;
-@define-color color15 #808080;
-@import url("file://%(colors)s");
+@define-color tray_bg rgba(27, 26, 27, 0.92);
+@define-color tray_text #F9F8F9;
+@define-color tray_card rgba(128, 128, 128, 0.18);
+@define-color tray_accent #7aa2f7;
+@define-color tray_on_accent #1B1A1B;
+@define-color tray_muted #9a9a9a;
+@define-color tray_attention #e06c75;
+%(theme)s
 window { background: transparent; }
 #card {
-    background: alpha(@background, 0.92);
-    border: 1px solid alpha(@color10, 0.8);
+    background: @tray_bg;
+    border: 1px solid @tray_accent;
     border-radius: 16px;
     padding: 18px 20px;
     box-shadow: 0 4px 18px rgba(0,0,0,0.5);
 }
-#time { font-size: 34px; font-weight: 700; color: @foreground; }
-#date { font-size: 13px; color: @color8; }
-#month { font-size: 16px; font-weight: 700; color: @foreground; }
+#time { font-size: 34px; font-weight: 700; color: @tray_text; }
+#date { font-size: 13px; color: @tray_muted; }
+#month { font-size: 16px; font-weight: 700; color: @tray_text; }
 .nav {
     background: transparent; border: none; box-shadow: none;
-    color: @color7; border-radius: 8px; padding: 2px 10px; font-size: 15px;
+    color: @tray_text; border-radius: 8px; padding: 2px 10px; font-size: 15px;
 }
-.nav:hover { background: alpha(@color10, 0.5); }
-.wd { font-size: 12px; font-weight: 700; color: @color10; }
+.nav:hover { background: alpha(@tray_accent, 0.5); }
+.wd { font-size: 12px; font-weight: 700; color: @tray_accent; }
 .day {
-    font-size: 14px; color: @color7;
+    font-size: 14px; color: @tray_text;
     min-width: 36px; min-height: 32px; border-radius: 10px;
 }
-.day.other { color: alpha(@color8, 0.4); }
-.day.weekend { color: @color11; }
-.day.today { background: @color9; color: @foreground; font-weight: 700; }
-.day.selected { background: alpha(@color10, 0.55); }
-.day.today.selected { background: @color9; box-shadow: inset 0 0 0 2px @color12; }
-.dot { font-size: 7px; color: @color12; min-height: 8px; }
+.day.other { color: alpha(@tray_muted, 0.4); }
+.day.weekend { color: @tray_accent; }
+.day.today { background: @tray_accent; color: @tray_on_accent; font-weight: 700; }
+.day.selected { background: alpha(@tray_accent, 0.55); }
+.day.today.selected { background: @tray_accent; box-shadow: inset 0 0 0 2px @tray_text; }
+.dot { font-size: 7px; color: @tray_accent; min-height: 8px; }
 .dot.off { color: transparent; }
-#events-title { font-size: 12px; font-weight: 700; color: @color10; }
-.ev-time { font-size: 12px; color: @color8; }
-.ev-title { font-size: 13px; color: @foreground; }
-.ev-note { font-size: 12px; color: @color4; }
-.sep { background: alpha(@color10, 0.5); min-height: 1px; }
+#events-title { font-size: 12px; font-weight: 700; color: @tray_accent; }
+.ev-time { font-size: 12px; color: @tray_muted; }
+.ev-title { font-size: 13px; color: @tray_text; }
+.ev-note { font-size: 12px; color: @tray_muted; }
+.sep { background: alpha(@tray_accent, 0.5); min-height: 1px; }
 .nav.small { font-size: 12px; padding: 0 8px; min-height: 0; }
-.nav.add { color: @color12; }
-.nav.primary { background: alpha(@color10, 0.55); color: @foreground; }
+.nav.add { color: @tray_accent; }
+.nav.primary { background: alpha(@tray_accent, 0.55); color: @tray_text; }
 entry {
-    background: alpha(@color0, 0.35); color: @foreground; caret-color: @foreground;
-    border: 1px solid alpha(@color10, 0.6); border-radius: 8px; padding: 4px 8px; box-shadow: none;
+    background: @tray_card; color: @tray_text; caret-color: @tray_text;
+    border: 1px solid alpha(@tray_accent, 0.6); border-radius: 8px; padding: 4px 8px; box-shadow: none;
 }
-entry:focus { border-color: @color12; }
-entry:disabled { color: alpha(@foreground, 0.35); }
+entry:focus { border-color: @tray_accent; }
+entry:disabled { color: alpha(@tray_text, 0.35); }
 check { border-radius: 4px; }
-checkbutton label { color: @color7; font-size: 13px; }
+checkbutton label { color: @tray_text; font-size: 13px; }
 """
 
 
 def build_css():
-    return (CSS % {"colors": COLORS}).encode()
+    # Only if it is there: GTK refuses the whole style sheet over a missing import
+    imported = f'@import url("file://{THEME}");' if os.path.exists(THEME) else ""
+    return (CSS % {"theme": imported}).encode()
 
 
 def read_sources():

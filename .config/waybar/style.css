@@ -126,8 +126,11 @@
 }
 
 #custom-recording {
-    color: @theme_attention;
-    padding: 0px 6px;
+    background: @theme_attention;
+    color: @theme_base;
+    border-radius: 8px;
+    padding: 0px 8px;
+    margin: 0px 4px;
 }
 #custom-noti {
     margin-right: 8px;
