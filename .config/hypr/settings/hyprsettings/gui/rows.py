@@ -72,7 +72,7 @@ def setting_row(win, s: Setting) -> Adw.ActionRow:
         drop.connect("notify::selected", lambda d, _p: names[d.get_selected()] != store.get(s)[0] and stage(names[d.get_selected()]))
         row.add_suffix(drop)
 
-    elif s.kind in ("model", "vision_model"):
+    elif s.kind in ("model", "vision_model", "mode_model"):
         from . import models_dialog
         text = show(s, value)
         current = Gtk.Label(label=text, css_classes=["dim-label"], ellipsize=Pango.EllipsizeMode.END,

@@ -50,7 +50,7 @@ def choose(win, s: Setting) -> None:
 
     def add(group, value, title, subtitle="", note_for=None):
         row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True, use_markup=False)
-        if value == (current or "none"):
+        if value == (current or ("same" if s.kind == "mode_model" else "none")):
             row.add_suffix(Gtk.Image(icon_name="object-select-symbolic"))
         if note_for:
             label = Gtk.Label(css_classes=["caption", "dim-label"], wrap=True, xalign=1, max_width_chars=26)
@@ -64,6 +64,8 @@ def choose(win, s: Setting) -> None:
     if vision:
         add(have, "same", "Same as chat model" + (f" ({chat_model})" if chat_model else ""), note_for="same")
         add(have, "none", "None", "Turns image features off")
+    if s.kind == "mode_model":
+        add(have, "same", "Same as chat model" + (f" ({chat_model})" if chat_model else ""), "No extra model to load")
     for n in names:
         add(have, n, n, f"{sizes[n]} GB", note_for=n)
     get = Adw.PreferencesGroup(title="Download")

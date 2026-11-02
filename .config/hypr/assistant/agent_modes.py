@@ -82,7 +82,7 @@ PRIVATE = set()  # names of modes that came from private_modes/
 
 def load_private(folder):
     """Loads every .py in folder that defines MODE, a dict with: name, blurb, prompt (text, or a function taking the
-    option), tools (a set of tool names). Optional: colour, caps, profile, pc_state, args (allowed options),
+    option), tools (a set of tool names). Optional: colour, caps, profile, pc_state, model, args (allowed options),
     default_arg, feeds (extra news feeds, name to URL) and on_activate(option, host), run when the mode is switched
     on; host is the assistant module. A broken file is skipped with a one-line note on stderr."""
     if not os.path.isdir(folder):
@@ -135,6 +135,15 @@ def colour():
 
 def describe():
     return STATE["name"] + (f" ({STATE['arg']})" if STATE["arg"] else "")
+
+
+def model(default, chosen=None):
+    """The model this mode answers with: the one picked for it in Settings ([assistant_modes] in
+    user_settings.toml), else the one the mode names itself ("model" in MODE), else default, the chat model."""
+    picked = (chosen or {}).get(STATE["name"])
+    if isinstance(picked, str) and picked.strip():
+        return picked.strip()
+    return _mode().get("model") or default
 
 
 def uses_profile():

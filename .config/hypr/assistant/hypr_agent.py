@@ -80,6 +80,13 @@ KEEP_ALIVE = SETTINGS["keep_alive"]
 NUM_CTX = SETTINGS["num_ctx"]
 VISION_NUM_CTX = SETTINGS["vision_num_ctx"]
 
+# Models picked per mode on the Settings page ([assistant_modes]: mode name = model); empty means the chat model
+MODE_MODELS = usersettings._load_all().get("assistant_modes", {})
+
+def chat_model():
+    """The model the current mode answers with. Vision "same" still means the main chat model (MODEL)."""
+    return agent_modes.model(MODEL, MODE_MODELS)
+
 def vision_model():
     return MODEL if VISION_SAME else VISION_MODEL
 
@@ -3840,7 +3847,7 @@ def _failure_hint(error, response):
         if "connection" in text or "refused" in text or "connect" in text:
             return "The Ollama server isn't reachable. Check `systemctl status ollama` and `journalctl -u ollama -n 30`."
         if getattr(error, "status_code", None) == 404 or "not found" in text:
-            return f"The model isn't installed. Run `ollama pull {MODEL}` or change `model` in user_settings.toml."
+            return f"The model isn't installed. Run `ollama pull {chat_model()}` or pick another model in Settings."
         if "memory" in text or "oom" in text or "alloc" in text:
             return "Out of VRAM/RAM. Close games or other GPU apps, or lower `num_ctx` in user_settings.toml."
         return "Check `journalctl -u ollama -n 30` for the server-side error."
@@ -3856,7 +3863,7 @@ def _failure_hint(error, response):
 
 def describe_failure(headline, messages, user_input, response=None, error=None):
     """Builds a diagnostic block for a failed request and appends the same details to the failure log."""
-    facts = [f"model: `{MODEL}` (context {NUM_CTX} tokens)", f"request: {user_input.strip()[:100]!r}",
+    facts = [f"model: `{chat_model()}` (context {NUM_CTX} tokens)", f"request: {user_input.strip()[:100]!r}",
              f"tool calls this request: {TOOL_COUNT[0]}, messages in context: {len(messages)}"]
     tool_names = [_get(m, 'tool_name') for m in messages if _get(m, 'role') == 'tool']
     if tool_names:
@@ -4340,7 +4347,7 @@ def _ask(messages, user_input, **kwargs):
     """chat() with the conversation squeezed to fit the context window."""
     fixed = len(json.dumps(kwargs.get('tools') or []))
     fitted = _fit_context(messages, user_input, fixed)
-    response = chat(MODEL, fitted, **kwargs)
+    response = chat(chat_model(), fitted, **kwargs)
     tokens = _get(response, 'prompt_eval_count') or 0
     if tokens > 1000:  # Ollama counts the whole prompt, cached part included
         sent = sum(_msg_size(m) for m in fitted) + fixed
@@ -4434,7 +4441,7 @@ def fact_check(messages, user_input, draft):
     evidence = _evidence(messages)
     prompt = FACT_CHECK_PROMPT.format(request=user_input.strip(), evidence=evidence, draft=draft)
     try:
-        response = chat(MODEL, [{'role': 'user', 'content': prompt}], "Checking facts", think=False)
+        response = chat(chat_model(), [{'role': 'user', 'content': prompt}], "Checking facts", think=False)
     except Exception:
         return []
     text = _get(_get(response, 'message'), 'content') or ""
@@ -4500,7 +4507,7 @@ def fix_contradictions(messages, answer, problems):
     evidence = _evidence(messages)
     prompt = FIX_PROMPT.format(evidence=evidence, wrong="\n".join(wrong), answer=answer)
     try:
-        response = chat(MODEL, [{'role': 'user', 'content': prompt}], "Correcting details", think=False)
+        response = chat(chat_model(), [{'role': 'user', 'content': prompt}], "Correcting details", think=False)
     except Exception:
         return answer
     fixed = TOOL_CALL_RE.sub("", _get(_get(response, 'message'), 'content') or "").strip()
@@ -4782,6 +4789,8 @@ def cmd_mode(arg=""):
         except OSError:
             pass
     if switched:
+        if chat_model() != MODEL:
+            text += f"\nThis mode answers with **{chat_model()}** (chosen in Settings, Assistant page)."
         extra = agent_modes.activate(sys.modules[__name__])
         if extra:
             text += "\n\n" + extra

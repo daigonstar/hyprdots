@@ -561,6 +561,8 @@ class App:
             return "(none)"
         if s.kind == "vision_model" and not value:
             return "None (image features off)"
+        if s.kind == "mode_model" and not value:
+            return "Same as chat model"
         if s.kind == "vision_model" and value == "same":
             return "Same as chat model"
         if s.kind == "list":
@@ -698,7 +700,7 @@ class App:
         s = row.setting
         if s.kind == "bool":
             return self.toggle(row)
-        if s.kind in ("model", "vision_model"):
+        if s.kind in ("model", "vision_model", "mode_model"):
             return self.choose_model(s)
         if s.kind == "choice" or (s.kind == "text" and s.key in ("terminal", "file_manager", "browser", "store")):
             return self.choose_value(s)
@@ -745,12 +747,14 @@ class App:
             same = ("same", "Same as chat model" + (f" ({chat_model})" if chat_model else ""), "no second model to load" if chat_sees else "")
             items.append(("none", "None - turn image features off", ""))
             items.insert(0 if chat_sees else 1, same)
+        if s.kind == "mode_model":
+            items.append(("same", "Same as chat model" + (f" ({chat_model})" if chat_model else ""), "no extra model to load"))
         for n in names:
             items.append((n, n + ("  (current)" if n == current else ""), f"{sizes[n]} GB"))
         for n in dict.fromkeys(x for x in suggested if x and x not in names):
             items.append((f"pull:{n}", f"Download {n}", f"suggested for your GPU" if n == models.TIERS[tier][1 if vision else 0] else "popular choice"))
         items.append(("pull:?", "Download another model...", "any name from ollama.com/library"))
-        index = next((i for i, (v, _, _) in enumerate(items) if v == (current or "none")), 0)
+        index = next((i for i, (v, _, _) in enumerate(items) if v == (current or ("same" if s.kind == "mode_model" else "none"))), 0)
         lines = [s.help] + ([err] if err else [f"Your GPU suggests the '{tier}' size."])
 
         def chosen(v):
@@ -764,6 +768,8 @@ class App:
         def note(v):
             if not isinstance(v, str) or v.startswith("pull:") or v == "none":
                 return ""
+            if v == "same" and s.kind == "mode_model":
+                return f"This mode answers with the chat model ({chat_model}), so nothing extra is loaded."
             if v == "same":
                 seen = self.caps.get(chat_model)
                 if seen is None:

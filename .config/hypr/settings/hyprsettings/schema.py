@@ -57,7 +57,7 @@ class Setting:
     section: str                       # TOML section in user_settings.local.toml
     key: str
     label: str
-    kind: str                          # choice | bool | int | float | text | list | model | vision_model | palette | font
+    kind: str                          # choice | bool | int | float | text | list | model | vision_model | mode_model | palette | font
     default: Any
     help: str
     choices: tuple = ()                # ((value, label), ...)
@@ -469,6 +469,46 @@ INSTALLED_CHOICES = {"theme.gtk_theme": "themes", "theme.icons": "icon_themes", 
 # Apps settings whose default is what GTK uses now: setting id -> key of gtktheme.current() (font split in two)
 GTK_NOW = {"theme.gtk_theme": "theme", "theme.icons": "icons", "theme.cursor": "cursor", "theme.cursor_size": "cursor_size",
            "theme.app_font": "font", "theme.app_font_size": "font_size"}
+
+
+def _assistant_modes() -> list[tuple[str, str]]:
+    """(name, blurb) of every assistant mode besides local: the built-in ones, then any in private_modes/.
+    Private modes are only read as text (their name and blurb), never run."""
+    import importlib.util
+    import re
+    from pathlib import Path
+    folder = Path(__file__).resolve().parents[2] / "assistant"
+    found: list[tuple[str, str]] = []
+    try:
+        spec = importlib.util.spec_from_file_location("hyprsettings_agent_modes", folder / "agent_modes.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        found += [(k, m["blurb"]) for k, m in module.MODES.items() if k != "local"]
+    except Exception:
+        found += [("external", "A supporting technician for IT work away from this PC."),
+                  ("gaming", "Advice for the game you name.")]
+    for path in sorted((folder / "private_modes").glob("[!_]*.py")):
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        name = re.search(r'["\']name["\']\s*:\s*["\']([a-z0-9_-]+)["\']', text)
+        blurb = re.search(r'["\']blurb["\']\s*:\s*"([^"]*)"', text)
+        if name and name[1] not in {n for n, _ in found}:
+            found.append((name[1], blurb[1] if blurb else ""))
+    return found
+
+
+def _mode_model_settings() -> list[Setting]:
+    return [Setting(ASSISTANT, "assistant_modes", name, f"{name.capitalize()} mode model", "mode_model", "",
+                    f"Answers in /mode {name}. Keep the chat model, or pick another that suits this mode better.",
+                    group="Models", tip=f"{blurb}\n\nA different model is loaded when you switch to this mode, so the "
+                    "first answer after switching takes a little longer.")
+            for name, blurb in _assistant_modes()]
+
+
+_after = next(i for i, s in enumerate(SETTINGS) if s.id == "assistant.vision_model") + 1
+SETTINGS[_after:_after] = _mode_model_settings()
 
 BY_ID = {s.id: s for s in SETTINGS}
 

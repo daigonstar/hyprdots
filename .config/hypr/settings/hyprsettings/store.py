@@ -150,6 +150,8 @@ class Store:
             items = raw if isinstance(raw, list) else [x.strip() for x in str(raw).split(",")]
             return [x for x in items if x]
         text = str(raw).strip()
+        if k == "mode_model":
+            return "" if text.lower() in ("", "same", "none") else text
         if k in ("model", "vision_model"):
             if not text and k == "model":
                 raise ValueError("a chat model is required")

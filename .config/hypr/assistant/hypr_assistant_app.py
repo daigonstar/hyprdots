@@ -1380,7 +1380,7 @@ class Assistant(Adw.Application):
                 if installed is False:
                     return (f"⚠  {role}: {name} not installed · ollama pull {name}", True)
                 return (f"●  {role}  {name}", False)
-            lines.append(model("Chat", agent.MODEL))
+            lines.append(model("Chat", agent.chat_model()))
             if not agent.VISION_ENABLED:
                 lines.append(("○  Vision off", False))
             elif agent.VISION_SAME:
@@ -1759,7 +1759,7 @@ class Assistant(Adw.Application):
             self.pill_approvals.add_css_class("good")
             self.pill_approvals.remove_css_class("warn")
         self.pill_think.set_label(f"◔ reasoning {agent.THINK['effort']}" if agent.THINK["show"] else "◔ reasoning hidden")
-        self.subtitle.set_label(f"{agent.MODEL} · {mode}")
+        self.subtitle.set_label(f"{agent.chat_model()} · {mode}")
         if hasattr(self, "actions"):
             self.actions["approvals"].set_state(GLib.Variant.new_boolean(not agent.AUTO_APPROVE[0]))
             self.actions["reasoning"].set_state(GLib.Variant.new_boolean(agent.THINK["show"]))
@@ -1776,7 +1776,8 @@ class Assistant(Adw.Application):
         self.refresh_status()
         if found:
             first = re.sub(r"\*\*|`", "", found[1].split("\n")[0])
-            self.toast(first.split(". ")[0].rstrip(".") + ".")
+            model = f" It answers with {agent.chat_model()}." if line.startswith("/mode") and agent.chat_model() != agent.MODEL else ""
+            self.toast(first.split(". ")[0].rstrip(".") + "." + model)
 
     # Scrolling
     def _on_scroll(self, adj):

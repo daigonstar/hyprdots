@@ -30,6 +30,11 @@ think_effort = "medium"     # reasoning depth: low, medium or high (change in ch
 fact_check = true           # check every answer against what the tools found and verify unsupported claims (slower, more accurate)
 searxng_url = ""            # your own SearXNG search (e.g. "http://127.0.0.1:8888"), searched first when set; empty = public engines only
 
+[assistant_modes]
+# The model each /mode answers with. Empty = the chat model above. A mode in private_modes/ can be added by its name.
+external = ""
+gaming = ""
+
 [monitor]
 renotify_hours = 6          # re-send a notification for a still-open problem after this long
 journal_window = "30 minutes ago"  # how far back to look for journal errors
