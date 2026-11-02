@@ -4,10 +4,12 @@
     "layer": "top",
         "position": "top",
         "reload_style_on_change": true,
-        "spacing": 10,
-        "modules-left": ["clock","custom/assistant","group/expand2"],
-        "modules-center": ["hyprland/window", "hyprland/workspaces","cava"],
-        "modules-right": ["group/expand","pulseaudio","bluetooth","custom/updates","battery","network","custom/recording","custom/power","custom/noti"],
+        "spacing": 2,
+        // What the quick tray has (network, Bluetooth, power, stay awake, the system monitor and the shortcuts) stays off
+        // the bar by default. It can all be added back from settings > Bar layout.
+        "modules-left": ["clock","custom/assistant"],
+        "modules-center": ["hyprland/window", "hyprland/workspaces"],
+        "modules-right": ["group/expand","custom/updates","pulseaudio","battery","custom/recording","custom/noti"],
 
     // Groups
 
@@ -21,10 +23,7 @@
             },
             "modules": [
                 "custom/trayarrow",
-                "tray",
-                "cpu",
-                "memory",
-                "temperature"
+                "tray"
             ]
         },
         "group/expand2": {
@@ -265,7 +264,7 @@
         },
           "custom/noti": {
         "tooltip": true,
-        "format": "<span size='16pt'>{icon}</span>",
+        "format": "{icon}",
         "format-icons": {
         "notification": "󱅫",
         "none": "󰂜",

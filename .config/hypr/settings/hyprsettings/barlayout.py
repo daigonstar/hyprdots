@@ -39,23 +39,23 @@ KNOWN = {
 
 # Ready-made layouts on the Bar layout page: key, name, what it is, arrangement, bar style (Theme page), position.
 # "classic" is the config's own arrangement. Modules a config does not define are left out when a preset is applied.
-STATUS = ["pulseaudio", "bluetooth", "network", "battery", "custom/updates", "custom/recording"]
+STATUS = ["custom/updates", "pulseaudio", "battery", "custom/recording"]  # the quick tray has the rest
 PRESETS = [
     ("classic", "Classic", "Clock on the left, workspaces in the middle, status on the right, as three panels.",
      None, "islands", "top"),
     ("two_sides", "Two sides", "Workspaces and the window title on the left, everything else on the right, nothing between.",
-     {"modules-left": ["group/expand2", "hyprland/workspaces", "hyprland/window"], "modules-center": [],
-      "modules-right": ["cava", "group/expand", *STATUS, "clock", "custom/assistant", "custom/noti", "custom/power"]},
+     {"modules-left": ["hyprland/workspaces", "hyprland/window"], "modules-center": [],
+      "modules-right": ["group/expand", *STATUS, "clock", "custom/assistant", "custom/noti"]},
      "islands", "top"),
     ("centre_pill", "Centre pill", "Everything in one panel in the middle of the bar; the sides stay clear.",
-     {"modules-left": [], "modules-center": ["group/expand2", "clock", "custom/assistant", "hyprland/workspaces", *STATUS,
-                                             "custom/noti", "custom/power", "group/expand"], "modules-right": []},
+     {"modules-left": [], "modules-center": ["clock", "custom/assistant", "hyprland/workspaces", *STATUS,
+                                             "custom/noti", "group/expand"], "modules-right": []},
      "islands", "top"),
     ("full_strip", "Full strip", "The classic arrangement as one solid bar across the whole screen.",
      None, "solid", "top"),
     ("bottom_dock", "Bottom dock", "A dock at the bottom: workspaces in the middle, every module in its own pill.",
-     {"modules-left": ["clock", "custom/assistant", "group/expand2"], "modules-center": ["hyprland/workspaces"],
-      "modules-right": ["group/expand", *STATUS, "custom/noti", "custom/power"]},
+     {"modules-left": ["clock", "custom/assistant"], "modules-center": ["hyprland/workspaces"],
+      "modules-right": ["group/expand", *STATUS, "custom/noti"]},
      "bubbles", "bottom"),
 ]
 

@@ -62,7 +62,7 @@ ICON = {
     "device": "\U000f0079",
     "close": "\U000f0156", "clear": "\U000f00e2", "previous": "\U000f04ae", "play_pause": "\U000f040e", "next": "\U000f04ad",
     "music": "\U000f075a", "record": "\U000f044a", "colour": "\U000f03d8", "emoji": "\U000f01f5",
-    "overview": "\U000f0570", "sounds": "\U000f009e", "eject": "\U000f01ea",
+    "overview": "\U000f0570", "disks": "\U000f02ca", "sounds": "\U000f009e", "eject": "\U000f01ea",
 }
 
 # Used until the settings app has written theme.css
@@ -500,6 +500,7 @@ class Tray(Gtk.Window):
                 (ICON["overview"], "All workspaces", "pkill -HUP -f '[h]ypr/tray/quick_tray'", 0.25),
                 (ICON["colour"], "Pick a colour", f"{SCRIPTS}/colour-picker.sh", 0.3),
                 (ICON["emoji"], "Pick an emoji", f"{SCRIPTS}/emoji.sh", 0.2),
+                (ICON["disks"], "Partition manager", "partitionmanager", 0),
                 (ICON["monitor"], "Task manager (btop)", "ghostty -e btop", 0)):
             if icon == ICON["monitor"] and not shutil.which("btop"):
                 continue

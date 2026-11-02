@@ -5,6 +5,13 @@
 * {
     color: @theme_text;
 }
+/* One spacing for every module, so the bar reads evenly whatever you put on it (settings > Bar layout). */
+#clock, #custom-assistant, #pulseaudio, #battery, #network, #bluetooth, #idle_inhibitor, #custom-updates, #custom-recording,
+#custom-power, #custom-noti, #custom-trayarrow, #custom-settingsarrow, #cpu, #memory, #temperature, #tray, #cava, #disk,
+#backlight, #mpris, #language, #custom-wallpaper, #custom-drive, #custom-keys, #custom-userconfig, #window {
+    padding: 0px 7px;
+    margin: 0px;
+}
 /* The panels behind the modules (window#waybar, .modules-left/-center/-right) come from the Bar style in theme.css */
 #workspaces {
     padding: 0px 5px;
@@ -16,7 +23,7 @@
     transition: all 0.2s ease;
 }
 #workspaces button:hover {
-    color: rgba(167, 91, 190, 0);
+    color: @theme_accent;
     border: none;
     text-shadow: 0px 0px 1.5px rgba(0, 0, 0, 0.5);
     transition: all 1s ease;
@@ -32,7 +39,7 @@
     text-shadow: 0px 0px 1.5px rgba(0, 0, 0, 0.2);
 }
 #workspaces button.empty:hover {
-    color: rgba(0, 0, 0, 0);
+    color: @theme_accent;
     border: none;
     text-shadow: 0px 0px 1.5px rgba(0, 0, 0, 0.5);
     transition: all 1s ease;
@@ -43,9 +50,6 @@
     text-shadow: 0px 0px 2px rgba(0, 0, 0, 0.5);
 }
 #custom-assistant {
-    padding: 0px 6px;
-    margin: 0px;
-    font-size: 15px;
     opacity: 0.8;
     color: @theme_text;
 }
@@ -53,88 +57,35 @@
     opacity: 1;
 }
 
-#clock {
-    padding: 0px 0px 0px 3px;
-    color: @theme_text;
-}
-
-#network {
-    padding: 0px 6px;
-    color: @theme_text;
-}
-
-#bluetooth {
-    padding: 0px 6px;
-    color: @theme_text;
-}
-
-#custom-power {
-    padding: 0px 6px;
-    color: @theme_text;
-}
-
-#battery {
-    padding: 0px 6px;
-}
 #battery.charging {
     color: rgba(24, 185, 9, 0.5);
 }
 #cava {
     color: @theme_text;
-    border-left: 0px;
-    border-right: 0px;
-    padding-right: 7px;
     font-size: 20px;
     font-family: "CaskaydiaCove Nerd Font Mono";
 }
 
-#cpu {
-    padding: 0px 5px;
-    background: none;
-    border-radius: 0;
-}
-
-#memory {
-    padding: 0px 5px;
-    background: none;
-    border-radius: 0;
-}
-
 #temperature {
-    padding: 0px 5px;
-    background: none;
-    color: red;
+    color: @theme_attention;
 }
 
 #tray {
-    padding: 0px 5px;
-    margin: 0px 0px 0px 0px;
     background: alpha(@theme_surface_alt, 0.6);
     border-radius: 10px;
     box-shadow: 0px 0px 2px rgba(0, 0, 0, 0.6);
 }
 
-#custom-trayarrow,
-#custom-settingarrow {
-    padding: 0px 6px;
-    margin: 0px 0px 0px 0px;
-    color: @theme_text;
-}
-#pulseaudio {
-    padding: 0px 6px;
-    color: @theme_text;
-}
-
+/* Always red and white, whatever the wallpaper: it has to be seen */
 #custom-recording {
-    background: @theme_attention;
-    color: @theme_base;
+    background: #d32f2f;
+    color: #ffffff;
+    font-weight: bold;
     border-radius: 8px;
-    padding: 0px 8px;
-    margin: 0px 4px;
+    margin: 0px 3px;
 }
 #custom-noti {
-    margin-right: 8px;
-    padding: 1px 6px 0px 6px; /* Fine-tune the vertical position if it looks off */
+    /* Fine-tune the vertical position if it looks off */
     color: @theme_text;
 }
 #custom-settingsicon,
@@ -142,18 +93,14 @@
 #custom-drive,
 #custom-keys,
 #custom-userconfig {
-    padding: 0px 5px;
     color: @theme_icons;
 }
-#custom-updates {
-    padding: 0px 6px;
-    color: @theme_text;
-}
-#custom-updates.pending {
-    color: orange;
-}
+#custom-updates.pending,
 #custom-updates.critical {
-    color: red;
+    background: @theme_attention;
+    color: @theme_base;
+    border-radius: 8px;
+    margin: 0px 3px;
 }
 #custom-noti.notification {
     color: @theme_attention;
