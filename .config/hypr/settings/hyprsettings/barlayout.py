@@ -28,6 +28,7 @@ KNOWN = {
     "hyprland/workspaces": ("Workspaces", "\U000f0570"), "cava": ("Music bars", "\U000f075a"), "pulseaudio": ("Sound", "\U000f057e"),
     "bluetooth": ("Bluetooth", "\U000f00af"), "custom/updates": ("Updates", "\U000f03d7"), "battery": ("Battery", "\U000f0079"),
     "network": ("Network", "\U000f0200"), "custom/power": ("Power menu", "\U000f0425"), "custom/noti": ("Notifications", "\U000f009a"),
+    "custom/recording": ("Recording dot", "\U000f044a"),
     "tray": ("Tray", "\U000f00a1"), "cpu": ("CPU", "\U000f04e9"), "memory": ("Memory", "\U000f035b"),
     "temperature": ("Temperature", "\U000f050f"),
     "mpris": ("Now playing", "\U000f0386"), "idle_inhibitor": ("Keep awake", "\U000f0176"),
@@ -38,7 +39,7 @@ KNOWN = {
 
 # Ready-made layouts on the Bar layout page: key, name, what it is, arrangement, bar style (Theme page), position.
 # "classic" is the config's own arrangement. Modules a config does not define are left out when a preset is applied.
-STATUS = ["pulseaudio", "bluetooth", "network", "battery", "custom/updates"]
+STATUS = ["pulseaudio", "bluetooth", "network", "battery", "custom/updates", "custom/recording"]
 PRESETS = [
     ("classic", "Classic", "Clock on the left, workspaces in the middle, status on the right, as three panels.",
      None, "islands", "top"),

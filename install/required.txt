@@ -39,6 +39,7 @@ plymouth
 pipewire
 pipewire-alsa
 pipewire-pulse
+libpulse
 pipewire-jack
 wireplumber
 pavucontrol
@@ -100,6 +101,13 @@ steam
 #     .config/hypr/assistant/setup.sh only if you choose the assistant) ---
 grim
 slurp
+satty
+hyprsunset
+hyprpicker
+gpu-screen-recorder
+rofimoji
+wtype
+noto-fonts-emoji
 gtk-layer-shell
 gtk4
 libadwaita

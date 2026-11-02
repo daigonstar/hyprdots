@@ -35,11 +35,15 @@ if [ "$HYPRGAMEMODE" = "true" ] ; then
     notify-send -e -u low -i "$notif" " Gamemode:" " enabled"
     exit
 else
-	awww-daemon && awww img "$HOME/.config/rofi/.current_wallpaper" &
-	sleep 0.1
-	"${SCRIPTSDIR}/wallust.sh" "$HOME/.config/rofi/.current_wallpaper"
-	sleep 0.5
-	${SCRIPTSDIR}/refresh.sh	 
+    # Puts back the wallpaper, and Hyprland's own settings by reloading. The bar and notifications are left alone: they
+    # were never changed, and restarting them would flash the bar and lose your notifications.
+    (setsid awww-daemon --format xrgb >/dev/null 2>&1 &)
+    for _ in {1..30}; do
+        awww query >/dev/null 2>&1 && break
+        sleep 0.1
+    done
+    awww img "$(readlink -f "$HOME/.config/rofi/.current_wallpaper")"
+    hyprctl reload
     notify-send -e -u normal -i "$notif" " Gamemode:" " disabled"
     exit
 fi

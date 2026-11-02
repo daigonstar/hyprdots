@@ -4,6 +4,7 @@ case "$1" in
         pkill swaync || true
         sleep 0.1
         ~/.config/swaync/launch.sh &
+        python3 ~/.config/hypr/tray/quick_tray.py &  # does nothing if it is still running
         ;;
     waybar)
         pkill waybar || true
@@ -16,5 +17,6 @@ case "$1" in
         sleep 0.2
         ~/.config/waybar/launch.sh &
         ~/.config/swaync/launch.sh &
+        python3 ~/.config/hypr/tray/quick_tray.py &  # does nothing if it is still running
         ;;
 esac

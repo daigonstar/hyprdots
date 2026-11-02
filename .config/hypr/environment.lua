@@ -4,6 +4,9 @@ hl.env("HYPRCURSOR_SIZE", "24")
 -- The old WLR_DRM_DEVICES name is ignored by Hyprland 0.42 and later.
 hl.env("SDL_VIDEO_FULLSCREEN_HEAD", "0")
 hl.env("QT_QPA_PLATFORM", "wayland")
+-- Qt apps take their colours, icons and file dialogs from GTK, so the settings Theme page reaches them (needs no extra
+-- package; KDE apps such as Ark also read ~/.config/kdeglobals, see theme_parts.write_qt)
+hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
 hl.env("GDK_BACKEND", "wayland")
 hl.env("PROTON_ENABLE_WAYLAND", "1")
 

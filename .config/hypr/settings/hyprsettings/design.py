@@ -189,8 +189,10 @@ def refresh_all(store=None) -> list[str]:
     o = theme_options(store)
     problems = []
     for name, job in (("bar", lambda: write_bar_theme(store)), ("notifications", lambda: theme_parts.write_swaync(o)),
+                      ("quick tray", lambda: theme_parts.write_tray(o)),
                       ("rofi", lambda: theme_parts.write_rofi(o)), ("window borders", lambda: theme_parts.write_hypr(o)),
-                      ("lock screen", lambda: theme_parts.write_lock(store)), ("apps", lambda: theme_parts.write_gtk(o))):
+                      ("lock screen", lambda: theme_parts.write_lock(store)), ("apps", lambda: theme_parts.write_gtk(o)),
+                      ("Qt apps", lambda: theme_parts.write_qt(o))):
         try:
             job()
         except OSError as e:

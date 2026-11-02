@@ -2,9 +2,12 @@
 current wallpaper's palette, so design.refresh_all() runs them again after wallust on every wallpaper change.
 
 - notifications: swaync/theme.css, imported last by swaync/style.css (theme.default.css is the fallback; launch.sh)
+- quick tray: hypr/tray/theme.css, which the tray watches (it has built-in colours until then)
 - rofi: a marked block appended to wallust's ~/.config/rofi/colors.rasi, which every rofi theme imports
 - window borders: hypr/theme.lua, read by window.lua when it exists
 - lock screen: hyprlock.local.conf, when you have one (the password line takes the accent)
+- Qt apps: follow GTK through QT_QPA_PLATFORMTHEME (environment.lua); KDE ones also read the [Colors:*] groups of
+  ~/.config/kdeglobals
 - apps: a marked block in ~/.config/gtk-3.0/gtk.css and gtk-4.0/gtk.css with GTK's named colours, the adw-gtk3 style
   for GTK 3 apps, and the icons, cursor and font from the Apps group. Flatpak apps are allowed to read those folders."""
 
@@ -50,6 +53,29 @@ def swaync_css(o: dict) -> str:
 def write_swaync(o: dict) -> None:
     design.write(HOME / ".config/swaync/theme.css", swaync_css(o))
     subprocess.run(["swaync-client", "--reload-css"], capture_output=True, timeout=10)
+
+
+def tray_css(o: dict) -> str:
+    c = design.resolved(o)
+    o = {**design.DEFAULTS, **o}
+    return f"""/* Quick tray colours and font, made by hypr-settings from the Theme page (rewritten when the wallpaper changes).
+   Do not edit by hand. */
+@define-color tray_bg {design.alpha_rgba(c['base'], int(o['base_opacity']) / 100)};
+@define-color tray_text {c['base_text']};
+@define-color tray_card {design.alpha_rgba(c['surface'], 0.22)};
+@define-color tray_accent {c['accent']};
+@define-color tray_on_accent {c['base']};
+@define-color tray_muted {design.alpha_rgba(c['base_text'], 0.65)};
+@define-color tray_attention {c['attention']};
+
+* {{
+    font-family: {design.font_list(o)};
+}}
+"""
+
+
+def write_tray(o: dict) -> None:
+    design.write(HOME / ".config/hypr/tray/theme.css", tray_css(o))
 
 
 def rofi_block(o: dict) -> str:
@@ -191,6 +217,50 @@ def write_gtk(o: dict) -> None:
         ok, message = gtktheme.apply(link_gtk4=False, **changes)
         if not ok:
             raise OSError(message)
+
+
+def kde_colours(o: dict) -> str:
+    """The [Colors:*] groups KDE apps draw with, in the same steps as gtk_colours, so they match Qt and GTK apps."""
+    g = gtk_colours(o)
+    triple = lambda colour: ",".join(str(round(v * 255)) for v in design.rgb(colour))  # noqa: E731
+    fg, accent, on_accent = g["window_fg_color"], g["accent_color"], g["accent_fg_color"]
+    muted = theme.mix(g["window_bg_color"], fg, 0.65)
+    alert = design.resolved(o)["attention"]
+
+    def group(name, background, alternate, text=fg, inactive=muted):
+        keys = {"BackgroundNormal": background, "BackgroundAlternate": alternate, "ForegroundNormal": text,
+                "ForegroundInactive": inactive, "ForegroundActive": accent, "ForegroundLink": accent,
+                "ForegroundVisited": accent, "ForegroundNegative": alert, "ForegroundNeutral": alert,
+                "ForegroundPositive": accent, "DecorationFocus": accent, "DecorationHover": accent}
+        return f"[Colors:{name}]\n" + "".join(f"{k}={triple(v)}\n" for k, v in keys.items()) + "\n"
+    base, shaded, card = g["window_bg_color"], g["theme_base_color"], g["card_bg_color"]
+    return (group("Window", base, shaded) + group("View", shaded, card) + group("Button", card, base)
+            + group("Header", base, shaded) + group("Tooltip", g["popover_bg_color"], base)
+            + group("Complementary", base, shaded) + group("Selection", accent, accent, on_accent, on_accent))
+
+
+def with_kde_colours(text: str, colours: str | None) -> str:
+    """kdeglobals with its colour groups replaced (or removed, on None). KDE apps keep other settings there."""
+    kept, skipping = [], False
+    for line in text.splitlines(keepends=True):
+        if line.startswith("["):
+            skipping = line.startswith("[Colors:")
+        if not skipping:
+            kept.append(line)
+    rest = "".join(kept).strip()
+    return (rest + "\n\n" if rest else "") + (colours or "")
+
+
+def write_qt(o: dict) -> None:
+    o = {**design.DEFAULTS, **o}
+    path = HOME / ".config/kdeglobals"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    new = with_kde_colours(text, kde_colours(o) if o["gtk_colours"] else None)
+    if new != text:
+        design.write(path, new)
 
 
 def flatpak_can_read_gtk() -> None:

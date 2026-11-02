@@ -34,6 +34,7 @@ PRESERVE=(
   .config/waybar/theme.css
   .config/waybar/layout.json
   .config/swaync/theme.css
+  .config/hypr/tray/theme.css
   .config/hypr/theme.lua
   .config/hypr/hypridle.local.conf
   .config/hypr/hyprlock.local.conf

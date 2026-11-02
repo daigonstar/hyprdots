@@ -7,7 +7,7 @@
         "spacing": 10,
         "modules-left": ["clock","custom/assistant","group/expand2"],
         "modules-center": ["hyprland/window", "hyprland/workspaces","cava"],
-        "modules-right": ["group/expand","pulseaudio","bluetooth","custom/updates","battery","network","custom/power","custom/noti"],
+        "modules-right": ["group/expand","pulseaudio","bluetooth","custom/updates","battery","network","custom/recording","custom/power","custom/noti"],
 
     // Groups
 
@@ -214,6 +214,14 @@
             "interval": 1800,
             "signal": 8,
             "on-click": "ghostty -e bash -c 'paru -Syu && flatpak update; pkill -RTMIN+8 waybar; read -rp \"Done. Press Enter to close.\"'"
+        },
+
+        "custom/recording": {
+            "exec": "~/.config/hypr/scripts/record.sh status",
+            "return-type": "json",
+            "interval": "once",
+            "signal": 11,
+            "on-click": "~/.config/hypr/scripts/record.sh stop"
         },
 
         "custom/power": {

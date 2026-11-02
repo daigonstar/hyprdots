@@ -66,28 +66,42 @@ local curves = {
     easeInOutSine = {{0.37, 0}, {0.63, 1}},
     easeInSine = {{0.12, 0}, {0.39, 0}},
     easeOutSine = {{0.61, 1}, {0.88, 1}},
+    decel = {{0.05, 0.7}, {0.1, 1}},
+    accel = {{0.3, 0}, {0.8, 0.15}},
 }
 
 for name, points in pairs(curves) do
     hl.curve(name, { type = "bezier", points = points })
 end
 
+-- Things arrive with a quick start and settle gently (decel, wind), and leave faster than they came (accel), so opening
+-- feels responsive and closing is out of your way. Speed is in tenths of a second.
 local animations = {
-    { leaf = "windowsIn", enabled = true, speed = 3, bezier = "easeInOutSine", style = "popin" },
-    { leaf = "windowsOut", enabled = true, speed = 3, bezier = "easeInOutSine", style = "popin" },
-    { leaf = "border", enabled = true, speed = 3, bezier = "easeInOutSine" },
-    { leaf = "borderangle", enabled = true, speed = 30, bezier = "easeInOutSine", style = "loop" },
-    { leaf = "workspacesIn", enabled = true, speed = 3, bezier = "easeInOutSine", style = "slidefade" },
-    { leaf = "workspacesOut", enabled = true, speed = 3, bezier = "easeInOutSine", style = "slidefade" },
-    { leaf = "specialWorkspaceIn", enabled = true, speed = 3, bezier = "easeInOutSine", style = "slidevert" },
-    { leaf = "specialWorkspaceOut", enabled = true, speed = 3, bezier = "easeInOutSine", style = "slidevert" },
-    { leaf = "layersIn", enabled = true, speed = 3, bezier = "easeInOutSine", style = "fade" },
-    { leaf = "layersOut", enabled = true, speed = 3, bezier = "easeInOutSine", style = "fade" },
+    { leaf = "windowsIn", enabled = true, speed = 2.5, bezier = "wind", style = "popin 90%" },
+    { leaf = "windowsOut", enabled = true, speed = 1.5, bezier = "accel", style = "popin 95%" },
+    { leaf = "windowsMove", enabled = true, speed = 3, bezier = "wind", style = "slide" },
+    { leaf = "fadeIn", enabled = true, speed = 2, bezier = "decel" },
+    { leaf = "fadeOut", enabled = true, speed = 1.5, bezier = "accel" },
+    { leaf = "border", enabled = true, speed = 2, bezier = "decel" },
+    -- Rotates gradient borders, and keeps redrawing the screen to do it. Yours are one colour, so there is nothing to see.
+    { leaf = "borderangle", enabled = false },
+    { leaf = "workspacesIn", enabled = true, speed = 3, bezier = "decel", style = "slidefade 20%" },
+    { leaf = "workspacesOut", enabled = true, speed = 3, bezier = "decel", style = "slidefade 20%" },
+    { leaf = "specialWorkspaceIn", enabled = true, speed = 2.5, bezier = "decel", style = "slidevert" },
+    { leaf = "specialWorkspaceOut", enabled = true, speed = 2, bezier = "accel", style = "slidevert" },
+    { leaf = "layersIn", enabled = true, speed = 2, bezier = "decel", style = "fade" },
+    { leaf = "layersOut", enabled = true, speed = 1.5, bezier = "accel", style = "fade" },
 }
 
 for _, animation in ipairs(animations) do
     hl.animation(animation)
 end
+
+-- Panels come from where they live
+hl.layer_rule({ name = "quick-tray-slide", match = { namespace = "^quick-tray$" }, animation = "slide right" })
+hl.layer_rule({ name = "quick-tray-level", match = { namespace = "^quick-tray-osd$" }, animation = "slide bottom" })
+hl.layer_rule({ name = "quick-tray-overview", match = { namespace = "^quick-tray-overview$" }, animation = "fade" })
+hl.layer_rule({ name = "quick-tray-switcher", match = { namespace = "^quick-tray-switcher$" }, animation = "popin 95%" })
 
 hl.window_rule({
     name = "chat-workspace",

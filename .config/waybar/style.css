@@ -125,6 +125,10 @@
     color: @theme_text;
 }
 
+#custom-recording {
+    color: @theme_attention;
+    padding: 0px 6px;
+}
 #custom-noti {
     margin-right: 8px;
     padding: 1px 6px 0px 6px; /* Fine-tune the vertical position if it looks off */

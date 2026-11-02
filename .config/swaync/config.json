@@ -3,9 +3,10 @@
   "positionX": "right",
   "positionY": "top",
   "cssPriority": "user",
+  "control-center-layer": "top",
 
-  "control-center-width": 380,
-  "control-center-height": 860,
+  "control-center-width": 300,
+  "control-center-height": 1,
   "control-center-margin-top": 2,
   "control-center-margin-bottom": 2,
   "control-center-margin-right": 1,
@@ -41,11 +42,6 @@
     }
   },
   "widgets": [
-    "label",
-    "buttons-grid",
-    "mpris",
-    "title",
-    "dnd",
     "notifications"
   ],
   "widget-config": {

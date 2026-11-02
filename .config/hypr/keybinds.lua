@@ -28,8 +28,13 @@ local binds = {
     { id = "wallpaper", label = "Wallpaper picker", keys = "SUPER + W", action = hl.dsp.exec_cmd(wallpaper_menu) },
     { id = "clipboard", label = "Clipboard history", keys = "SUPER + CTRL + C", action = hl.dsp.exec_cmd("clipvault list | rofi -dmenu -display-columns 2 | clipvault get | wl-copy") },
     { id = "cheatsheet", label = "Keybind cheatsheet", keys = "SUPER + K", action = hl.dsp.exec_cmd("~/.config/hypr/cheatsheet/cheatsheet.sh") },
-    { id = "screenshot_window", label = "Screenshot a window", keys = "CONTROL + ALT + S", action = hl.dsp.exec_cmd("hyprshot -m window -o ~/Pictures/screenshots") },
-    { id = "screenshot_region", label = "Screenshot a region", keys = "CONTROL + SHIFT + S", action = hl.dsp.exec_cmd("hyprshot -m region -o ~/Pictures/screenshots") },
+    { id = "emoji", label = "Emoji picker", keys = "SUPER + period", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/emoji.sh") },
+    { id = "colour_picker", label = "Pick a colour on screen", keys = "SUPER + SHIFT + C", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/colour-picker.sh") },
+    { id = "record_screen", label = "Record this screen (again to stop)", keys = "SUPER + ALT + R", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/record.sh screen") },
+    { id = "record_region", label = "Record an area (again to stop)", keys = "SUPER + ALT + SHIFT + R", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/record.sh region") },
+    { id = "screenshot_window", label = "Screenshot a window", keys = "CONTROL + ALT + S", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh window") },
+    { id = "screenshot_region", label = "Screenshot a region", keys = "CONTROL + SHIFT + S", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh region") },
+    { id = "screenshot_screen", label = "Screenshot this screen", keys = "Print", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/screenshot.sh screen") },
 
     -- group: Windows
     { id = "close", label = "Close window", keys = "SUPER + Q", action = hl.dsp.window.close() },
@@ -41,6 +46,9 @@ local binds = {
     -- legacy dispatcher names. Use the native dispatcher directly instead.
     { id = "fullscreen", label = "Fullscreen", keys = "SUPER + SHIFT + F", action = hl.dsp.window.fullscreen() },
     { id = "maximize", label = "Maximize", keys = "SUPER + CTRL + F", action = hl.dsp.window.fullscreen({ mode = "maximized" }) },
+    -- The window switcher is in the quick tray (tray/popups.py), which is running already, so a signal opens it at once
+    { id = "switch_next", label = "Switch windows", keys = "ALT + TAB", action = hl.dsp.exec_cmd("pkill -USR2 -f '[h]ypr/tray/quick_tray'") },
+    { id = "switch_previous", label = "Switch windows, backwards", keys = "ALT + SHIFT + TAB", action = hl.dsp.exec_cmd("pkill -WINCH -f '[h]ypr/tray/quick_tray'") },
     { id = "focus_left", label = "Focus window on the left", keys = "SUPER + left", action = hl.dsp.focus({ direction = "left" }) },
     { id = "focus_right", label = "Focus window on the right", keys = "SUPER + right", action = hl.dsp.focus({ direction = "right" }) },
     { id = "focus_up", label = "Focus window above", keys = "SUPER + up", action = hl.dsp.focus({ direction = "up" }) },
@@ -53,6 +61,7 @@ local binds = {
     { id = "resize_down", label = "Grow window height", keys = "SUPER + SHIFT + down", action = hl.dsp.window.resize({ x = 0, y = 50, relative = true }), opts = { repeating = true } },
 
     -- group: Workspaces and monitors
+    { id = "overview", label = "See all workspaces", keys = "SUPER + TAB", action = hl.dsp.exec_cmd("pkill -HUP -f '[h]ypr/tray/quick_tray'") },
     { id = "special_toggle", label = "Show / hide scratch workspace", keys = "SUPER + CTRL + S", action = hl.dsp.workspace.toggle_special("magic") },
     { id = "special_move", label = "Send window to scratch workspace", keys = "SUPER + SHIFT + S", action = hl.dsp.window.move({ workspace = "special:magic" }) },
     { id = "workspace_next", label = "Next workspace (scroll down)", keys = "SUPER + mouse_down", action = hl.dsp.focus({ workspace = "e+1" }) },
@@ -100,8 +109,8 @@ hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), repeating_locked)
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), repeating_locked)
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), repeating_locked)
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+"), repeating_locked)
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-"), repeating_locked)
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+; pkill -USR1 -f '[h]ypr/tray/quick_tray'"), repeating_locked)
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-; pkill -USR1 -f '[h]ypr/tray/quick_tray'"), repeating_locked)
 
 local locked = { locked = true }
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), locked)

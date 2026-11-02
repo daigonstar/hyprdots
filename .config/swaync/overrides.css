@@ -53,4 +53,9 @@
   border: 1px solid transparent;
 }
 
+/* The quick tray (hypr/tray) draws the panel. swaync's stays open invisibly behind it, for clicking away and Escape. */
+.control-center {
+  opacity: 0;
+}
+
 /* Avoid forcing unsupported properties here; GTK parser is strict. */
