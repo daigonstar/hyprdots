@@ -1,102 +1,252 @@
 # hyprdots audit
 
-Date: 2026-10-19. Four read-only reviews (installer and updater, Hyprland and desktop config, AI assistant, settings app and new menus), about 100 findings in total. Nothing was changed while auditing.
+Updated: 2026-11-02, at commit `7659136`. This replaces the audit of 2026-10-19; what that one found and got fixed is summarised at the end, and the full text is in git history.
 
-**How much to trust each item:** items marked *(checked)* were confirmed in the code by hand. The rest come from a reviewer reading the code; none of the exploit scenarios were actually run. One reviewer claim was wrong and is left out: `imagemagick` is not missing from the installer, it is installed as an extra dependency.
+**The goal:** a modern, sleek, reliable desktop with features that make it stand out, on a **desktop, a laptop and a tablet PC**. This lists everything found that stands between today and that goal, in the order it matters.
 
-## Fix first
+**How much to trust each item:**
 
-| # | Problem | Why it matters |
+- **[checked]** confirmed in the code or on the running desktop while writing this.
+- **[old]** carried over from the first audit and still looks open, but not re-proven. Reviewer findings; none of the exploit scenarios were ever run.
+- **[gap]** something that does not exist yet.
+- **[idea]** not a fault: a feature that would help it stand out.
+
+Everything was tested on one PC: a desktop with two screens and an AMD card. Nothing has run on a real laptop or tablet.
+
+## Where it stands
+
+These are judgement calls, not measurements.
+
+| | Today | What is missing most |
 |---|---|---|
-| 1 | `update.sh` moves your local config (`monitors.lua`, `user_settings.local.toml`, `user_overrides.lua` and others) to `~/.config/backup` before it checks the network. A failed `git fetch` strands it there. *(checked)* | Hyprland fails to load `monitors.lua` on the next start. **Fixed in 9213b2e:** fetches first, keeps local files in place, restores ones stranded by older versions. |
-| 2 | `update.sh` runs `git reset --hard` on the repo while it is still reading `update.sh`. | The rest of the run can execute garbled. **Fixed in 9213b2e:** the script runs from `main()`. |
-| 3 | `git clean -fdx` deletes more than the five preserved files, including the saved branch choice. The updater also never installs new dependencies from `install/required.txt`. | Existing installs break after an update that adds a package. **Fixed in 9213b2e:** `git clean` skips a preserve list (including `.update-branch` and `private_modes/`), and missing packages are installed. |
-| 4 | `hyprinstall.sh` and `update.sh` delete your existing configs and `~/Pictures/wallpapers`. The installer's backup prompt defaults to No. | A clean-machine user can lose their own configs and wallpapers. **Fixed in 9213b2e:** configs are moved to `~/.config-backup/<timestamp>/`, wallpapers are added without overwriting. |
-| 5 | `assistant/setup.sh` classes every Intel GPU as AMD: the pattern `amd\|ati\|advanced micro` matches "Intel Corporation". *(checked)* | Intel users get the AMD ROCm build of ollama. **Fixed in 3ed9e8b**, along with the same bug in the installer's GPU driver step. |
-| 6 | `assistant/setup.sh` assumes `paru` exists. On a clean Arch machine the install silently fails. | This is the bug hit on the laptop. **Low priority:** the installer installs paru before running this, so it only fails when `setup.sh` is run on its own. |
-| 7 | Assistant command guard bypasses: `env -S`, docker/systemctl option values read as the subcommand, `git ls-remote --upload-pack`, `cp`/`mv --target-directory=`. `write_file` can also stage a config file that a "safe" command then loads. | Commands run or files are written without a prompt. Prompt injection from a web page or calendar entry could use this. **Fixed:** every listed bypass was confirmed, then closed. Tools with options that write or run things now have a list of allowed options, spelled out in full (GNU tools accept abbreviations like `--out=`, which a deny-list cannot catch); options before a subcommand must be known, so their values are never read as the subcommand; `cp`/`mv`/`mkdir`/`touch` allow only a few options; writes inside any hidden folder (a project's `.git/config`) always ask, even after `/allow`. |
-| 8 | Displays page: turning off the laptop's own screen while docked can be saved to `monitors.lua`. | Undocked, no screen is enabled. **Fixed:** a built-in screen (eDP, LVDS, DSI) is never saved as off; it stays off only for the session. |
-| 9 | Display confirm popup: Esc is ignored and Enter keeps the layout, but the text says anything else puts the old settings back. Saving also forgets screens that are not plugged in, and mirrored screens are not handled. | On a blank screen the popup cannot be cancelled. **Mostly fixed** in the GTK settings window: Esc or closing puts the old layout back, the countdown is shown, and screens that are not plugged in keep their saved line. Mirrored screens are still not handled. |
-| 10 | The Super+K cheatsheet reads `~/.config/hypr/keybinds.conf`, which no longer exists. *(checked)* | The cheatsheet opens empty. **Fixed:** replaced by a GTK4 window (`hypr/cheatsheet/`) that reads `keybinds.lua` through the settings store, applies your custom keys, and lists the fixed binds. |
-| 11 | `.config/rofi/.current_wallpaper` is committed as a symlink to `/home/robb/Pictures/wallpapers/lieutenant-titus.jpg`, and `.config/rofi/.wallpaper_current` is a committed 2.2 MB JPEG. *(checked)* | They break game mode on other machines and are re-committed on every wallpaper change. **Fixed:** both, an empty `rofi/wallpaper/.wallpaper_current` and the four wallust colour files are no longer tracked. The colour files ship as `.default` copies; `hypr/scripts/first-colours.sh` fills in any that are missing and points `.current_wallpaper` at a shipped wallpaper. The installer, the updater, and the bar and notification launch scripts run it. The updater keeps them, plus the git-ignored `hypridle.local.conf` and `hyprlock.local.conf` it used to delete, across its reset. Nothing read the JPEG copy, so it is no longer written. |
+| **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
+| **Fresh install on another PC** | About 70% | A real install has never been run, and personal apps are forced on everyone |
+| **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
+| **Tablet** | About 15% | No on-screen keyboard, rotation or touch gestures, and much of the desktop assumes a keyboard or a hover |
 
-## Installer and updater
+## 1. Reliability: fix these first
 
-- ~~`update.sh` reads its whole body before the repo is reset; wrap it in a function or re-run itself after the reset.~~ Fixed in 9213b2e.
-- ~~Wallpapers are wiped and recopied on every install and update; use `rsync -a` or `cp -rn`.~~ Fixed in 9213b2e (`cp --update=none`); `update.sh` also no longer runs `rsync --delete` into a real `~/.config/hypr`.
-- ~~Plymouth: `git clone` into `/usr/share/plymouth/themes` fails on a re-run and aborts the installer under `set -e`. The `plymouth` hook and `splash` kernel parameter are never added, so the splash never appears.~~ Fixed: `install/plymouth.sh` clones the theme once, adds the hook, and adds `quiet splash` wherever the kernel line lives (`/etc/kernel/cmdline`, systemd-boot, GRUB or Limine). Safe to run again.
-- ~~`--dry-run` crashes on a machine without `paru`, because the clone is only printed and `pushd` then fails.~~ Fixed, along with a dry run stopping on AUR and multilib packages, and a dry run that **really appended to `~/.bashrc`**. CI now runs a dry run on a clean Arch container.
-- ~~The log directory is created only in dry-run mode, so a real first run falls back to `~/hyprinstall.log`.~~ Fixed.
-- ~~The cursor theme copy nests (`Future-cursors/Future-cursors`) on the second run. The SDDM `Xsetup.bak` is overwritten on the second run.~~ Fixed (the SDDM theme copy too); the Xsetup step went with the Wayland login screen.
-- ~~SDDM monitor detection uses `xrandr`, which needs a display; from a TTY it finds nothing.~~ Fixed: the login screen now runs on Wayland in Weston; screens are read from `/sys/class/drm`, and Plymouth hands over with `--retain-splash`. (The X login screen's `xrandr` step had been adding 24 s to every boot.)
-- ~~The installer defaults to the unstable `dev` branch~~ (fixed: the installer and updater default to `main`; `dev` had not been updated since March), ~~and the pull rewrites `hyprinstall.sh` mid-run~~ (fixed: the repo is updated first, and the installer restarts from the new copy when the pull changed it).
-- ~~Services are enabled unconditionally (`NetworkManager`, `docker`, and others), which can drop the network on machines using another network manager.~~ Fixed: NetworkManager is skipped, with a warning, when systemd-networkd, connman, dhcpcd, netctl or wicd is enabled.
-- ~~Packages used but not listed in `install/required.txt`: `lm_sensors`, `kitty`. `bluetui` and `docker-compose` need checking.~~ Fixed: `lm_sensors` (the assistant reads temperatures) and `bluetui` (the bar's Bluetooth click) added. `kitty` and `docker-compose` are not used (fastfetch's kitty image mode works in Ghostty).
-- ~~CI does not run the settings tests (`.config/hypr/settings/tests/` is gitignored, including `test_mime.py` and `test_displays_gtk.py`)~~ Fixed: neither test folder is ignored any more, both missing files are tracked, and CI runs every test (it had been failing since 31 Oct on three setup tests, fixed in 195e6e5). CI also runs a dry-run install now, and shellcheck now fails the build on warnings as well as errors (the nine warnings it found are fixed).
-- ~~Hardcoded paths: `install/hide.sh` defaults to `$HOME/hyprdots/...`, `.bashrc` aliases expand `$REPO_DIR` at install time, and `update.sh` has a shorter chmod list than the installer.~~ Fixed: `hide.sh` uses the list next to it, `hyprupdate` finds the repo through `~/.config/hypr`, and both scripts mark every tracked script with a `#!` line executable. Also found: `hide.sh` (and the installer's copy of it, now removed) appended `NoDisplay=true` after an app's last `[Desktop Action]` group, so apps with actions were never hidden; it now goes in `[Desktop Entry]`.
+A desktop feels unreliable when one failure leaves you stuck, so these come before any new feature.
 
-## Hyprland, Waybar and rofi
+### Nothing has been proven on a blank machine
 
-- ~~`autostart.lua` and the Super+F12 keybind hardcode `DP-1`; both do nothing on a laptop with `eDP-1`.~~ Fixed: login focuses workspace 1 wherever it lives, and Super+F12 focuses the next screen.
-- ~~`environment.lua` sets `WLR_DRM_DEVICES=/dev/dri/card0`. Hyprland probably ignores it (it uses `AQ_DRM_DEVICES`), and if honoured it pins the wrong GPU on hybrid laptops.~~ Removed, with a note on `AQ_DRM_DEVICES`.
-- ~~`hypridle.conf` uses `hyprctl dispatch dpms on/off`, and `scripts/startup.sh` uses `closewindow`; both are legacy dispatcher forms that may not work under the Lua config. Not tested.~~ Fixed: hypridle uses `hl.dsp.dpms`, and `startup.sh` was unused and is removed.
-- ~~`hypridle.conf` and `gamemode.sh` point at `swaync/images/ja.png`, which does not exist (it is at `rofi/images/ja.png`).~~ Fixed.
-- ~~`hyprpaper.conf` is dead (the setup uses awww) and contains `/home/robb/...` paths.~~ Removed.
-- ~~Waybar CSS names the font `ttf-cascadia-code-nerd` (an Arch package name, not a font family) and mixes in `NotoSansMono Nerd Font`, which is not installed. Rofi themes use `JetBrainsMono Nerd Font` and `feather`, also not installed.~~ Fixed: the bar and rofi take the Theme page font; `feather` was only in the removed rofi power-menu theme.
-- ~~Dead files: the old rofi power-menu theme (`powermenu/style.rasi`, `shared/colors.rasi`, `shared/fonts.rasi`), `rofi/colors/onedark.rasi`, and unused Waybar modules (`custom/notification`, `custom/endpoint`, `custom/separator`). Several CSS selectors match nothing (`.expand`, `#bluetooth-connected`, `#pulseaudio.format-icons`).~~ Removed, along with the old adi1090x rofi launcher (`launchers/launcher.sh`, `launchers/style.rasi`). The categorized rofi launcher stays as a fallback.
-- ~~`refresh.sh` sends SIGUSR1 to Waybar after killing it, which toggles visibility; `gamemode.sh` ends with an unreachable `hyprctl reload`.~~ Fixed. Worse than listed: the wallpaper picker runs `refresh.sh` on every change, and it started a plain `waybar` (dropping a saved Bar layout) and random rainbow borders (overriding the Theme page). It now restarts the bar and notifications through their launch scripts.
-- ~~Waybar's update click runs `bash -ic update`, which depends on the `.bashrc` alias.~~ Fixed: it runs `paru -Syu && flatpak update` itself.
-- ~~`wallust.toml` has orphaned templates and writes kitty and cava configs for programs that are not required.~~ Fixed: the kitty target and the pre-Lua Hyprland template are removed; cava is installed by the installer, so it stays.
-- Hardware-specific defaults: UK keyboard layout, an `epic-mouse-v1` device rule, and autostart entries (`openrgb ... Ice.orp`, Solaar, Nextcloud, Bitwarden) that are on by default. **Left as they are:** the layout and each startup app can be changed on the settings Hyprland and Hyprdots pages, a rule for a mouse that is not plugged in does nothing, and the installer reads the layout for the login screen. A first-run page (see the end of this file) is the place to ask.
-- ~~`.gitignore` does not cover `*.orig` and `*.rej`.~~ Fixed.
+- **No real install has ever been run.** [checked] CI and the local check are dry runs, which print what they would do. A real run in a virtual machine is the most useful next test, and it should become a repeatable one.
+- **Nothing tests the desktop itself.** [gap] CI runs unit tests and a dry run. Nothing starts Hyprland, the bar or the tray, and this session's bugs (Dismiss could not be clicked, Alt+Tab crashed on some apps, a bad rule option) were all of the kind that only a real run finds. A headless Hyprland in CI could at least catch config errors and start-up crashes.
+- **Hand checks are outstanding.** [checked] See the list near the end.
 
-## AI assistant
+### If a background part dies, nothing brings it back
 
-- **Guard bypasses** (reading `hypr_agent.py` around lines 2485-2720): see item 7 above. Others in the same area:
-  - ~~`/allow` auto-approves wrappers such as `sh -c "sudo ..."`, `env sudo` and `xargs sudo`.~~ Fixed: sudo, doas and the rest inside a wrapper always ask.
-  - ~~Abbreviated long options bypass exact-match deny lists (`sort --out=FILE`, `grep --rec`, `nmcli c del`).~~ Fixed with item 7.
-  - ~~`nmcli -s -g ... c show` prints Wi-Fi passwords into the model context.~~ Fixed: `-s` always asks.
-  - ~~The blocked-path list omits browser profiles, `.docker/config.json`, `.npmrc`, shell history, `/proc/*/environ`, and `printenv`/`env` dump environment secrets.~~ Fixed: those are blocked; `env` and a bare `printenv` ask, and `printenv` of a name like `*TOKEN*` or `*KEY*` asks.
-- Data can leave the machine with no prompt: `web_fetch` and `web_search` take free-form URLs and queries after the model has read sensitive data.
-- ~~The approval prompt prints raw command text, so control characters can overwrite what the user sees.~~ Fixed: they are shown as text (`\x1b`, `\r`).
-- Journal text and calendar event titles go into the system prompt without being marked as untrusted. `_note_from_user` can save a note with no confirmation if it has no long words, and saved notes persist across sessions.
-- No client timeout on calls to ollama; a stalled server hangs the process.
-- State files in `~/.local/state/hypr_agent` are world-readable, and `failures.log` can contain secrets from tool output.
-- A timed-out confirmed command can leave child processes running; `sudo` ignores a non-root kill.
-- `setup.sh`: the SearXNG config is created mode 0600 and probably unreadable inside the container; the image is unpinned `:latest`; `vision_model = "same"` is passed to `ollama pull`; ollama can be started three different ways (`ollama.sh`, `setup.sh`, the agent).
-- `agent_monitor.py`: the report is written non-atomically, a missing `notify-send` crashes it, `journalctl` output is unbounded, and the service has no timeout.
-- Small items: predictable `/tmp` fallback paths, a double-press race in `assistant-toggle.sh`, `$(cat browser.sh)` run as a command in `ai.sh`, and dead code (`hypr_agent.py.bak`, `_page_excerpt`).
+- **Nothing restarts what crashes.** [checked] The tray, bar, swaync, udiskie and hypridle are started once from `autostart.lua`. The only recovery is pressing `SUPER + N`, and that does not restart udiskie.
+- **A dead tray makes the bell look broken.** [checked] swaync's panel is now invisible behind the tray, so if the tray dies, the bell seems to do nothing and swaync's keyboard grab may stay until Escape. The same process also holds the volume popup, Alt+Tab, the overview and the battery warnings, so one crash loses all of them.
+- **Failures leave no trace.** [checked] Tray output goes nowhere when it is started from autostart. The PC Health monitor does not watch for dead desktop parts.
+- **Fix:** run these as systemd user services with `Restart=on-failure` and logs in the journal, optionally through `uwsm`, and have the health monitor report them.
 
-## Settings app and new menus
+### Updates and bad changes have no way back
 
-- **Displays:**
-  - Item 8 and 9 above.
-  - The 10-second revert timer and the `y` key can race, leaving the file and the live layout disagreeing.
-  - `fresh` can be an empty list from a failed `hyprctl`, which would write an empty `monitors.lua`.
-  - Scale is rounded to 3 decimals on read, then every screen is re-applied, so a 1.666667 scale becomes 1.667.
-  - Applying runs synchronously in the key handler and freezes the UI.
-  - Screens are keyed by port name, so DP-1 and DP-2 swapping loses their settings.
-- **Cloud drives:**
-  - It lists and can remove every `rclone` remote, including hand-made crypt, sftp and s3 remotes.
-  - Remote names are not escaped in the systemd unit template, and `exe` is not quoted.
-  - The WebDAV password is passed on the command line.
-  - `rclone` and `systemctl` calls run on the render thread and can freeze the UI; Esc does not stop a mount in progress.
-  - Bookmarks and unit files are written non-atomically.
-- **File types:** the default lookup ignores desktop-specific `mimeapps.list` files, Removed Associations, `Hidden=true` masking, and MIME aliases.
-- **GTK settings (Theme page, Apps):** writing `settings.ini` replaces a symlinked file with a regular file, and the GTK 4 link step unlinks any existing symlink.
-- **`exo-terminal.sh`:** the cleanup of `helpers.rc` can strip the `[Default]` header and leave a broken file when other keys are present.
-- **Power menu:** the toggle uses `pkill -f` on the script path, which also matches an editor that has the file open. Lock is silent if `hypridle` is not listening. The layer-shell library path is hardcoded to `/usr/lib`.
-- **Wallpaper picker:** a second keypress closes and then reopens it, and it kills any rofi. Thumbnails are written straight to their final name, so a killed run leaves a broken file that is never regenerated. Thumbnail names use a 32-bit checksum, so two files can collide.
-- **Smaller:** the TOML parser ignores `[[arrays]]` and multi-line strings; the private settings file is briefly readable before `chmod`; `nan`/`inf` pass float validation and break the generated Lua; `KeyError` from `hyprctl` crashes the Displays page; a terminal under 60x16 wraps badly.
-- **First-time user:** "SUPER + +" cannot be entered as a key; the 10-second timer has no on-screen countdown; some pages save immediately and some wait for Ctrl+S.
-- **Test gaps:** no tests for `cloud.py`, the revert race, Esc/Enter on the confirm popup, mirrored or laptop layouts, disabled-monitor persistence, hotplug, `sync_terminal`, or the shell scripts.
+- **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
+- **`update.sh` can still wipe uncommitted work.** [checked] It resets hard to the remote. Fine for a normal user, dangerous while developing here. It should stop and ask when the repo has local changes.
+- **No release channel.** [checked] The newest tag is `0.2.5`, and updates follow `main`, so a bad push reaches everyone. A tested `stable` branch or tagged releases would fix it, plus a changelog shown after updating.
+- **A config mistake has no safe mode.** [gap] A broken Lua file leaves Hyprland showing an error, or a desktop with no keybinds. Check generated files before reloading everywhere (Window rules already does this), and keep a last-known-good copy to fall back to.
 
-## Suggested order
+### Hardening
 
-1. ~~Updater and installer safety (items 1-4), then the Intel and `paru` bugs (items 5-6).~~ Items 1-5 done; item 6 is low priority.
-2. ~~Tighten the assistant guard (item 7) by allow-listing flags per command instead of deny-listing~~ (done), then fix the display popup and docked-laptop cases (items 8-9; mostly done).
-3. ~~Clear the broken or accidentally committed files (items 10-11), and un-ignore the tests so CI runs them.~~ Done.
+- **No firewall in the dots.** [checked] `ufw` is installed on this PC, but the install list does not set one up.
+- **No disk encryption path.** [checked] This PC has none, and the installer says nothing about it. It matters most on a laptop or tablet that can be lost.
+- **Hearthling data handling.** [checked] `web_fetch` and `web_search` can still send anything out with no prompt, even after reading private data. See section 7.
+- **`failures.log` and notes are readable by other users.** [checked] `~/.local/state/hypr_agent` is mode 755, its files 644, and that log can contain tool output.
 
-## For the launch page
+## 2. Foundation for three kinds of device
 
-A first-run page should cover: which screen is the primary one, whether this is a laptop, that `paru` is needed for the assistant, and a short tour of the settings pages.
+These sit underneath the laptop and tablet work, so they come first.
+
+- **One idea of "what device is this".** [gap] The tray checks for laptops itself, and the power menu checks for a battery. A single detected profile (desktop, laptop, tablet or convertible, from the chassis type, battery, touchscreen and tablet switch) should drive the defaults everywhere, and be overridable in Settings.
+- **Personal apps are forced on everyone.** [checked] `install/required.txt` installs Discord, Vesktop, Zed, Steam, Zen, OpenRGB, CoolerControl, Solaar, Docker, FreeRDP, WinBoat and more with no choice. A tablet does not want most of these. Split them into a small core plus choices by group: gaming, development, RGB and cooling, and so on.
+- **Defaults still set for this PC.** [checked] A UK keyboard, an `epic-mouse-v1` rule, autostart entries for OpenRGB (with a named profile), Solaar, Nextcloud, Bitwarden, Vesktop and CoolerControl, and built-in window rules for specific apps. The welcome window only mentions the keyboard. The installer should ask, or detect the layout, and startup apps should only be on when installed.
+- **HiDPI is untested.** [gap] Everything has only run at scale 1. Laptops and tablets usually need 1.25x to 2x. GTK 3 parts (the tray, calendar and bar) cannot draw natively at fractional scales and may look soft. Fixed pixel sizes in the tray and overview need checking. Moving the tray to GTK 4 is worth weighing here.
+- **A screen with no saved settings.** [gap] `monitors.lua` starts empty on a new install. Needs testing with a real laptop panel, plus a sensible first-time scale.
+- **The Surface.** [gap] The earlier plan is still waiting on the model. ARM Surfaces (Pro X, Snapdragon Pro 11 and Laptop 7) cannot run Arch normally, so this decides what is possible. The rest needs `linux-surface` and `iptsd`.
+
+## 3. Laptop
+
+- **Lid is not handled.** [checked] There is no lid bind or setting. It needs: sleep when closed on battery, and with an external screen connected, turn off the built-in panel and keep working, then bring it back when opened. Audit item 8 stopped this being saved wrongly, but the behaviour itself is missing.
+- **No power profiles.** [checked] `power-profiles-daemon` or `tuned` is not installed, so the tile never appears. It should also switch by itself on battery.
+- **Idle does not know about battery.** [checked] The Power & lock page has one set of timeouts. Laptops want shorter ones on battery.
+- **No hibernate.** [gap] Sleep only, including the 3% battery action. Suspend-then-hibernate protects work on a dying battery, but it needs swap set up by the installer.
+- **No touchpad gestures.** [checked] `hl.gesture` exists but nothing is configured. Three-finger swipe between workspaces and four-finger for the overview are the minimum, with a Settings page.
+- **No network status on the bar.** [checked] I removed it from the default, since the tray has it. A desktop on a cable does not need it, but a laptop on Wi-Fi does. Same for Bluetooth headphones. The profile above should decide.
+- **Brightness popup only follows the keys.** [checked] Automatic brightness or firmware keys do not show it. There is no keyboard backlight control or popup, and no automatic screen brightness.
+- **Battery details.** [gap] Time remaining, health, and a charge limit to protect the battery.
+- **Fingerprint login.** [gap] `fprintd` with hyprlock and the login screen, where the hardware allows.
+- **Graphics switching on hybrid laptops.** [gap] The installer can install drivers for two cards, but nothing helps run an app on the dedicated one.
+- **Laptop parts have only run in simulation.** [checked] Battery row, brightness slider, touchpad and airplane tiles. The touchpad switch's command has never run against a real touchpad.
+
+## 4. Tablet
+
+Nothing here exists yet, and most of it is [gap]. It decides whether this can be a tablet desktop at all.
+
+- **No on-screen keyboard.** With no keyboard attached you cannot type. It needs one that appears for text fields (`wvkbd` or `squeekboard`) and works on hyprlock and the login screen, or you cannot unlock.
+- **No auto-rotate.** `iio-sensor-proxy` with `iio-hyprland` or a small script, plus a rotation lock tile in the tray. Rotation must also rotate touch and pen input.
+- **No tablet mode.** Detect a detached keyboard and switch: show the on-screen keyboard, larger controls, and windows fullscreen or side by side.
+- **No touch gestures.** Edge swipes to open the launcher and tray, swipes between workspaces, and three-finger close. `hyprgrass` needs `hyprpm`, which is not installed, and I do not know its state under the Lua config. `lisgd` is the plugin-free choice. Needs a test.
+- **Controls that need hover or a keyboard.** [checked]
+  - The bar's system tray drawer opens on hover (`click-to-reveal` is false), so touch cannot open it.
+  - Alt+Tab is keyboard only, and the overview's keyboard shortcut has no touch way in except the tray.
+  - The tray has no keyboard navigation at all, and its sliders and small icon buttons are mouse-sized.
+  - The overview's drag uses GTK drag and drop, which has never been tried with a finger.
+- **Touch sizes.** Bar icons are 15px. A tablet preset needs a taller bar with larger targets.
+- **Pen.** Pressure and eraser, mapped to the built-in screen only, and a note-taking shortcut. Pen button actions in Settings.
+- **Handwriting and palm rejection.** Depends on hardware and `iptsd`.
+
+## 5. Desktop
+
+The strongest of the three. What is left:
+
+- **HDR.** [gap] No setting on the Displays page, though Hyprland has been adding support. Check and expose it.
+- **Screens keyed by port name.** [old] Displays stores `DP-1` and `DP-2`, so swapping cables loses settings. Use the monitor's description instead.
+- **Per-screen profiles.** [gap] "Docked", "just the main screen" and "TV" layouts you can switch between, which also matters for laptops.
+- **A wake-from-sleep and game check.** [gap] Game mode, VRR and sleep have not had a dedicated stress test. Game mode no longer restarts the bar, but a video wallpaper is not restored afterwards. [checked]
+- **Boot time.** [checked] 46.5 seconds on this PC, of which 16 is firmware and **16 is the boot loader**. The loader's wait looks like the easiest win.
+
+## 6. Modern and sleek
+
+Things people now expect, and the finish that makes it feel designed.
+
+### Missing basics
+
+- **Accessibility: none.** [checked] No screen reader support has been tested, no large-text or high-contrast mode, and no reduced-motion option beyond turning animations off. The tray is mouse-only. Colour alone carries some meaning.
+- **Other languages.** [checked] All text is hard-coded English.
+- **Printers.** [checked] Nothing for CUPS or printer setup.
+- **Phone connection.** [checked] No KDE Connect. LocalSend is included.
+- **Screen sharing check.** [gap] Portals are installed, but the common apps have not been tested.
+- **Notification buttons in the tray.** [checked] Reply and similar only work on popups, and clicking a notification does not open its app. It was kept this way by choice. The options are replacing swaync with a daemon of our own, or adding an "Open app" button by focusing the app's window.
+- **Notifications from before the tray started** [checked] only show as a count, and the list is lost if the tray restarts.
+- **Grouped notifications and per-app settings.** [gap] Several messages from one app should fold together, and each app should be able to stay quiet.
+- **Per-app volume.** [gap] The tray has output and input only, and no per-app sliders.
+- **Tray settings.** [gap] You cannot choose which tiles and shortcuts appear, or their order. Nothing to adjust sounds, or volume ticks separately.
+- **Update centre.** [gap] Updates open a terminal running `paru`. A page showing what changes, with one button, would suit a non-terminal user.
+- **Backup.** [gap] Nothing for your own files, and no export of your settings to carry to a new device.
+- **Drive popups need a real USB test.** [checked] See the hand checks.
+
+### Consistency and finish
+
+- **Look and feel across parts.** [gap] The tray, launcher, power menu, settings and rofi pickers each draw their own controls. Corner radius, spacing and sizes should come from one shared set, as colours already do. Two toolkits (GTK 3 and GTK 4) and rofi are in use, which keeps them slightly apart.
+- **Rofi is the odd one out.** [checked] Wallpaper, clipboard and emoji pickers still use it. It does not support the same animation or touch, and it would be better replaced by the launcher's own style.
+- **Qt apps.** [checked] Only Ark has been checked. Links stay blue, buttons are low contrast on a black palette, and running apps only recolour when reopened. Whether other apps, such as OpenRGB, follow is untested.
+- **Colour contrast is not guaranteed.** [gap] A role can land on a colour that is hard to read. The Theme page, or the wallust step, should enforce a minimum, instead of leaving it to the wallpaper. The amber update pill is one place it could show.
+- **Video wallpapers.** [gap] From reading the script, game mode does not restore one. How the lock screen and overview look with one has not been tried.
+- **Login to desktop handover.** [gap] Plymouth, the login screen, the lock screen and the desktop should look like one continuous thing. Not checked end to end at each scale.
+- **Stale leftovers.** [checked]
+  - `.config/hypr-dock` is not used by anything, and `hypr-dock` is not installed.
+  - `*.orig` and `*.rej` files are tracked in git: `keybinds.lua.orig`, `overrides.py.orig`, `schema.py.orig`, `store.py.orig`, `tui.py.orig`, and two `.rej` files.
+  - `scripts/ai.sh`, `pywall.sh` and `rainbowb.sh` are not called from anywhere. `ai.sh` also runs a file's contents as a command.
+  - Comments naming `JaKooLit` and odd names remain in older scripts.
+- **README is out of date.** [checked] It still says to click the cog in the bar's drawer, which is gone. Screenshots need a fresh set once the look settles, and the tray, overview and window rules have none.
+- **Very large files.** [checked] `tray/quick_tray.py` is 1,204 lines and `assistant/hypr_agent.py` is 5,116. They need splitting before more goes in.
+- **Deprecated calls.** [checked] `popup_calendar.py` still uses `GLib.unix_signal_add`.
+- **Known calendar quirk.** [checked] It closes itself whenever it loses focus, including when started from a script.
+
+## 7. Open items from the first audit
+
+Still open unless noted. Rechecked as far as a read of the code allows.
+
+### Hearthling
+
+- **Data can leave with no prompt.** [checked] `web_fetch` and `web_search` take free-form URLs and queries, even after the model has read something private. The most serious item here.
+- **Untrusted text in the prompt.** [old] Journal text and calendar titles are not marked as untrusted. `_note_from_user` can save a note with no confirmation if it has no long words, and notes persist.
+- **No timeout on calls to Ollama.** [checked] It uses `ollama.chat` with no client timeout, so a stalled server hangs it.
+- **State files readable by others.** [checked] See section 1.
+- **`setup.sh`.** [checked] The SearXNG config is created mode 0600 and may be unreadable in the container, and its image is an unpinned `:latest`. [old] `vision_model = "same"` is passed to `ollama pull`, and Ollama can be started three different ways.
+- **`agent_monitor.py`.** [checked] The report is not written atomically, a missing `notify-send` would crash it, journal output has no limit, and the service has no timeout.
+- **Small.** [checked] A double-press race in `assistant-toggle.sh` (no lock), and dead `_page_excerpt`. [old] `/tmp` fallback paths, and a timed-out command may leave child processes (`killpg` is now used on some paths, so this needs a fresh look).
+- **Mangled comment.** [checked] `self.revise_round = 0` in `hypr_agent.py` has two comments run together.
+
+### Settings app
+
+- **Displays.** [checked] Scale is rounded when read, so 1.666667 becomes 1.667 and is re-applied. [old] A failed `hyprctl` could write an empty `monitors.lua`, the revert timer and the keep key can race, and applying can freeze the page.
+- **Cloud drives.** [checked] It lists and can remove every `rclone` remote, including hand-made ones. The executable path is unquoted in the unit file, and bookmarks and unit files are not written atomically. The obscured WebDAV password is on the command line, and there are no tests for `cloud.py`. Fixed since the first audit: the GTK page no longer blocks on these calls.
+- **File types.** [checked] Removed Associations and MIME aliases are not honoured. `Hidden=true` now is.
+- **GTK settings.** [checked] Writing `settings.ini` replaces a symlinked file, and the GTK 4 step removes any existing link.
+- **`exo-terminal.sh`.** [checked] Cleaning `helpers.rc` removes the `[Default]` header, which can leave a broken file if other keys are there.
+- **Power menu.** [checked] Its toggle uses `pkill -f` on the script path, which also matches an editor with that file open. [old] Lock is silent if `hypridle` is not listening, and the layer-shell path is hard-coded to `/usr/lib`.
+- **Wallpaper picker.** [checked] Thumbnails are written straight to their final name, so a killed run leaves a broken one that is never remade. Names use a 32-bit checksum, so two can collide. [old] A second keypress closes and reopens it.
+- **Smaller.** [checked] `nan` and `inf` are not rejected in number fields, and could break generated Lua. [old] The TOML parser ignores `[[arrays]]` and multi-line strings, `KeyError` from `hyprctl` can crash Displays, and a terminal under 60x16 wraps badly.
+- **First-time use.** [old] "SUPER + +" cannot be entered as a key, the terminal version has no countdown for the display timer, and some pages save at once while others wait for Save.
+- **Test gaps.** [checked] No tests for `cloud.py`, the revert race, mirrored or laptop layouts, disabled-monitor persistence, or real screen changes. The GUI itself has almost none: `gui/windowrules.py` and the tray's windows were only checked by driving them in a scratch script.
+
+## 8. Features that would make it stand out
+
+None of these are faults. Many Linux desktops can match the basics, so this is where it could be different. All [idea]. The first two groups build on what is already unusual here.
+
+### Hearthling as part of the desktop
+
+The strongest thing this has that others do not. Today it is a separate chat window.
+
+- **In the launcher:** type a question into Super+Space and get an answer or an action.
+- **Explain this:** "what is this error?" on a notification, or on a screenshot or selected text.
+- **Do it for me:** "make Discord always open on workspace 2" writes a window rule, with the same approval flow.
+- **Health that fixes itself:** the PC Health monitor's warnings could offer a fix button that hands the problem to Hearthling.
+- **Local and private by default,** which is worth saying clearly in the README.
+
+### One desktop that adapts
+
+- **Tablet, laptop and desktop modes that switch by themselves,** with the same apps and settings. Few Linux setups do this well, and this could be the headline feature.
+- **Modes for what you are doing:** "Gaming", "Work" and "Focus" switch game mode, do not disturb, wallpaper, bar layout and which apps open, in one click from the tray. Game mode is the start of this.
+- **Follow-me colours:** the wallpaper-driven theme is already unusual in reaching this far. Add a smooth colour transition when the wallpaper changes, and automatic light and dark by time of day.
+- **Time-of-day wallpaper,** tied to the night light with a sunset schedule.
+
+### Everyday touches
+
+- **A launcher that searches everything:** files, settings pages, windows, calendar, clipboard, and web.
+- **Smart screenshots:** copy text from a screenshot (`tesseract` is already on this PC, though not in the install list), annotate, and pin to the screen.
+- **Clipboard with pictures** in a panel of its own, rather than a rofi list.
+- **Live activity on the bar:** a small area for media, recording, timers and downloads, like a phone's.
+- **Now playing with artwork,** in the tray and on the lock screen.
+- **Calendar in the tray:** today's events beside the clock or notifications, and a reminder before each.
+- **Weather** on the tray or lock screen.
+- **Window snapping layouts:** pick a layout from the tray or by dragging, for people who are new to tiling.
+- **Session restore:** reopen what you had, on the right workspaces, after a restart.
+- **Peek at a workspace** by hovering on it in the bar, reusing the overview's window pictures.
+
+### A proper first impression
+
+- **A graphical installer or a live USB** rather than a shell script, including partitioning and encryption.
+- **A fuller welcome:** pick your device type, keyboard, apps, wallpaper, and then a short interactive tour.
+- **A website or README with short videos,** since motion is much of the appeal.
+
+## 9. Hand checks still to do
+
+These were built this session but could not be clicked or pressed from the tools used. Dismiss was only found this way, so these are worth doing.
+
+- [ ] Hold Alt and tap Tab, with windows on both screens
+- [ ] Overview (`SUPER + TAB`): click a window, click a workspace, and drag a window to another
+- [ ] Bar: the system tray arrow still opens on hover
+- [ ] Window rules: add a rule with the wizard and press the real Save, then switch one off
+- [ ] Night light on and off
+- [ ] Screenshot: Open, Show in folder and Edit buttons, and region and window modes
+- [ ] Emoji typed into an app, and a picked colour pasted
+- [ ] Record an area with the mouse, and stop from the REC badge
+- [ ] Plug in a USB stick: mounts, notifies, opens and ejects from the tray
+- [ ] Log out and back in: the welcome stays away, and udiskie and the tray both start
+- [ ] Unplug a screen for real and plug it back in (it was only simulated by turning one off)
+- [ ] Sleep and wake with the tray open
+
+## 10. Suggested order
+
+1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
+2. **Make it hard to break:** systemd services with restarts, logs, snapshots before updates, a safe `update.sh`, and a stable channel. Fix the Hearthling data item and the small open items in section 7.
+3. **Tidy up:** remove the stale files, split the large files, update the README, and split the install list into core and optional.
+4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
+5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
+6. **Tablet:** confirm the Surface model first, then on-screen keyboard, rotation, gestures, and touch sizes, tested on the device.
+7. **Sleek:** shared design values, replacing rofi, accessibility, grouped notifications, and per-app volume.
+8. **Stand out:** Hearthling in the launcher, automatic device modes, and activity modes.
+
+## Fixed since the first audit
+
+All are in git history.
+
+- **Installer and updater:** local config is no longer stranded or deleted, the update runs safely while replacing itself, missing packages are installed, and configs are backed up rather than removed. Dry runs are safe and run in CI, along with shellcheck and all test suites. Plymouth and the login screen were reworked, and the login screen now runs on Wayland.
+- **Desktop config:** hard-coded `DP-1` paths, old dispatchers, dead files, font names and rainbow border overrides are all gone.
+- **Assistant:** the listed command guard bypasses are closed, wrapped `sudo` always asks, secrets and browser profiles are blocked, and control characters are shown as text.
+- **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
+- **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.
