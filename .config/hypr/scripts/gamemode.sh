@@ -2,7 +2,6 @@
 # Game Mode. Turning off all animations
 
 notif="$HOME/.config/rofi/images/ja.png"
-SCRIPTSDIR="$HOME/.config/hypr/scripts"
 
 
 # Since the hyprland.lua migration, hyprctl no longer supports the legacy

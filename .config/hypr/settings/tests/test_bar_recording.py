@@ -1,6 +1,6 @@
 import unittest
 
-import _paths  # noqa: F401
+import _paths
 from hyprsettings import barlayout
 
 
@@ -20,7 +20,7 @@ class Recording(unittest.TestCase):
         self.assertEqual(barlayout.with_recording(layout, {}), layout)
 
     def test_the_tracked_config_defines_it(self):
-        self.assertIn("custom/recording", barlayout.read_config())
+        self.assertIn("custom/recording", barlayout.read_config(_paths.HYPR.parent / "waybar" / "config"))
 
 
 if __name__ == "__main__":
