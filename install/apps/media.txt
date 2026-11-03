@@ -1,0 +1,5 @@
+# title: Music and video
+# about: VLC, Spotify, and cava for music bars on the panel
+flatpak:org.videolan.VLC
+flatpak:com.spotify.Client
+cava

@@ -54,7 +54,7 @@ Full screen, with a PC (a laptop when a battery is found) in the middle and the 
 
 ### Install:
 
-The installer is for **Arch Linux** (it uses `pacman` and `paru`) and expects a Hyprland 0.55+ session with the Lua config. Run it as your normal user; it asks for `sudo` when needed. Try `./hyprinstall.sh --dry-run` first to see exactly what it would do.
+The installer is for **Arch Linux** (it uses `pacman` and `paru`) and expects a Hyprland 0.55+ session with the Lua config. Run it as your normal user; it asks for `sudo` when needed. It opens a full-screen installer: answer a few questions (keyboard, graphics drivers, browser, extra apps, Hearthling), check the summary, and it does the rest while showing its progress. Try `./hyprinstall.sh --dry-run` first: you get the same screens, and nothing is installed or changed. `--plain` asks in plain text instead.
 
 ```bash
 git clone https://github.com/daigonstar/hyprdots.git
@@ -62,7 +62,29 @@ cd hyprdots
 chmod +x hyprinstall.sh
 ./hyprinstall.sh
 ```
-The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `install/gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. Everything else is in `install/required.txt` (Flatpaks in `install/flatpak.txt`). `install/hide.sh` hides unwanted app launcher entries listed in `install/hide.txt`. It also enables the needed services. The PC assistant is optional (see below).
+The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `install/gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. `install/hide.sh` hides unwanted app launcher entries listed in `install/hide.txt`. It also enables the needed services. The PC assistant is optional (see below).
+#### What gets installed
+
+`install/required.txt` is the desktop itself. Everything else is your choice: the installer asks which web browser you want and offers these groups, none of them needed (`install/apps/`):
+
+| Group | Apps |
+|---|---|
+| `store` (on by default) | Bazaar, Flatseal |
+| `media` | VLC, Spotify, cava |
+| `office` | Collabora Office, Obsidian |
+| `sharing` | Nextcloud, LocalSend, FileZilla, Bitwarden |
+| `chat` | Discord, Vesktop, Teams |
+| `gaming` | Steam, Lutris, Heroic, Ryujinx, PokeMMO |
+| `dev` | Zed, GitHub command line, sif |
+| `hardware` | OpenRGB, CoolerControl, Solaar |
+| `windows` | WinBoat, Docker, FreeRDP |
+
+Add more any time with `install/apps.sh`. To answer ahead of time, use `HYPR_APPS="gaming chat" HYPR_BROWSER=zen ./hyprinstall.sh --plain` (or `all`, or `none`).
+
+#### Updating
+
+`update.sh` (or `hyprupdate`) leaves your settings alone. Everything the settings app saves is in local files git ignores, and those are never touched, along with any files you added yourself. If you edited a shipped file by hand, your edit is put back on top of the update. If it clashes with the update, the new version goes in and yours is saved in `~/.local/state/hyprdots/update-backups/`, with a notification. If you have commits that are not pushed, the update stops and changes nothing. Updates only add packages the desktop itself needs, never the optional apps.
+
 ### PC assistant (optional)
 
 A local AI helper (Super+C or the bar button) that answers questions about your PC, calendar and the web. It runs through Ollama, so nothing leaves your machine, but it needs a reasonably strong GPU. The installer asks, shows what it detected and recommends a size:
@@ -91,7 +113,7 @@ Describe your own machine to the assistant in `~/.config/hypr/assistant/agent_co
 
 ### Settings app
 
-Click the cog in the waybar drawer (or run `~/.config/hypr/scripts/settings.sh`) for a settings window where you can change things without editing files. It uses your wallpaper's colours, and on a narrow or rotated screen it shows the page list and the page one at a time. Over SSH, or with `settings.sh --tui`, the same settings open as a terminal app instead.
+Click the cog in the quick tray (or run `~/.config/hypr/scripts/settings.sh`) for a settings window where you can change things without editing files. It uses your wallpaper's colours, and on a narrow or rotated screen it shows the page list and the page one at a time. Over SSH, or with `settings.sh --tui`, the same settings open as a terminal app instead.
 
 | Page | What you can change |
 | --- | --- |

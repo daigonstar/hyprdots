@@ -1,0 +1,5 @@
+# title: App store
+# about: Bazaar for browsing apps (Super+A), and Flatseal for app permissions
+# default: yes
+flatpak:io.github.kolunmi.Bazaar
+flatpak:com.github.tchx84.Flatseal

@@ -1,0 +1,4 @@
+# title: Office and notes
+# about: Collabora Office and Obsidian (Super+O)
+flatpak:com.collaboraoffice.Office
+flatpak:md.obsidian.Obsidian

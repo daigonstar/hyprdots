@@ -1,6 +1,6 @@
 # hyprdots audit
 
-Updated: 2026-11-02, at commit `7659136`. This replaces the audit of 2026-10-19; what that one found and got fixed is summarised at the end, and the full text is in git history.
+Updated: 2026-11-03. This replaces the audit of 2026-10-19; what that one found and got fixed is summarised at the end, and the full text is in git history.
 
 **The goal:** a modern, sleek, reliable desktop with features that make it stand out, on a **desktop, a laptop and a tablet PC**. This lists everything found that stands between today and that goal, in the order it matters.
 
@@ -20,7 +20,7 @@ These are judgement calls, not measurements.
 | | Today | What is missing most |
 |---|---|---|
 | **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
-| **Fresh install on another PC** | About 70% | A real install has never been run, and personal apps are forced on everyone |
+| **Fresh install on another PC** | About 75% | A real install has never been run |
 | **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
 | **Tablet** | About 15% | No on-screen keyboard, rotation or touch gestures, and much of the desktop assumes a keyboard or a hover |
 
@@ -44,7 +44,6 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 ### Updates and bad changes have no way back
 
 - **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
-- **`update.sh` can still wipe uncommitted work.** [checked] It resets hard to the remote. Fine for a normal user, dangerous while developing here. It should stop and ask when the repo has local changes.
 - **No release channel.** [checked] The newest tag is `0.2.5`, and updates follow `main`, so a bad push reaches everyone. A tested `stable` branch or tagged releases would fix it, plus a changelog shown after updating.
 - **A config mistake has no safe mode.** [gap] A broken Lua file leaves Hyprland showing an error, or a desktop with no keybinds. Check generated files before reloading everywhere (Window rules already does this), and keep a last-known-good copy to fall back to.
 
@@ -60,8 +59,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 These sit underneath the laptop and tablet work, so they come first.
 
 - **One idea of "what device is this".** [gap] The tray checks for laptops itself, and the power menu checks for a battery. A single detected profile (desktop, laptop, tablet or convertible, from the chassis type, battery, touchscreen and tablet switch) should drive the defaults everywhere, and be overridable in Settings.
-- **Personal apps are forced on everyone.** [checked] `install/required.txt` installs Discord, Vesktop, Zed, Steam, Zen, OpenRGB, CoolerControl, Solaar, Docker, FreeRDP, WinBoat and more with no choice. A tablet does not want most of these. Split them into a small core plus choices by group: gaming, development, RGB and cooling, and so on.
-- **Defaults still set for this PC.** [checked] A UK keyboard, an `epic-mouse-v1` rule, autostart entries for OpenRGB (with a named profile), Solaar, Nextcloud, Bitwarden, Vesktop and CoolerControl, and built-in window rules for specific apps. The welcome window only mentions the keyboard. The installer should ask, or detect the layout, and startup apps should only be on when installed.
+- **Defaults still set for this PC.** [checked] A UK keyboard, an `epic-mouse-v1` rule, a named OpenRGB profile, and built-in window rules for specific apps. The installer now asks for the layout. The Settings startup list also still shows apps that are not installed, though they are now skipped at login.
 - **HiDPI is untested.** [gap] Everything has only run at scale 1. Laptops and tablets usually need 1.25x to 2x. GTK 3 parts (the tray, calendar and bar) cannot draw natively at fractional scales and may look soft. Fixed pixel sizes in the tray and overview need checking. Moving the tray to GTK 4 is worth weighing here.
 - **A screen with no saved settings.** [gap] `monitors.lua` starts empty on a new install. Needs testing with a real laptop panel, plus a sensible first-time scale.
 - **The Surface.** [gap] The earlier plan is still waiting on the model. ARM Surfaces (Pro X, Snapdragon Pro 11 and Laptop 7) cannot run Arch normally, so this decides what is possible. The rest needs `linux-surface` and `iptsd`.
@@ -140,7 +138,7 @@ Things people now expect, and the finish that makes it feel designed.
   - `*.orig` and `*.rej` files are tracked in git: `keybinds.lua.orig`, `overrides.py.orig`, `schema.py.orig`, `store.py.orig`, `tui.py.orig`, and two `.rej` files.
   - `scripts/ai.sh`, `pywall.sh` and `rainbowb.sh` are not called from anywhere. `ai.sh` also runs a file's contents as a command.
   - Comments naming `JaKooLit` and odd names remain in older scripts.
-- **README is out of date.** [checked] It still says to click the cog in the bar's drawer, which is gone. Screenshots need a fresh set once the look settles, and the tray, overview and window rules have none.
+- **README screenshots.** [checked] They need a fresh set once the look settles, and the tray, overview and window rules have none.
 - **Very large files.** [checked] `tray/quick_tray.py` is 1,204 lines and `assistant/hypr_agent.py` is 5,116. They need splitting before more goes in.
 - **Deprecated calls.** [checked] `popup_calendar.py` still uses `GLib.unix_signal_add`.
 - **Known calendar quirk.** [checked] It closes itself whenever it loses focus, including when started from a script.
@@ -234,7 +232,7 @@ These were built this session but could not be clicked or pressed from the tools
 
 1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
 2. **Make it hard to break:** systemd services with restarts, logs, snapshots before updates, a safe `update.sh`, and a stable channel. Fix the Hearthling data item and the small open items in section 7.
-3. **Tidy up:** remove the stale files, split the large files, update the README, and split the install list into core and optional.
+3. **Tidy up:** remove the stale files, split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
 6. **Tablet:** confirm the Surface model first, then on-screen keyboard, rotation, gestures, and touch sizes, tested on the device.
@@ -249,4 +247,5 @@ All are in git history.
 - **Desktop config:** hard-coded `DP-1` paths, old dispatchers, dead files, font names and rainbow border overrides are all gone.
 - **Assistant:** the listed command guard bypasses are closed, wrapped `sudo` always asks, secrets and browser profiles are blocked, and control characters are shown as text.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
+- **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

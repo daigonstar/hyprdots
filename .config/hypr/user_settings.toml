@@ -1,6 +1,6 @@
 # Shared defaults for the PC assistant, health monitor and popup calendar.
 #
-# The easy way to change anything here: click the cog in the waybar drawer, or run
+# The easy way to change anything here: click the cog in the quick tray, or run
 #   ~/.config/hypr/scripts/settings.sh
 # It shows a menu with a model picker, explains every option, and saves YOUR choices to
 #   ~/.config/hypr/user_settings.local.toml

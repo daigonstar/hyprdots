@@ -1,7 +1,6 @@
-# Packages installed by hyprinstall.sh (official repos or AUR), in install order.
-# Everything here is used by the current setup; "#" starts a comment.
-# GPU drivers are installed first from install/gpu-<vendor>.txt
-# (chosen by the installer), so they are not listed here.
+# What the desktop itself needs, installed by hyprinstall.sh (official repos or AUR) and kept up by update.sh. "#" starts a comment.
+# Optional apps are not here: they are in install/apps/, and you choose them (install/apps.sh).
+# GPU drivers are installed first from install/gpu-<vendor>.txt (chosen by the installer).
 
 # --- Core desktop ---
 hyprland
@@ -72,8 +71,6 @@ flatpak
 bc
 wget
 vim
-github-cli
-sif-git
 
 # --- Theme, icons, fonts ---
 gnome-themes-extra
@@ -83,19 +80,6 @@ adw-gtk-theme
 ttf-cascadia-code-nerd
 ttf-cascadia-mono-nerd
 ttf-font-awesome-5
-cava
-
-# --- Apps (autostarted or bound to keys) ---
-zen-browser-bin
-discord
-vesktop
-zed
-solaar
-openrgb
-coolercontrol
-
-# --- Gaming ---
-steam
 
 # --- Popup calendar and the optional PC assistant (ollama and python-ollama are installed by
 #     .config/hypr/assistant/setup.sh only if you choose the assistant) ---
@@ -128,9 +112,5 @@ python-prompt_toolkit
 python-recurring-ical-events
 poppler  # pdftotext: lets the assistant read PDFs
 
-# --- WinBoat (Windows apps in a container) ---
-docker
-freerdp
-winboat
 lm_sensors
 bluetui

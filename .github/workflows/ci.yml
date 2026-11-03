@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Updates keep your settings, and the install choices work
+        run: python3 -m unittest discover -s install/tests -v
       - name: Syntax check, then shellcheck (warnings and errors)
         run: |
           # Every tracked script that starts with a shell shebang
@@ -77,6 +79,9 @@ jobs:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: ./hyprinstall.sh --dry-run
         run: HYPR_ASSISTANT=none ./hyprinstall.sh --dry-run </dev/null
+      - run: pacman -S --noconfirm --needed python
+      - name: The full-screen installer, driven through a real terminal
+        run: python install/tests/test_tui.py
 
   packages:
     name: Install lists still exist

@@ -7,12 +7,13 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 read_list() { grep -hvE '^\s*(#|$)' "$@" | sed 's/[[:space:]].*//' | sort -u; }
+read_pacman() { read_list "$@" | grep -v '^flatpak:'; }
 
 missing=()
 aur_candidates=()
 while read -r pkg; do
   pacman -Si "$pkg" >/dev/null 2>&1 || aur_candidates+=("$pkg")
-done < <(read_list required.txt gpu-*.txt)
+done < <(read_pacman required.txt gpu-*.txt apps/*.txt; printf '%s\n' firefox zen-browser-bin chromium brave-bin)
 
 if ((${#aur_candidates[@]})); then
   query=""
@@ -28,7 +29,7 @@ fi
 while read -r app; do
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://flathub.org/api/v2/appstream/$app")"
   [[ "$code" == 200 ]] || missing+=("flatpak: $app (HTTP $code)")
-done < <(read_list flatpak.txt)
+done < <(read_list apps/*.txt | sed -n 's/^flatpak://p')
 
 if ((${#missing[@]})); then
   printf 'Missing:\n'; printf '  %s\n' "${missing[@]}"

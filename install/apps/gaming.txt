@@ -1,0 +1,7 @@
+# title: Gaming
+# about: Steam, Lutris, Heroic, the Ryujinx emulator and PokeMMO
+steam
+flatpak:net.lutris.Lutris
+flatpak:com.heroicgameslauncher.hgl
+flatpak:io.github.ryubing.Ryujinx
+flatpak:com.pokemmo.PokeMMO

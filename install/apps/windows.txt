@@ -1,0 +1,5 @@
+# title: Windows apps
+# about: WinBoat, which runs Windows in a container, with Docker and FreeRDP
+docker
+freerdp
+winboat

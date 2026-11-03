@@ -1,0 +1,5 @@
+# title: Development
+# about: The Zed editor (Super+Z), the GitHub command line, and sif
+zed
+github-cli
+sif-git

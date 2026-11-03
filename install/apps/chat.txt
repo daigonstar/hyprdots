@@ -1,0 +1,5 @@
+# title: Chat
+# about: Discord, Vesktop (Discord with extras) and Teams
+discord
+vesktop
+flatpak:com.github.IsmaelMartinez.teams_for_linux

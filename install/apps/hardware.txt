@@ -1,0 +1,5 @@
+# title: RGB, fans and Logitech devices
+# about: OpenRGB, CoolerControl and Solaar. Only useful with hardware they support
+openrgb
+coolercontrol
+solaar

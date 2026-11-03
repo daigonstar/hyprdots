@@ -1,0 +1,138 @@
+"""Runs the real update.sh against a throwaway remote and home: an update must not cost you a setting or a file."""
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout
+
+
+class Update(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.home, self.dev, self.pc = root / "home", root / "dev", root / "pc"
+        self.home.mkdir()
+        bare = root / "remote.git"
+        git(root, "init", "-q", "--bare", "-b", "main", str(bare))
+        self.env = {**os.environ, "HOME": str(self.home), "SKIP_PACKAGES": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "UPDATE_BRANCH": "main", "XDG_STATE_HOME": str(self.home / ".local/state")}
+        self.env.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
+        self.env.pop("XDG_CONFIG_HOME", None)
+        git(root, "clone", "-q", str(bare), str(self.dev))
+        for name in ("hypr", "waybar", "swaync", "rofi", "wallust", "ghostty", "fastfetch"):
+            (self.dev / ".config" / name).mkdir(parents=True)
+        (self.dev / ".config/starship.toml").write_text("default\n")
+        (self.dev / ".config/hypr/user_settings.toml").write_text("a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\n")
+        (self.dev / ".config/hypr/keybinds.lua").write_text("shipped\n")
+        (self.dev / ".config/waybar/config").write_text("shipped\n")
+        (self.dev / ".gitignore").write_text("/.config/hypr/user_overrides.lua\n/.config/hypr/user_settings.local.toml\n/.config/waybar/layout.json\n")
+        shutil.copy(REPO / "update.sh", self.dev / "update.sh")
+        self.publish("first")
+        git(root, "clone", "-q", str(bare), str(self.pc))
+        (self.home / ".config").mkdir()
+        os.symlink(self.pc / ".config/hypr", self.home / ".config/hypr")
+
+    def publish(self, message):
+        git(self.dev, "add", "-A")
+        subprocess.run(["git", "commit", "-qm", message], cwd=self.dev, env=self.env, check=True)
+        git(self.dev, "push", "-q", "origin", "main")
+
+    def update(self, *extra, **env):
+        return subprocess.run(["bash", str(self.pc / "update.sh"), *extra], cwd=self.pc, env={**self.env, **env}, capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL, timeout=120)
+
+    def read(self, name):
+        return (self.pc / name).read_text()
+
+    def test_settings_and_your_own_files_survive(self):
+        files = {".config/hypr/user_overrides.lua": "mine", ".config/hypr/user_settings.local.toml": "[a]\nb = 1\n", ".config/waybar/layout.json": "{}",
+                 ".config/hypr/user_settings.local.toml.bak": "old", ".config/hypr/my-script.sh": "mine", ".config/hypr/notes/idea.txt": "mine"}
+        for name, text in files.items():
+            (self.pc / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.pc / name).write_text(text)
+        (self.dev / ".config/hypr/keybinds.lua").write_text("new\n")
+        self.publish("second")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "new\n")
+        for name, text in files.items():
+            self.assertEqual(self.read(name), text, name)
+
+    def test_a_hand_edit_is_put_back_on_top_of_the_update(self):
+        (self.pc / ".config/hypr/user_settings.toml").write_text("a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 99\n")
+        (self.dev / ".config/hypr/user_settings.toml").write_text("a = 111\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\n")
+        self.publish("second")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read(".config/hypr/user_settings.toml"), "a = 111\nb = 2\nc = 3\nd = 4\ne = 5\nf = 99\n")
+
+    def test_a_clashing_edit_gives_way_and_is_saved(self):
+        (self.pc / ".config/hypr/keybinds.lua").write_text("mine\n")
+        (self.dev / ".config/hypr/keybinds.lua").write_text("new\n")
+        self.publish("second")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "new\n")
+        self.assertIn("clash", result.stderr)
+        saved = list((self.home / ".local/state/hyprdots/update-backups").glob("*/.config/hypr/keybinds.lua"))
+        self.assertEqual([p.read_text() for p in saved], ["mine\n"])
+
+    def test_local_commits_stop_the_update_and_change_nothing(self):
+        (self.pc / ".config/hypr/keybinds.lua").write_text("committed here\n")
+        git(self.pc, "add", "-A")
+        subprocess.run(["git", "commit", "-qm", "local"], cwd=self.pc, env=self.env, check=True)
+        (self.pc / ".config/waybar/config").write_text("edited\n")
+        (self.dev / ".config/hypr/user_settings.toml").write_text("new\n")
+        self.publish("second")
+        before = git(self.pc, "rev-parse", "HEAD")
+        result = self.update()
+        self.assertEqual(result.returncode, 3)
+        self.assertEqual(git(self.pc, "rev-parse", "HEAD"), before)
+        self.assertEqual(self.read(".config/waybar/config"), "edited\n")
+        self.assertEqual(self.update(UPDATE_DISCARD_COMMITS="1").returncode, 0)
+        self.assertEqual(self.read(".config/hypr/user_settings.toml"), "new\n")
+
+    def test_a_failed_fetch_changes_nothing(self):
+        (self.pc / ".config/hypr/keybinds.lua").write_text("mine\n")
+        git(self.pc, "remote", "set-url", "origin", "/nonexistent")
+        result = self.update()
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "mine\n")
+
+    def test_moves_to_the_chosen_branch_rather_than_overwriting_the_current_one(self):
+        git(self.pc, "switch", "-qc", "other", "origin/main")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(git(self.pc, "branch", "--show-current").strip(), "main")
+        self.assertIn("other", git(self.pc, "branch", "--list", "other"))
+
+    def test_your_own_configs_are_not_replaced(self):
+        (self.home / ".config/starship.toml").write_text("my prompt\n")
+        (self.home / ".config/ghostty").mkdir()
+        (self.home / ".config/ghostty/config").write_text("my terminal\n")
+        result = self.update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.home / ".config/starship.toml").read_text(), "my prompt\n")
+        self.assertEqual((self.home / ".config/ghostty/config").read_text(), "my terminal\n")
+        self.assertEqual(list((self.home / ".config").glob("*.bak.*")), [])
+
+    def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
+        (self.pc / ".config/hypr/new.lua").write_text("mine\n")
+        (self.dev / ".config/hypr/new.lua").write_text("shipped\n")
+        self.publish("second")
+        self.assertEqual(self.update().returncode, 0)
+        self.assertEqual(self.read(".config/hypr/new.lua"), "shipped\n")
+        saved = list((self.home / ".local/state/hyprdots/update-backups").glob("*/.config/hypr/new.lua"))
+        self.assertEqual([p.read_text() for p in saved], ["mine\n"])
+
+
+if __name__ == "__main__":
+    unittest.main()
