@@ -3,11 +3,16 @@
 # GPU drivers are installed first from install/gpu-<vendor>.txt (chosen by the installer).
 
 # --- Core desktop ---
+# First, before anything needs JACK: ffmpeg and mpv would otherwise pull in jack2, which it conflicts with, and pacman
+# will not swap them without asking.
+pipewire-jack
+
 hyprland
 hypridle
 hyprlock
 gtklock   # the lock screen where hyprlock cannot run on the graphics
 hyprpolkitagent
+accountsservice  # the User page in Settings changes your name and picture through it
 hyprshot-git
 xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
@@ -39,8 +44,8 @@ plymouth
 pipewire
 pipewire-alsa
 pipewire-pulse
+rtkit  # lets audio run at high priority, so it does not crackle under load
 libpulse
-pipewire-jack
 wireplumber
 pavucontrol
 playerctl

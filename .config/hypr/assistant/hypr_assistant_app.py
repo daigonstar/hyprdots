@@ -67,7 +67,7 @@ def theme():
         colours = {**FALLBACK, **design.resolved(o)}
         return colours, design.font_list({**design.DEFAULTS, **o}), design.palette()
     except Exception:
-        return dict(FALLBACK), '"CaskaydiaCove Nerd Font", sans-serif', {}
+        return dict(FALLBACK), '"CaskaydiaCove Nerd Font Propo", "CaskaydiaCove Nerd Font", sans-serif', {}
 
 
 def rgb(hex_colour):

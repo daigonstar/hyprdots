@@ -16,8 +16,10 @@ Needs python-recurring-ical-events (pulls in python-icalendar).
 import calendar
 import datetime
 import hashlib
+import json
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -62,7 +64,7 @@ CSS = """
 @define-color tray_muted #9a9a9a;
 @define-color tray_attention #e06c75;
 %(theme)s
-window { background: transparent; }
+window, scrolledwindow, viewport { background: transparent; }
 #card {
     background: @tray_bg;
     border: 1px solid @tray_accent;
@@ -212,6 +214,16 @@ def load_events(force=False):
     return days, status
 
 
+def screen_height():
+    """The height of the screen you are on, in the units windows use (a scale of 2 halves it)."""
+    try:
+        screens = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=2).stdout)
+        m = next(m for m in screens if m["focused"])
+        return int((m["width"] if m["transform"] % 2 else m["height"]) / m["scale"])
+    except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError):
+        return 1080
+
+
 class CalendarPopup(Gtk.Window):
     def __init__(self):
         super().__init__(title="calendar")
@@ -224,6 +236,7 @@ class CalendarPopup(Gtk.Window):
         self.armed = None  # uid of the event whose delete button was clicked once
 
         GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "calendar")
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         touch_mode = os.path.exists(os.path.expanduser("~/.local/state/hyprdots/touch-mode"))  # the bar and its clock are at the bottom right
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM if touch_mode else GtkLayerShell.Edge.TOP, True)
@@ -236,7 +249,13 @@ class CalendarPopup(Gtk.Window):
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.card.set_name("card")
-        self.add(self.card)
+        # On a screen too short for it (a high scale leaves little height), the card scrolls instead of running off the bottom
+        self.scroller = Gtk.ScrolledWindow()
+        self.scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.scroller.set_propagate_natural_width(True)
+        self.height_limit = max(320, screen_height() - CFG["margin_top"] - 70)
+        self.scroller.add(self.card)
+        self.add(self.scroller)
 
         self.time_label = Gtk.Label(xalign=0)
         self.time_label.set_name("time")
@@ -271,9 +290,6 @@ class CalendarPopup(Gtk.Window):
         self.card.pack_start(self.events_box, False, False, 0)
 
         self.connect("key-press-event", self.on_key)
-        # Not in touch mode: with no pointer it loses the focus at once, and would close before it was seen. Tap the clock instead
-        if not os.path.exists(os.path.expanduser("~/.local/state/hyprdots/touch-mode")):
-            self.connect("focus-out-event", lambda *_: self.close_popup())
         self.connect("button-press-event", lambda *_: False)
 
         self.render()
@@ -393,6 +409,7 @@ class CalendarPopup(Gtk.Window):
         add.set_halign(Gtk.Align.START)
         self.events_box.pack_start(add, False, False, 2)
         self.events_box.show_all()
+        self.fit_to_screen()
 
     def button(self, text, fn, *classes):
         b = Gtk.Button(label=text)
@@ -444,6 +461,7 @@ class CalendarPopup(Gtk.Window):
             self.events_box.pack_start(w, False, False, 0)
         self.form = {"title": title, "all_day": all_day, "start": start, "end": end, "repeat": "", "error": error}
         self.events_box.show_all()
+        self.fit_to_screen()
         error.hide()
         title.grab_focus()
 
@@ -515,6 +533,14 @@ class CalendarPopup(Gtk.Window):
             self.refresh_events(force=True)
         return True
 
+    def fit_to_screen(self):
+        """Runs when the card changes size: a scroller only takes the height it is told to."""
+        _smallest, natural = self.card.get_preferred_height()
+        self.scroller.set_min_content_height(-1)
+        self.scroller.set_max_content_height(self.height_limit)
+        self.scroller.set_min_content_height(min(natural, self.height_limit))
+        self.resize(1, 1)
+
     def close_popup(self):
         try:
             os.remove(LOCK)
@@ -573,6 +599,7 @@ def main():
     win = CalendarPopup()
     win.connect("destroy", lambda *_: Gtk.main_quit())
     win.show_all()
+    win.fit_to_screen()
     try:
         Gtk.main()
     finally:

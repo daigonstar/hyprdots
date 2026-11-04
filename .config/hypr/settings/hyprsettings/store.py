@@ -3,13 +3,14 @@ the schema default. Edits are staged in memory and written together on save."""
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import keyspec, overrides, tomledit
+from . import account, keyspec, overrides, tomledit
 from .schema import APP_CANDIDATES, BY_ID, GTK_NOW, INSTALLED_CHOICES, SETTINGS, Setting
 
 RESET = object()  # staged marker: remove the key from the local file
@@ -20,6 +21,13 @@ KB_PREFIX = "keybinds."  # staged id for one keybind: keybinds.<id>
 def default_hypr_dir() -> Path:
     env = os.environ.get("HYPR_SETTINGS_DIR")
     return Path(env) if env else Path(__file__).resolve().parents[2]
+
+
+def _can_start(app: dict) -> bool:
+    program = app["cmd"].split()[0]
+    if program.startswith("~/") and "openrgb" in program:
+        program = "openrgb"
+    return program.startswith("~/") or shutil.which(program) is not None
 
 
 class Store:
@@ -140,6 +148,8 @@ class Store:
                 value = cast(str(raw).strip()) if isinstance(raw, str) else cast(raw)
             except ValueError:
                 raise ValueError(f"enter a number{' (whole)' if cast is int else ''}") from None
+            if not math.isfinite(value):  # float() takes "nan" and "inf", which would break the generated Lua
+                raise ValueError("enter a number")
             if k != "choice":
                 if s.lo is not None and value < s.lo or s.hi is not None and value > s.hi:
                     raise ValueError(f"must be between {s.lo:g} and {s.hi:g}{s.unit and ' ' + s.unit}")
@@ -164,7 +174,8 @@ class Store:
 
     # ---- startup apps (a list in the file, a checkbox per app in the UI) ---------------------------------
     def startup_apps(self) -> list[dict]:
-        return overrides.startup_apps(self.autostart_path)
+        """The ones you can start: an app you did not install has nothing to switch on."""
+        return [a for a in overrides.startup_apps(self.autostart_path) if _can_start(a)]
 
     def disabled_startup(self) -> list[str]:
         if STARTUP_ID in self.staged:
@@ -283,7 +294,10 @@ class Store:
 
     def lock_options(self) -> dict:
         """The lock screen settings as they stand, including unsaved changes (the Preview button uses this)."""
-        return {s.key: self.get(s)[0] for s in SETTINGS if s.section == "lockscreen"}
+        options = {s.key: self.get(s)[0] for s in SETTINGS if s.section == "lockscreen"}
+        if account.picture_path().exists():
+            options["picture"] = str(account.picture_path())
+        return options
 
     def write_overrides(self) -> None:
         config, apps = [], {}

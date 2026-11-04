@@ -2,6 +2,9 @@
 *.bak
 *.bak.*
 paru/
+# Copied from config.jsonc.default when missing, so your own look is yours to keep
+/.config/fastfetch/config.jsonc
+/.config/fastfetch/goku.png
 /.config/hypr/monitors.conf
 /.config/hypr/monitors.lua
 .creds

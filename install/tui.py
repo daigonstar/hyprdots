@@ -69,6 +69,10 @@ def detect_layout(localectl=None):
     return code if code in known else "us"
 
 
+def root_is_btrfs():
+    return _run("findmnt", "-no", "FSTYPE", "/").strip() == "btrfs"
+
+
 def detect_monitors():
     names = set()
     for status in glob.glob("/sys/class/drm/card*-*/status"):
@@ -144,7 +148,7 @@ class Page:
 class Wizard:
     """Moves between pages. press() takes a key name and returns "install", "quit" or None."""
 
-    def __init__(self, gpus, monitors, layout, memory_gb, browsers, groups, laptop=False, dry_run=False):
+    def __init__(self, gpus, monitors, layout, memory_gb, browsers, groups, laptop=False, dry_run=False, btrfs=False):
         self.dry_run, self.at, self.confirm_quit = dry_run, 0, False
         rec = recommended_tier(memory_gb)
         tiers = [(i, n + ("  (suits this PC)" if i == rec else ""), a) for i, n, a in TIERS]
@@ -171,6 +175,9 @@ class Wizard:
         if len(monitors) > 1:
             self.pages.append(Page("login", "Login screen", ["Which screen should show the login screen?"], "radio",
                                    [(m, m, "") for m in monitors], {monitors[0]}))
+        if btrfs:
+            self.pages.append(Page("snapshots", "Undo for updates", ["Keeps a copy of the system from before each update, so a bad one can be undone. Copies share space, and only the newest 10 are kept."],
+                                   "radio", [("yes", "Yes, keep them", ""), ("no", "No thanks", "")], {"yes"}))
         self.pages += [
             Page("health", "PC health monitor", ["Runs in the background and sends a notification about failed services, full disks and heat."],
                  "radio", [("yes", "Yes, keep an eye on it", ""), ("no", "No thanks", "")], {"yes"}),
@@ -228,6 +235,8 @@ class Wizard:
                "HYPR_ASSISTANT": self.answer("assistant"), "HYPR_HEALTH": self.answer("health")}
         if self.answer("login"):
             env["HYPR_LOGIN_MONITOR"] = self.answer("login")
+        if self.answer("snapshots"):
+            env["HYPR_SNAPSHOTS"] = self.answer("snapshots")
         return env
 
     def summary(self):
@@ -240,6 +249,8 @@ class Wizard:
                 ("Hearthling", names["assistant"][self.answer("assistant")].split("  ")[0])]
         if self.answer("login"):
             rows.append(("Login screen", self.answer("login")))
+        if self.answer("snapshots"):
+            rows.append(("Undo for updates", "Yes" if self.answer("snapshots") == "yes" else "No"))
         rows.append(("Health monitor", "Yes" if self.answer("health") == "yes" else "No"))
         return rows
 
@@ -687,7 +698,10 @@ def follow_with(screen, wiz, args, prog, broker):
             if ended is not None and not data:
                 code = ended
                 prog.feed(buffer.decode("utf-8", "replace"))
-            box = box or broker.request()
+            if not box:
+                box = broker.request()
+                if box:  # sudo may have just written straight to the terminal (its first-time lecture), so draw it all again
+                    screen.s.clearok(True)
         if box and code is not None:  # the install ended while asking
             broker.reply(box, cancelled=True)
             box = None
@@ -764,7 +778,7 @@ def interface(stdscr, wiz, args):
 def main(argv):
     dry = "--dry-run" in argv
     browsers, groups = list_apps()
-    wiz = Wizard(detect_gpus(), detect_monitors(), detect_layout(), video_memory_gb(), browsers, groups, is_laptop(), dry)
+    wiz = Wizard(detect_gpus(), detect_monitors(), detect_layout(), video_memory_gb(), browsers, groups, is_laptop(), dry, root_is_btrfs())
     locale.setlocale(locale.LC_ALL, "")
     os.environ.setdefault("ESCDELAY", "25")
     code = curses.wrapper(interface, wiz, [a for a in argv if a in ("--dry-run", "--verbose")])

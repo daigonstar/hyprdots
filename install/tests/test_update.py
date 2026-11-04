@@ -1,5 +1,6 @@
 """Runs the real update.sh against a throwaway remote and home: an update must not cost you a setting or a file."""
 import os
+import pty
 import shutil
 import subprocess
 import tempfile
@@ -123,6 +124,94 @@ class Update(unittest.TestCase):
         self.assertEqual((self.home / ".config/starship.toml").read_text(), "my prompt\n")
         self.assertEqual((self.home / ".config/ghostty/config").read_text(), "my terminal\n")
         self.assertEqual(list((self.home / ".config").glob("*.bak.*")), [])
+
+    def test_moving_to_an_older_stable_is_allowed_and_your_own_commits_still_stop_it(self):
+        git(self.dev, "push", "-q", "origin", "main:stable")
+        (self.dev / ".config/hypr/keybinds.lua").write_text("newest\n")
+        self.publish("newest")
+        self.assertEqual(self.update().returncode, 0)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "newest\n")
+        done = self.update(UPDATE_BRANCH="stable")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "shipped\n")
+        self.assertIn("Nothing new", done.stdout)
+
+    def test_lists_what_changed(self):
+        (self.dev / ".config/hypr/keybinds.lua").write_text("new\n")
+        self.publish("Popups close when you click away")
+        done = self.update()
+        self.assertIn("What's new (1):\n- Popups close when you click away", done.stdout)
+        saved = Path(self.env["XDG_STATE_HOME"]) / "hyprdots/last-update.txt"
+        self.assertEqual(saved.read_text(), "- Popups close when you click away\n")
+
+    def promote(self, checks, answer="y\n"):
+        fake = self.home / "bin"
+        fake.mkdir(exist_ok=True)
+        (fake / "gh").write_text(f"#!/bin/sh\nprintf '%s\\n' '{checks}'\n")
+        (fake / "gh").chmod(0o755)
+        shutil.copy(REPO / "install/promote.sh", self.dev / "promote.sh")
+        return subprocess.run(["bash", "promote.sh"], cwd=self.dev, env={**self.env, "PATH": f"{fake}:{os.environ['PATH']}"},
+                              capture_output=True, text=True, input=answer, timeout=30)
+
+    def stable(self):
+        return subprocess.run(["git", "rev-parse", "--verify", "-q", "origin/stable"], cwd=self.dev, capture_output=True, text=True).stdout.strip()
+
+    def test_promote_only_moves_stable_on_a_passed_version(self):
+        for checks in ("completed failure", "in_progress ", "none"):
+            self.assertNotEqual(self.promote(checks).returncode, 0, checks)
+            self.assertEqual(self.stable(), "")
+        self.assertNotEqual(self.promote("completed success", "n\n").returncode, 0)
+        self.assertEqual(self.stable(), "")
+        done = self.promote("completed success")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotEqual(self.stable(), "")
+
+    def test_promote_still_asks_after_a_long_list(self):
+        for n in range(45):
+            subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", f"change {n}"], cwd=self.dev, env=self.env, check=True)
+        git(self.dev, "push", "-q", "origin", "main")
+        done = self.promote("completed success")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("...and 6 more", done.stdout)
+        self.assertNotEqual(self.stable(), "")
+
+    def test_no_menu_in_a_terminal_until_there_is_a_stable_branch(self):
+        main, other = pty.openpty()
+        self.addCleanup(os.close, main)
+        env = {k: v for k, v in self.env.items() if k != "UPDATE_BRANCH"}
+        done = subprocess.run(["bash", str(self.pc / "update.sh")], cwd=self.pc, env=env, stdin=other, capture_output=True, text=True, timeout=60)
+        os.close(other)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("Which version", done.stdout)
+        self.assertFalse((self.pc / ".update-branch").exists())
+
+    def test_gpu_check_only_names_cards_without_their_drivers(self):
+        fake = self.home / "bin"
+        fake.mkdir(exist_ok=True)
+        (fake / "lspci").write_text("#!/bin/sh\necho '03:00.0 VGA compatible controller [0300]: NVIDIA Corporation [10de:2684]'\necho '13:00.0 VGA compatible controller [0300]: Advanced Micro Devices [1002:164e]'\n")
+        script = REPO / ".config/hypr/scripts/gpu-check.sh"
+
+        def run(installed):
+            (fake / "pacman").write_text(f"#!/bin/sh\ncase \" {installed} \" in *\" $2 \"*) exit 0;; esac\necho \"$2\"\nexit 127\n")
+            for tool in ("lspci", "pacman"):
+                (fake / tool).chmod(0o755)
+            return subprocess.run(["bash", str(script)], env={**self.env, "PATH": f"{fake}:{os.environ['PATH']}"}, capture_output=True, text=True).stdout.split()
+
+        self.assertEqual(run("nvidia-utils vulkan-radeon"), [])
+        self.assertEqual(run("vulkan-radeon"), ["nvidia"])
+        self.assertEqual(run(""), ["nvidia", "amd"])
+
+    def test_files_that_stop_being_shipped_stay_with_you(self):
+        (self.dev / ".config/fastfetch/config.jsonc").write_text("my look\n")
+        self.publish("ship a look")
+        self.assertEqual(self.update().returncode, 0)
+        self.assertEqual(self.read(".config/fastfetch/config.jsonc"), "my look\n")
+        git(self.dev, "rm", "-q", "--cached", ".config/fastfetch/config.jsonc")
+        (self.dev / ".gitignore").write_text((self.dev / ".gitignore").read_text() + "/.config/fastfetch/config.jsonc\n")
+        self.publish("stop shipping it")
+        done = self.update()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.read(".config/fastfetch/config.jsonc"), "my look\n")
 
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")

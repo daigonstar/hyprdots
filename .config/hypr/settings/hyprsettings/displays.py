@@ -230,6 +230,8 @@ def write(path: Path | str, monitors: list[dict]) -> None:
     """Saves the layout. Screens that are not plugged in right now keep the line they already had, so docking
     somewhere else does not forget them. A laptop's own screen is never saved as off: with nothing else plugged
     in at the next login it would leave no screen at all, so it stays off only for this session."""
+    if not monitors:  # Hyprland gave no answer: an empty list says nothing about your screens, so it must not replace them
+        return
     path = Path(path)
     old = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
     if old.strip() and BANNER.split(".")[0] not in old[:200]:

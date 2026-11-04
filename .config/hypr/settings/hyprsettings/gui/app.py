@@ -13,19 +13,22 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from .. import theme  # noqa: E402
-from ..schema import BY_ID, CLOUD_EFFECT, PAGES  # noqa: E402
+from .. import overrides, theme  # noqa: E402
+from ..schema import BY_ID, CLOUD_EFFECT, PAGES as SHARED_PAGES  # noqa: E402
 from ..store import Store  # noqa: E402
 from . import pages, ui  # noqa: E402
 
 APP_ID = "com.hyprdots.settings"
 
 
+PAGES = ["User", *SHARED_PAGES]  # the terminal version has no User page: passwd does that job there
+
+
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import barlayout, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
+    from . import account, barlayout, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
-    out.update({"Keybinds": keybinds.build, "File types": filetypes.build,
+    out.update({"User": account.build, "Keybinds": keybinds.build, "File types": filetypes.build,
                 "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build,
                 "Network": network.build, "Window rules": windowrules.build})
     return out
@@ -193,6 +196,10 @@ class Window(Adw.ApplicationWindow):
             then()
 
     def reload_hyprland(self) -> None:
+        problem = overrides.config_problem()
+        if problem:
+            ui.message(self, "Not reloaded", "Your running desktop is unchanged. This needs fixing first:\n\n" + problem)
+            return
         result = subprocess.run(["hyprctl", "reload"], capture_output=True, text=True)
         errors = subprocess.run(["hyprctl", "configerrors"], capture_output=True, text=True).stdout.strip()
         if errors and errors != "[]":

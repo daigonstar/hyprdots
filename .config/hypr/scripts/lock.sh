@@ -8,4 +8,4 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.1
 done
 cmd=$(sed -n 's/^[[:space:]]*lock_cmd[[:space:]]*=[[:space:]]*//p' "$HOME/.config/hypr/hypridle.local.conf" 2>/dev/null | head -n1)
-exec bash -c "${cmd:-$HOME/.config/hypr/scripts/lock-screen.sh}"
+exec bash -c "${cmd:-$HOME/.config/hypr/scripts/lock-screen.sh all}"

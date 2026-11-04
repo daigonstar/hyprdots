@@ -141,8 +141,7 @@ class Editing(TuiBase):
         self.goto("Hyprland")
         self.select("Keyboard layout")
         self.app.handle_key("enter")
-        for _ in range(len(self.app.popup.items) - 1):
-            self.app.handle_key("down")
+        self.app.popup.index = len(self.app.popup.items) - 1
         self.app.handle_key("enter")                    # "Something else..."
         self.assertEqual(self.app.popup.mode, "input")
         self.app.handle_key("c-u")
@@ -473,7 +472,11 @@ class OtherPages(TuiBase):
         self.app.handle_key("y", "y")
         self.assertEqual(self.store.calendar_sources(), [])
 
+    def test_startup_list_leaves_out_apps_you_did_not_install(self):
+        self.assertEqual(self.store.startup_apps(), [])
+
     def test_startup_apps_toggle(self):
+        tui.shutil.which.return_value = "/usr/bin/vesktop"
         self.goto("Hyprdots")
         self.select("Vesktop")
         self.assertIn("on", self.app.current_row().value)

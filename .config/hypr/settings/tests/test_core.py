@@ -1,14 +1,17 @@
+import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import threading
 import unittest
+import unittest.mock
 import http.server
 from pathlib import Path
 
 import _paths
-from hyprsettings import models, overrides, schema, tomledit
+from hyprsettings import account, displays, lockscreen, models, overrides, schema, tomledit
 from hyprsettings.store import RESET, Store
 
 LUA = shutil.which("lua5.4") or shutil.which("lua")
@@ -100,7 +103,7 @@ class Schema(unittest.TestCase):
         for key, value in (("gaps_in", 5), ("gaps_out", 10), ("border_size", 2), ("rounding", 18)):
             self.assertIn(f"{key} = {value}", window, key)
         self.assertIn('layout = "dwindle"', window)
-        self.assertIn('kb_layout = "gb"', (_paths.HYPR / "input.lua").read_text())
+        self.assertIn('kb_layout = "us"', (_paths.HYPR / "input.lua").read_text())
 
 
 class StoreTests(unittest.TestCase):
@@ -185,7 +188,8 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(store.get(self.s("hyprland.gaps_in"))[1], "default")
 
     def test_startup_apps_and_calendar(self):
-        self.assertIn("vesktop", [a["id"] for a in self.store.startup_apps()])
+        with unittest.mock.patch("shutil.which", return_value="/usr/bin/vesktop"):
+            self.assertIn("vesktop", [a["id"] for a in self.store.startup_apps()])
         self.store.set_startup("vesktop", False)
         self.store.set_startup("solaar", False)
         self.store.set_calendar_sources(["Home|https://example.com/x.ics"])
@@ -210,6 +214,188 @@ class StoreTests(unittest.TestCase):
         self.assertIn('terminal = "kitty"', lua)
         self.assertNotIn("qwen", lua)
         self.assertNotIn("rounding", lua)
+
+
+SAFE_RIG = r"""
+-- Stands in for Hyprland: its require records a failure and returns an empty table, without the path a real load returns
+local dir = arg[1]
+package.path = dir .. "/?.lua"
+hooks, binds = {}, 0
+hl = {
+    on = function(_, fn) hooks[#hooks + 1] = fn end,
+    bind = function() binds = binds + 1 end,
+    unbind = function() binds = 0 end,
+    dsp = {exec_cmd = function() end, exit = function() end},
+    notification = {create = function(o) print("NOTICE " .. o.text) end},
+}
+local lua_require = require
+require = function(name)
+    local ok, value, where = pcall(lua_require, name)
+    if not ok and tostring(value):find("not found") then error(value, 2) end
+    if not ok then return {} end
+    return value, where
+end
+local safe = lua_require("safe_config")
+safe.load("keybinds")
+local has, optional = pcall(require, "not_there")
+print("optional", has)
+print("value", require("settings").value)
+safe.finish()
+for _, fn in ipairs(hooks) do fn() end
+print("binds", binds)
+"""
+
+
+@unittest.skipUnless(LUA, "needs lua")
+class SafeConfig(unittest.TestCase):
+    """safe_config.lua falls back to the last copy that worked. Tested for real in a nested Hyprland when it was written."""
+    GOOD = {"keybinds": 'hl.bind("a")\nhl.bind("b")\n', "settings": "return {value = 'good'}\n"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        shutil.copy(Path(_paths.__file__).parents[2] / "safe_config.lua", self.dir)
+        (self.dir / "rig.lua").write_text(SAFE_RIG)
+        self.write(self.GOOD)
+
+    def write(self, files):
+        for name, text in files.items():
+            (self.dir / f"{name}.lua").write_text(text)
+
+    def run_rig(self):
+        env = {"HOME": str(self.dir), "XDG_STATE_HOME": str(self.dir / "state"), "PATH": "/usr/bin:/bin"}
+        done = subprocess.run([LUA, str(self.dir / "rig.lua"), str(self.dir)], capture_output=True, text=True, env=env, timeout=10)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def saved(self, name):
+        return (self.dir / "state/hyprdots/last_good" / f"{name}.lua").read_text()
+
+    def test_clean_load_is_saved_and_a_missing_optional_file_is_no_problem(self):
+        out = self.run_rig()
+        self.assertIn("binds\t2", out)
+        self.assertNotIn("NOTICE", out)
+        self.assertEqual(self.saved("keybinds"), self.GOOD["keybinds"])
+
+    def test_a_broken_file_uses_its_copy_without_overwriting_it(self):
+        self.run_rig()
+        self.write({"settings": "oops("})
+        out = self.run_rig()
+        self.assertIn("value\tgood", out)
+        self.assertIn("NOTICE Safe mode: settings", out)
+        self.assertEqual(self.saved("settings"), self.GOOD["settings"])
+
+    def test_keybinds_failing_part_way_are_not_doubled(self):
+        self.run_rig()
+        self.write({"keybinds": 'hl.bind("a")\nerror("boom")\n'})
+        self.assertIn("binds\t2", self.run_rig())
+
+    def test_keybinds_with_no_copy_still_give_a_way_out(self):
+        self.write({"keybinds": "oops("})
+        self.assertIn("binds\t2", self.run_rig())  # the two emergency keys
+
+
+FAKE_PASSWD = """#!/bin/sh
+echo "Changing password for you."
+printf "Current password: "; read -r current
+[ "$current" = old ] || { echo "passwd: Authentication token manipulation error"; exit 10; }
+printf "New password: "; read -r new
+[ "$new" = short ] && { echo "BAD PASSWORD: The password is shorter than 8 characters"; exit 10; }
+printf "Retype new password: "; read -r again
+[ "$new" = "$again" ] || exit 10
+echo "$new" > "$PASSWD_RESULT"
+echo "passwd: password updated successfully"
+"""
+
+
+class Account(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        fake = self.dir / "passwd"
+        fake.write_text(FAKE_PASSWD)
+        fake.chmod(0o755)
+        env = {"PATH": f"{self.dir}:{os.environ['PATH']}", "PASSWD_RESULT": str(self.dir / "changed"), "HOME": str(self.dir)}
+        patcher = unittest.mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_password_changes_with_the_right_current_one(self):
+        self.assertEqual(account.change_password("old", "new secret")[0], True)
+        self.assertEqual((self.dir / "changed").read_text(), "new secret\n")
+
+    def test_a_wrong_current_password_says_so_and_never_repeats_it(self):
+        worked, message = account.change_password("wrong secret", "new secret")
+        self.assertFalse(worked)
+        self.assertIn("current password", message)
+        self.assertNotIn("secret", message)
+
+    def test_a_refused_new_password_gives_the_reason(self):
+        worked, message = account.change_password("old", "short")
+        self.assertFalse(worked)
+        self.assertIn("shorter than 8", message)
+
+    def test_a_stuck_passwd_does_not_hang_the_page(self):
+        (self.dir / "passwd").write_text("#!/bin/sh\nsleep 30\n")
+        self.assertFalse(account.change_password("old", "new", timeout=0.5)[0])
+
+    @unittest.skipUnless(importlib.util.find_spec("gi"), "needs PyGObject")
+    def test_picture_is_cropped_to_a_square(self):
+        import gi
+        gi.require_version("GdkPixbuf", "2.0")
+        from gi.repository import GdkPixbuf
+        wide = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 400, 100)
+        wide.savev(str(self.dir / "wide.png"), "png", [], [])
+        with unittest.mock.patch.object(account, "_accounts", return_value="") as told:
+            account.set_picture(self.dir / "wide.png")
+        saved = GdkPixbuf.Pixbuf.new_from_file(str(self.dir / ".face"))
+        self.assertEqual((saved.get_width(), saved.get_height()), (256, 256))
+        told.assert_called_once_with("SetIconFile", str(self.dir / ".face"))
+
+    @unittest.skipUnless(importlib.util.find_spec("gi"), "needs PyGObject")
+    def test_a_file_that_is_not_a_picture_is_refused_and_keeps_the_old_one(self):
+        (self.dir / "notes.txt").write_text("not a picture")
+        (self.dir / ".face").write_text("the old one")
+        with self.assertRaises(ValueError):
+            account.set_picture(self.dir / "notes.txt")
+        self.assertEqual((self.dir / ".face").read_text(), "the old one")
+
+    def test_a_name_cannot_break_the_account_file(self):
+        with self.assertRaises(ValueError):
+            account.set_real_name("Robb, the second")
+
+    def test_lock_screen_shows_the_picture_only_when_there_is_one(self):
+        o = dict(lockscreen.DEFAULTS, show_user=True)
+        self.assertNotIn("image {", lockscreen.render(o))
+        self.assertIn("path = /home/x/.face", lockscreen.render({**o, "picture": "/home/x/.face"}))
+
+
+class DataSafety(unittest.TestCase):
+    def test_nan_and_inf_are_not_numbers(self):
+        store = Store(_paths.scratch_hypr_dir())
+        self.addCleanup(shutil.rmtree, store.dir, True)
+        setting = next(s for s in schema.SETTINGS if s.kind == "float" and s.lo is None) if any(s.kind == "float" and s.lo is None for s in schema.SETTINGS) else next(s for s in schema.SETTINGS if s.kind == "float")
+        for text in ("nan", "inf", "-inf"):
+            with self.assertRaises(ValueError):
+                store.coerce(setting, text)
+
+    def test_no_answer_from_hyprland_leaves_the_saved_screens_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "monitors.lua"
+            path.write_text("your screens\n")
+            displays.write(path, [])
+            self.assertEqual(path.read_text(), "your screens\n")
+
+
+class ConfigProblem(unittest.TestCase):
+    def test_reports_the_error_and_stays_quiet_when_it_cannot_check(self):
+        fake = subprocess.CompletedProcess([], 1, "noise\n======== Config parsing result:\n\nkeybinds.lua:1: bad\n", "")
+        with unittest.mock.patch("subprocess.run", return_value=fake):
+            self.assertEqual(overrides.config_problem(), "keybinds.lua:1: bad")
+        with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(overrides.config_problem(), "")
 
 
 class Overrides(unittest.TestCase):

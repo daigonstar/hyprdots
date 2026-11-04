@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,16 @@ def render(config: list[tuple[tuple, Any]], apps: dict[str, str], startup_disabl
         out.append("function M.apply() end\n")
     out.append("return M\n")
     return "\n".join(out)
+
+
+def config_problem() -> str:
+    """What is wrong with the Hyprland config on disk, or "" if it is fine or cannot be checked. Run before a reload."""
+    config = Path.home() / ".config/hypr/hyprland.lua"
+    try:
+        result = subprocess.run(["Hyprland", "--verify-config", "-c", str(config)], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return "" if result.returncode == 0 else result.stdout.split("Config parsing result:")[-1].strip()[:600]
 
 
 def write(path: Path | str, text: str) -> None:

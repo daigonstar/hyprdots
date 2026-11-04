@@ -188,24 +188,40 @@ trap '[[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/nu
 
 init_logging
 
+# A blank Arch may not have Python yet, and the full-screen interface needs it
+if use_tui && [[ "$DRY_RUN" == "false" ]] && ! command -v python3 >/dev/null; then
+  echo "Installing Python, which the installer runs on. This may ask for your password."
+  sudo pacman -S --needed --noconfirm python || echo "Could not install Python, so using plain questions instead." >&2
+fi
+
 # Branch selection for repo operations (supports UPDATE_BRANCH env var or .update-branch file)
 BRANCH="${UPDATE_BRANCH:-}"
 if [[ -f "$BASE_DIR/.update-branch" ]]; then
   BRANCH="$(<"$BASE_DIR/.update-branch")"
 fi
-if [[ -z "$BRANCH" && "$DRY_RUN" == "false" && -t 0 ]] && ! use_tui; then
-  echo "Select branch to use for repo operations:"
-  echo "  1) main (recommended)"
-  echo "  2) dev (development)"
+HAS_STABLE=false
+git -C "$REPO_DIR" ls-remote --exit-code --heads origin stable >/dev/null 2>&1 && HAS_STABLE=true
+if [[ -z "$BRANCH" && "$HAS_STABLE" == "true" && "$DRY_RUN" == "false" && -t 0 ]] && ! use_tui; then
+  echo "Which version do you want to follow?"
+  echo "  1) stable: tested first (recommended)"
+  echo "  2) main: the newest, and may break"
   echo "  3) Enter branch name"
   read -rp "Choice [1-3] (default 1): " _choice
   case "$_choice" in
-    1) BRANCH="main" ;;
+    2) BRANCH="main" ;;
     3) read -rp "Enter branch name: " BRANCH ;;
-    *) BRANCH="main" ;;
+    *) BRANCH="" ;;
   esac
 fi
-BRANCH="${BRANCH:-main}"
+# New installs follow stable, once the repo has one. update.sh keeps following what is saved here.
+if [[ -z "$BRANCH" ]]; then
+  if [[ "$HAS_STABLE" == "true" ]]; then
+    BRANCH="stable"
+  else
+    BRANCH="main"
+  fi
+fi
+[[ "$HAS_STABLE" == "true" && "$DRY_RUN" == "false" && ! -f "$BASE_DIR/.update-branch" ]] && printf '%s\n' "$BRANCH" > "$BASE_DIR/.update-branch"
 
 # Update the repo first. A pull can change this very script, so when it does, start again from the new copy rather
 # than carry on with the old one against new files.
@@ -299,7 +315,9 @@ run_cmd "sudo pacman -S --needed --noconfirm git base-devel"
 local tmpdir
 tmpdir="$(mktemp -d)"
 run_cmd "git clone https://aur.archlinux.org/paru.git \"$tmpdir/paru\"" || die "Could not download paru. See $LOGFILE for details."
-run_cmd "cd \"$tmpdir/paru\" && makepkg -si --noconfirm" || die "Could not build paru. See $LOGFILE for details."
+# Not makepkg -i: it runs sudo -k, which asks for the password again even though sudo still remembers it
+run_cmd "cd \"$tmpdir/paru\" && makepkg -sf --noconfirm" || die "Could not build paru. See $LOGFILE for details."
+run_cmd "cd \"$tmpdir/paru\" && sudo pacman -U --noconfirm --needed paru-[0-9]*.pkg.tar.*" || die "Could not install paru. See $LOGFILE for details."
 rm -rf "$tmpdir"
 [[ "$DRY_RUN" == "true" ]] && return
 log "OK" "paru installed"
@@ -314,7 +332,9 @@ mark items "${#pkgs[@]}"
 for pkg in "${pkgs[@]:-}"; do
 mark item "$pkg"
 # -T also counts a package that provides it (vesktop-git for vesktop): installing the listed one would conflict
-if pacman -T "$pkg" &>/dev/null; then
+if [[ "$pkg" == pipewire-jack ]] && pacman -Qq jack2 &>/dev/null; then
+log "OK" "Keeping jack2, which is already here (pipewire-jack would have to replace it)"
+elif pacman -T "$pkg" &>/dev/null; then
 log "OK" "Package $pkg already installed"
 elif pacman -Si "$pkg" &>/dev/null; then
 log "INFO" "Installing official package: $pkg"
@@ -403,7 +423,7 @@ mark step apps
 
 mark step flatpak
 mark items "${#FLATPAK_PKGS[@]}"
-run_cmd "flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" ||
+run_cmd "sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" ||
   die "Failed to configure the Flathub remote. See $LOGFILE for details."
 
 for f in "${FLATPAK_PKGS[@]:-}"; do
@@ -412,7 +432,7 @@ mark item "$f"
 if flatpak list --app 2>/dev/null | grep -qw "$f"; then
 log "OK" "Flatpak $f already installed"
 else
-run_cmd "flatpak install -y --noninteractive --or-update flathub \"$f\"" ||
+run_cmd "sudo flatpak install --system -y --noninteractive --or-update flathub \"$f\"" ||
   die "Failed to install Flatpak: $f. See $LOGFILE for details."
 fi
 done
@@ -600,7 +620,7 @@ fi
 # Flatpak apps follow the settings Theme page: they may read its colours (~/.config/gtk-*), and GTK 3 ones get the
 # adw-gtk3 style as a Flatpak (GTK 4 apps need no theme)
 run_cmd "flatpak --user override --filesystem=xdg-config/gtk-3.0:ro --filesystem=xdg-config/gtk-4.0:ro"
-run_cmd "flatpak install -y --noninteractive --or-update flathub org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark" ||
+run_cmd "sudo flatpak install --system -y --noninteractive --or-update flathub org.gtk.Gtk3theme.adw-gtk3 org.gtk.Gtk3theme.adw-gtk3-dark" ||
   log "WARN" "Could not install the adw-gtk3 theme for Flatpak apps; GTK 3 Flatpak apps keep their own look"
 
 # Bashrc update
@@ -708,6 +728,12 @@ run_cmd "sudo mkdir -p /etc/sddm.conf.d" # Ensure directory exists
 run_cmd "sudo cp \"$REPO_DIR/SDDM/sddm.conf\" /etc/sddm.conf.d/sddm.conf"
 
 # Plymouth Configuration
+
+# Undo for updates, on a btrfs system (see install/snapshots.sh). Last, so the install itself is not what gets kept.
+if [[ "$(findmnt -no FSTYPE / 2>/dev/null)" == btrfs ]] && [[ "${HYPR_SNAPSHOTS:-ask}" != no ]] &&
+  { [[ "${HYPR_SNAPSHOTS:-ask}" == yes ]] || yesno_prompt "Keep a copy of the system before each update, so a bad one can be undone?" "y"; }; then
+  run_cmd "sudo bash \"$BASE_DIR/install/snapshots.sh\"" || log "WARN" "Could not turn on snapshots; run sudo $BASE_DIR/install/snapshots.sh to try again"
+fi
 
 # The theme, the plymouth hook and "quiet splash" on the kernel command line (see install/plymouth.sh)
 run_cmd "sudo bash \"$BASE_DIR/install/plymouth.sh\"" || log "WARN" "Boot splash setup failed; run sudo $BASE_DIR/install/plymouth.sh later"

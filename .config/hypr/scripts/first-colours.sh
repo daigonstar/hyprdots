@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Fills in the files that follow your wallpaper when they are missing (a new install, or a clean checkout).
 # They are git-ignored because wallust and the wallpaper picker rewrite them on every wallpaper change:
-#   - the colour files wallust writes: start from the .default copy next to each one
+#   - the colour files wallust writes, and fastfetch's look: start from the .default copy next to each one
 #   - ~/.config/rofi/.current_wallpaper (the lock screen and game mode use it): points at a shipped wallpaper
 # Never touches files that already exist. Run by hyprinstall.sh and update.sh.
 set -u
 cfg="$HOME/.config"
 
-for f in waybar/colors/colors.css rofi/colors.rasi swaync/wallust/colors-wallust.css hypr/wallust/colors.lua; do
+for f in waybar/colors/colors.css rofi/colors.rasi swaync/wallust/colors-wallust.css hypr/wallust/colors.lua fastfetch/config.jsonc; do
     if [[ ! -e "$cfg/$f" && -f "$cfg/$f.default" ]]; then
         cp "$cfg/$f.default" "$cfg/$f"
         echo "Added starting colours: ~/.config/$f"

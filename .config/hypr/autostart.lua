@@ -8,7 +8,7 @@ local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == 
 local optional_apps = {
     { id = "vesktop", label = "Vesktop", cmd = "vesktop" },
     { id = "nextcloud", label = "Nextcloud sync", cmd = "com.nextcloud.desktopclient.nextcloud --background" },
-    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "openrgb --startminimized -p ICE.orp" },
+    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "~/.config/hypr/scripts/openrgb-start.sh" },
     { id = "coolercontrol", label = "CoolerControl (fans and cooling)", cmd = "coolercontrol" },
     { id = "solaar", label = "Solaar (Logitech devices)", cmd = "solaar --w hide" },
     { id = "bitwarden", label = "Bitwarden", cmd = "com.bitwarden.desktop --hidden" },
@@ -30,7 +30,8 @@ hl.on("hyprland.start", function()
         -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
-        "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\" && PYTHONPATH=\"$HOME/.config/hypr/settings\" python3 -m hyprsettings.design refresh",
+        "~/.config/hypr/scripts/login-wallpaper.sh",
+        "sleep 8 && ~/.config/hypr/scripts/gpu-check.sh --notify",
         "python3 ~/.config/hypr/welcome/welcome.py",  -- only at the first login
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",

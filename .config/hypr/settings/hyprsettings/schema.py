@@ -13,6 +13,7 @@ PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives"
 
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
+    "User": "Your name, your picture and your password.",
     "Assistant": "Hearthling, the local AI helper you open with Super+C: which models it uses and how it behaves.",
     "Assistant Monitor": "This is NOT about your screens. It is the assistant's background health monitor: every few minutes it checks "
                          "your PC (failed services, full disks, heat, pending updates) and sends a desktop notification when something is "
@@ -233,7 +234,7 @@ SETTINGS: list[Setting] = [
             effect="when Hyprland reloads", lua=('decoration', 'blur', 'size'), group="Effects"),
     Setting(HYPRLAND, "hyprland", "blur_passes", "Blur smoothness", "int", 1, 'More passes look smoother but cost more GPU.', lo=1, hi=4,
             effect="when Hyprland reloads", lua=('decoration', 'blur', 'passes'), group="Effects"),
-    Setting(HYPRLAND, "hyprland", "kb_layout", "Keyboard layout", "choice", "gb", "Your keyboard layout code.", choices=KB_LAYOUTS, allow_custom=True,
+    Setting(HYPRLAND, "hyprland", "kb_layout", "Keyboard layout", "choice", "us", "Your keyboard layout code.", choices=KB_LAYOUTS, allow_custom=True,
             effect="when Hyprland reloads", lua=("input", "kb_layout"), group="Keyboard"),
     Setting(HYPRLAND, "hyprland", "kb_variant", "Keyboard variant", "text", "", "Optional layout variant such as dvorak or intl. Leave empty for the standard one.",
             effect="when Hyprland reloads", lua=("input", "kb_variant"), group="Keyboard"),

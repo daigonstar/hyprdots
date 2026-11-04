@@ -68,6 +68,7 @@ def style_css(style: str) -> str:
                 f"    background: @theme_surface_fill;\n    box-shadow: {SHADOW};\n}}\n")
     return out
 ICON_FALLBACK = "CaskaydiaCove Nerd Font"  # always listed after your font, so bar icons still draw
+PROPO = " Propo"  # a Nerd Font's plain cut draws wide icons off to the right of their box; this cut has the same letters and centres them
 WAYBAR_COLORS = Path.home() / ".config/waybar/colors/colors.css"
 
 
@@ -110,9 +111,7 @@ def render_waybar(o: dict, empty: list[str] | None = None) -> str:
     for key, _label, _help, _slot in ROLES:
         lines.append(f"@define-color theme_{key} @{o[f'role_{key}']};\n")
     lines.append(f"@define-color theme_surface_fill alpha(@{o['role_surface']}, {int(o['surface_opacity']) / 100:g});\n\n")
-    font = str(o["bar_font"]).replace('"', "")
-    fallback = "" if font == ICON_FALLBACK else f', "{ICON_FALLBACK}"'
-    lines.append(f'* {{\n    font-family: "{font}"{fallback};\n    font-size: {int(o["bar_font_size"])}px;\n}}\n')
+    lines.append(f'* {{\n    font-family: {font_list(o)};\n    font-size: {int(o["bar_font_size"])}px;\n}}\n')
     lines.append(f"\n/* Bar style: {dict(STYLES).get(o['bar_style'], o['bar_style'])} */\n" + style_css(o["bar_style"]))
     if empty:
         lines.append("\n/* Empty in your layout, so not drawn */\n" + ", ".join("." + z for z in empty)
@@ -174,10 +173,24 @@ def font_of(o: dict) -> str:
     return str({**DEFAULTS, **o}["bar_font"]).replace('"', "")
 
 
+def _families(o: dict) -> list[str]:
+    """Your font, then the Nerd Font for icons (once), each after its centred cut. A missing cut is just skipped."""
+    names = []
+    for font in (font_of(o), ICON_FALLBACK):
+        for name in ((font + PROPO, font) if font.endswith("Nerd Font") else (font,)):
+            if name not in names:
+                names.append(name)
+    return names
+
+
 def font_list(o: dict) -> str:
-    """CSS font-family value: your font, then the Nerd Font for icons (once)."""
-    font = font_of(o)
-    return f'"{font}"' + ("" if font == ICON_FALLBACK else f', "{ICON_FALLBACK}"')
+    """CSS font-family value."""
+    return ", ".join(f'"{name}"' for name in _families(o))
+
+
+def font_pango(o: dict) -> str:
+    """The same list for a Pango font description, which rofi takes."""
+    return ",".join(_families(o))
 
 
 def refresh_all(store=None) -> list[str]:

@@ -20,7 +20,7 @@ These are judgement calls, not measurements.
 | | Today | What is missing most |
 |---|---|---|
 | **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
-| **Fresh install on another PC** | About 75% | A real install has never been run |
+| **Fresh install on another PC** | About 85% | Passes in a virtual machine with default answers; real graphics drivers tested by hand only |
 | **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
 | **Tablet** | About 15% | No on-screen keyboard, rotation or touch gestures, and much of the desktop assumes a keyboard or a hover |
 
@@ -30,7 +30,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 ### Nothing has been proven on a blank machine
 
-- **No real install has ever been run.** [checked] CI and the local check are dry runs, which print what they would do. A real run in a virtual machine is the most useful next test, and it should become a repeatable one.
+- **A real install now passes in a virtual machine.** [checked] `install/tests/vm/vm.sh test` takes a blank Arch disk through the full-screen installer, a reboot, two logins and checks, in about 15 minutes. First passed on 4 November, after fixing what only a blank machine shows: `pipewire-jack` stopping the install, Flathub setup failing without `sudo`, no wallpaper at first login, no Python for the installer, and `makepkg` asking for the password again (it runs `sudo -k`). It covers the default answers only, with no extra apps, no assistant and a plain virtual card, so real graphics drivers and bare metal are still untested. It needs KVM, so it does not run in CI.
 - **Nothing tests the desktop itself.** [gap] CI runs unit tests and a dry run. Nothing starts Hyprland, the bar or the tray, and this session's bugs (Dismiss could not be clicked, Alt+Tab crashed on some apps, a bad rule option) were all of the kind that only a real run finds. A headless Hyprland in CI could at least catch config errors and start-up crashes.
 - **Hand checks are outstanding.** [checked] See the list near the end.
 
@@ -42,9 +42,9 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 ### Updates and bad changes have no way back
 
-- **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
-- **No release channel.** [checked] The newest tag is `0.2.5`, and updates follow `main`, so a bad push reaches everyone. A tested `stable` branch or tagged releases would fix it, plus a changelog shown after updating.
-- **A config mistake has no safe mode.** [gap] A broken Lua file leaves Hyprland showing an error, or a desktop with no keybinds. Check generated files before reloading everywhere (Window rules already does this), and keep a last-known-good copy to fall back to.
+- **Undo for updates is in, for most updates.** [checked] On btrfs the installer offers snapper and snap-pac, and `hyprundo` puts the last pacman or paru run back; tested in a VM by undoing a real package install. It cannot undo a kernel change, as `/boot` is not in the snapshot, and there is no boot menu entry, so a PC that no longer starts still needs a live USB.
+- **Stable channel waits for 1.0.** [checked] Decided 4 November: no branches until there is a good 1.0, so everything follows `main` until then. The support is in and stays dormant: with no `stable` branch there is no menu and nothing is saved. Running `install/promote.sh` creates the branch and switches it on for new installs. Each update already lists what changed.
+- **Safe mode is in, with gaps.** [checked] A Lua file that fails to load now falls back to its last working copy (`hypr/safe_config.lua`), with emergency keys if the keybinds have no copy, and Settings checks the config before reloading. Tested in a nested Hyprland, not yet through a real broken login. Not covered: a mistake in `hyprland.lua` or `safe_config.lua` themselves, a file that loads but does the wrong thing, and `autostart.lua` failing after it has registered its start-up, which would start things twice.
 
 ### Hardening
 
@@ -57,9 +57,9 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 These sit underneath the laptop and tablet work, so they come first.
 
 - **One idea of "what device is this".** [gap] The tray checks for laptops itself, and the power menu checks for a battery. A single detected profile (desktop, laptop, tablet or convertible, from the chassis type, battery, touchscreen and tablet switch) should drive the defaults everywhere, and be overridable in Settings.
-- **Defaults still set for this PC.** [checked] A UK keyboard, an `epic-mouse-v1` rule, a named OpenRGB profile, and built-in window rules for specific apps. The installer now asks for the layout. The Settings startup list also still shows apps that are not installed, though they are now skipped at login.
-- **HiDPI is untested.** [gap] Everything has only run at scale 1. Laptops and tablets usually need 1.25x to 2x. GTK 3 parts (the tray, calendar and bar) cannot draw natively at fractional scales and may look soft. Fixed pixel sizes in the tray and overview need checking. Moving the tray to GTK 4 is worth weighing here.
-- **A screen with no saved settings.** [gap] `monitors.lua` starts empty on a new install. Needs testing with a real laptop panel, plus a sensible first-time scale.
+- **Defaults are no longer this PC's.** [checked] New installs get a US keyboard unless they choose (the installer asks), no named mouse or lighting profile, and only the Steam game rules built in. Settings and the cheatsheet leave out apps you did not install. Installs that relied on the old UK default or the old built-in rules need to set them again.
+- **HiDPI works in a VM.** [checked] Scales 1.25, 1.6 and 2 were looked at on one virtual screen: the bar, tray, calendar, launcher and power menu fit, and scroll when the screen is too short. GTK 3 parts are slightly soft at fractional scales, which they cannot avoid. Not yet seen on a real HiDPI panel, or with Xwayland apps.
+- **A screen with no saved settings** now gets its preferred mode and an automatic scale. Still needs seeing on a real laptop panel.
 - **The Surface.** [gap] The earlier plan is still waiting on the model. ARM Surfaces (Pro X, Snapdragon Pro 11 and Laptop 7) cannot run Arch normally, so this decides what is possible. The rest needs `linux-surface` and `iptsd`.
 
 ## 3. Laptop
@@ -151,14 +151,14 @@ Still open unless noted. Rechecked as far as a read of the code allows.
 
 ### Settings app
 
-- **Displays.** [checked] Scale is rounded when read, so 1.666667 becomes 1.667 and is re-applied. [old] A failed `hyprctl` could write an empty `monitors.lua`, the revert timer and the keep key can race, and applying can freeze the page.
+- **Displays.** [checked] Scale is rounded when read, so 1.666667 becomes 1.667 and is re-applied. [old] The revert timer and the keep key can race, and applying can freeze the page.
 - **Cloud drives.** [checked] It lists and can remove every `rclone` remote, including hand-made ones. The executable path is unquoted in the unit file, and bookmarks and unit files are not written atomically. The obscured WebDAV password is on the command line, and there are no tests for `cloud.py`. Fixed since the first audit: the GTK page no longer blocks on these calls.
 - **File types.** [checked] Removed Associations and MIME aliases are not honoured. `Hidden=true` now is.
 - **GTK settings.** [checked] Writing `settings.ini` replaces a symlinked file, and the GTK 4 step removes any existing link.
 - **`exo-terminal.sh`.** [checked] Cleaning `helpers.rc` removes the `[Default]` header, which can leave a broken file if other keys are there.
 - **Power menu.** [checked] Its toggle uses `pkill -f` on the script path, which also matches an editor with that file open. [old] Lock is silent if `hypridle` is not listening, and the layer-shell path is hard-coded to `/usr/lib`.
 - **Wallpaper picker.** [checked] Thumbnails are written straight to their final name, so a killed run leaves a broken one that is never remade. Names use a 32-bit checksum, so two can collide. [old] A second keypress closes and reopens it.
-- **Smaller.** [checked] `nan` and `inf` are not rejected in number fields, and could break generated Lua. [old] The TOML parser ignores `[[arrays]]` and multi-line strings, `KeyError` from `hyprctl` can crash Displays, and a terminal under 60x16 wraps badly.
+- **Smaller.** [old] The TOML parser ignores `[[arrays]]` and multi-line strings, `KeyError` from `hyprctl` can crash Displays, and a terminal under 60x16 wraps badly.
 - **First-time use.** [old] "SUPER + +" cannot be entered as a key, the terminal version has no countdown for the display timer, and some pages save at once while others wait for Save.
 - **Test gaps.** [checked] No tests for `cloud.py`, the revert race, mirrored or laptop layouts, disabled-monitor persistence, or real screen changes. The GUI itself has almost none: `gui/windowrules.py` and the tray's windows were only checked by driving them in a scratch script.
 
@@ -204,8 +204,19 @@ The strongest thing this has that others do not. Today it is a separate chat win
 
 ## 9. Hand checks still to do
 
-These were built this session but could not be clicked or pressed from the tools used. Dismiss was only found this way, so these are worth doing.
+These cannot be clicked or pressed from the tools used.
 
+**Popups**
+- [ ] Click inside a popup: it stays open. Click outside, on another screen and on the desktop: it closes
+- [ ] Click the bell or the clock while its popup is open: it closes and does not reopen
+- [ ] A toast: clicking elsewhere hides it, and it stays listed in the quick tray
+
+**User page**
+- [ ] Choose a picture with the file picker, then remove it
+- [ ] Change your name
+- [ ] Change your password, trying a wrong current one once, then log in with the new one. Have the old one written down until you have
+
+**Desktop**
 - [ ] Hold Alt and tap Tab, with windows on both screens
 - [ ] Overview (`SUPER + TAB`): click a window, click a workspace, and drag a window to another
 - [ ] Bar: the system tray arrow still opens on hover
@@ -214,15 +225,21 @@ These were built this session but could not be clicked or pressed from the tools
 - [ ] Screenshot: Open, Show in folder and Edit buttons, and region and window modes
 - [ ] Emoji typed into an app, and a picked colour pasted
 - [ ] Record an area with the mouse, and stop from the REC badge
+
+**Hardware**
 - [ ] Plug in a USB stick: mounts, notifies, opens and ejects from the tray
-- [ ] Log out and back in: the welcome stays away, and udiskie and the tray both start
+- [ ] Log out and back in: udiskie and the tray both start, and the login is quick
 - [ ] Unplug a screen for real and plug it back in (it was only simulated by turning one off)
 - [ ] Sleep and wake with the tray open
+- [ ] OpenRGB: your lighting profile loads at login
+
+**Optional: undo for updates on your PC** (this changes your system, so it has not been done there)
+- [ ] `sudo ~/hyprdots/install/snapshots.sh`, run `pacman -S` on something small, then `hyprundo` and check it is gone
 
 ## 10. Suggested order
 
-1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
-2. **Make it hard to break:** snapshots before updates, config safe mode, and a stable channel. Fix the small open items in section 7.
+1. **Prove it works:** run the hand checks.
+2. **Make it hard to break:** the small open items in section 7 that remain.
 3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
@@ -240,5 +257,7 @@ All are in git history.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
 - **Installer password, 4 November:** the full-screen installer asks for your password in an overlay whenever sudo needs it, including from `makepkg` and `paru`.
 - **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
+- **Settings and drivers, 4 November:** a User page in Settings for your name, picture and password, with the picture on the quick tray and lock screen. A graphics card with no drivers is now noticed at login and in `update.sh`.
+- **Popups and icons, 4 November:** a click outside closes popups and hides toasts (`hypr/click_away.lua`; touchscreen taps do not trigger it). Icons are centred by using the Nerd Font's Propo cut.
 - **4 November:** web calls ask first when they appear to carry private data, Hearthling's state folder and files are private to you, calls to Ollama have a timeout, and stale `.orig`/`.rej` files, `hypr-dock` and three unused scripts are gone.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

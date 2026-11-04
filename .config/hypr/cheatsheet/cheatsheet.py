@@ -7,6 +7,7 @@ Run through cheatsheet.sh (it preloads gtk4-layer-shell, which has to be loaded 
 while it is open closes it. --list prints the rows instead of opening the window."""
 
 import sys
+import shutil
 from pathlib import Path
 
 HYPR_DIR = Path(__file__).resolve().parents[1]
@@ -34,6 +35,15 @@ KEY_NAMES = {
 }
 
 
+# Keys for apps you choose to install: not worth listing without them
+OPTIONAL_APPS = {"obsidian": "md.obsidian.Obsidian", "editor": "zeditor", "store": "io.github.kolunmi.Bazaar"}
+
+
+def installed(app: str) -> bool:
+    flatpaks = (Path.home() / ".local/share/flatpak/app" / app, Path("/var/lib/flatpak/app") / app)
+    return shutil.which(app) is not None or any(p.exists() for p in flatpaks)
+
+
 def load():
     """[(group, [(keys, label), ...]), ...] with your changes applied, and the Super logo setting."""
     store = Store(HYPR_DIR)
@@ -41,6 +51,10 @@ def load():
     for row in store.keybind_rows():
         keys, _source = store.get_keybind(row)
         if keys == "none":  # left unbound in hypr-settings
+            continue
+        if row["id"] in OPTIONAL_APPS and not installed(OPTIONAL_APPS[row["id"]]):
+            continue
+        if row["id"] == "assistant" and not shutil.which("ollama"):
             continue
         group = row["group"] or "Other"
         if group not in index:

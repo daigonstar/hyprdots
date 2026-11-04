@@ -28,7 +28,7 @@ from hyprsettings.schema import BY_ID  # noqa: E402
 from hyprsettings.store import Store  # noqa: E402
 
 STYLES = ("spotlight", "grid", "categories", "compact", "dock")
-ICON_FONT = "CaskaydiaCove Nerd Font"
+ICON_FONT = "CaskaydiaCove Nerd Font Propo"
 
 
 LOOK = {"size": 100, "icon_size": 100, "transparency": 0, "dim": 35, "rounding": 22, "outline": True, "hints": True}
