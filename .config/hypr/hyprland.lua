@@ -3,6 +3,8 @@
 
 local safe = require("safe_config")
 
+-- A screen with no saved settings (any screen, on a new install): its best mode, and a scale that suits its size
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
 safe.load("monitors")
 safe.load("workspaces")
 safe.load("keybinds")

@@ -11,7 +11,7 @@ import http.server
 from pathlib import Path
 
 import _paths
-from hyprsettings import account, lockscreen, models, overrides, schema, tomledit
+from hyprsettings import account, displays, lockscreen, models, overrides, schema, tomledit
 from hyprsettings.store import RESET, Store
 
 LUA = shutil.which("lua5.4") or shutil.which("lua")
@@ -370,6 +370,23 @@ class Account(unittest.TestCase):
         o = dict(lockscreen.DEFAULTS, show_user=True)
         self.assertNotIn("image {", lockscreen.render(o))
         self.assertIn("path = /home/x/.face", lockscreen.render({**o, "picture": "/home/x/.face"}))
+
+
+class DataSafety(unittest.TestCase):
+    def test_nan_and_inf_are_not_numbers(self):
+        store = Store(_paths.scratch_hypr_dir())
+        self.addCleanup(shutil.rmtree, store.dir, True)
+        setting = next(s for s in schema.SETTINGS if s.kind == "float" and s.lo is None) if any(s.kind == "float" and s.lo is None for s in schema.SETTINGS) else next(s for s in schema.SETTINGS if s.kind == "float")
+        for text in ("nan", "inf", "-inf"):
+            with self.assertRaises(ValueError):
+                store.coerce(setting, text)
+
+    def test_no_answer_from_hyprland_leaves_the_saved_screens_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "monitors.lua"
+            path.write_text("your screens\n")
+            displays.write(path, [])
+            self.assertEqual(path.read_text(), "your screens\n")
 
 
 class ConfigProblem(unittest.TestCase):

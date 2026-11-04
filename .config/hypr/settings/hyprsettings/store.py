@@ -3,6 +3,7 @@ the schema default. Edits are staged in memory and written together on save."""
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import subprocess
@@ -147,6 +148,8 @@ class Store:
                 value = cast(str(raw).strip()) if isinstance(raw, str) else cast(raw)
             except ValueError:
                 raise ValueError(f"enter a number{' (whole)' if cast is int else ''}") from None
+            if not math.isfinite(value):  # float() takes "nan" and "inf", which would break the generated Lua
+                raise ValueError("enter a number")
             if k != "choice":
                 if s.lo is not None and value < s.lo or s.hi is not None and value > s.hi:
                     raise ValueError(f"must be between {s.lo:g} and {s.hi:g}{s.unit and ' ' + s.unit}")

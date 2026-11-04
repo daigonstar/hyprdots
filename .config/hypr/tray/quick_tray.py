@@ -675,7 +675,7 @@ class Tray(Gtk.Window):
         display = self.get_display()
         window = self.get_window()
         monitor = display.get_monitor_at_window(window) if window else display.get_monitor(0)
-        limit = max(320, monitor.get_geometry().height - 70 if monitor else 1010)
+        limit = max(320, monitor.get_geometry().height - 120 if monitor else 1010)  # the bar, the margins and the panel's padding
         _smallest, natural = self.scroller.get_child().get_preferred_height()
         self.scroller.set_min_content_height(min(natural, limit))
         self.scroller.set_max_content_height(limit)
