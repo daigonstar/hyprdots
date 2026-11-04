@@ -194,18 +194,26 @@ if [[ -f "$BASE_DIR/.update-branch" ]]; then
   BRANCH="$(<"$BASE_DIR/.update-branch")"
 fi
 if [[ -z "$BRANCH" && "$DRY_RUN" == "false" && -t 0 ]] && ! use_tui; then
-  echo "Select branch to use for repo operations:"
-  echo "  1) main (recommended)"
-  echo "  2) dev (development)"
+  echo "Which version do you want to follow?"
+  echo "  1) stable: tested first (recommended)"
+  echo "  2) main: the newest, and may break"
   echo "  3) Enter branch name"
   read -rp "Choice [1-3] (default 1): " _choice
   case "$_choice" in
-    1) BRANCH="main" ;;
+    2) BRANCH="main" ;;
     3) read -rp "Enter branch name: " BRANCH ;;
-    *) BRANCH="main" ;;
+    *) BRANCH="" ;;
   esac
 fi
-BRANCH="${BRANCH:-main}"
+# New installs follow stable, once the repo has one. update.sh keeps following what is saved here.
+if [[ -z "$BRANCH" ]]; then
+  if git -C "$REPO_DIR" ls-remote --exit-code --heads origin stable >/dev/null 2>&1; then
+    BRANCH="stable"
+  else
+    BRANCH="main"
+  fi
+fi
+[[ "$DRY_RUN" == "false" && ! -f "$BASE_DIR/.update-branch" ]] && printf '%s\n' "$BRANCH" > "$BASE_DIR/.update-branch"
 
 # Update the repo first. A pull can change this very script, so when it does, start again from the new copy rather
 # than carry on with the old one against new files.

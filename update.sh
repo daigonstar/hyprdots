@@ -4,13 +4,15 @@ set -euo pipefail
 # update.sh
 # Brings this repository up to date and leaves your settings and files alone.
 # Usage: ./update.sh [remote] [branch]
-# - Defaults: remote 'origin', branch 'main'.
+# - Defaults: remote 'origin', branch 'main'. New installs follow 'stable', which only moves when install/promote.sh
+#   passes on a version that CI has passed. The branch you pick is kept in .update-branch.
 # Behavior:
 # - Fetches the remote first; nothing is touched if that fails.
 # - Stops, changing nothing, if you have commits the remote does not (UPDATE_DISCARD_COMMITS=1 throws them away).
 # - Moves to remote/branch. Files git does not track are never deleted: your settings (the files in
 #   .gitignore), and anything you added yourself. Edits to tracked files are put back on top. An edit that
 #   clashes with the update gives way to it, and is kept in ~/.local/state/hyprdots/update-backups/.
+# - Lists what changed, and keeps the list in ~/.local/state/hyprdots/last-update.txt.
 # - Installs any packages from install/required.txt that are missing (the desktop itself, not the optional
 #   apps: install/apps.sh adds those). Set SKIP_PACKAGES=1 to skip this step.
 #
@@ -117,16 +119,17 @@ main() {
   fi
   # If not provided, offer an interactive menu when running in a terminal
   if [[ -z "$branch" && -t 0 ]]; then
-    echo "Select branch to use:"
-    echo "  1) main (recommended)"
-    echo "  2) dev (unstable)"
+    echo "Which version do you want to follow?"
+    echo "  1) stable: tested first (recommended)"
+    echo "  2) main: the newest, and may break"
     echo "  3) Enter branch name"
     read -rp "Choice [1-3] (default 1): " _choice
     case "$_choice" in
-      1) branch="main" ;;
+      2) branch="main" ;;
       3) read -rp "Enter branch name: " branch ;;
-      *) branch="main" ;;
+      *) branch="stable" ;;
     esac
+    [[ -n "$branch" ]] && printf '%s\n' "$branch" > "$repo_root/.update-branch"
   fi
   branch="${branch:-main}"
   timestamp="$(date +%Y%m%d-%H%M%S)"
@@ -148,10 +151,11 @@ main() {
   fi
 
   # Commits only this PC has would be lost for good, so do not guess
+  # (commits on any branch of the remote are safe, which lets you move from main to the older stable)
   local target="$remote/$branch" ahead=0 own
-  ahead="$(git rev-list --count "$target..HEAD")"
+  ahead="$(git rev-list --count HEAD --not --remotes="$remote")"
   if git show-ref --verify --quiet "refs/heads/$branch"; then
-    own="$(git rev-list --count "$target..refs/heads/$branch")"
+    own="$(git rev-list --count "refs/heads/$branch" --not --remotes="$remote")"
     (( own > ahead )) && ahead="$own"
   fi
   if (( ahead > 0 )) && [[ "${UPDATE_DISCARD_COMMITS:-0}" != "1" ]]; then
@@ -189,6 +193,8 @@ main() {
     fi
   done < <(git diff --name-only --diff-filter=A HEAD "$target")
 
+  local before
+  before="$(git rev-parse HEAD)"
   echo "Moving to $target"
   git checkout -f -B "$branch" "$target"
   for f in "${PRESERVE[@]}"; do
@@ -224,7 +230,25 @@ main() {
   "$HOME/.config/hypr/scripts/first-colours.sh" || true
   # Re-apply the settings Theme page to the files the reset just put back (best-effort)
   PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh || true
+  show_changes "$before"
   exit 0
+}
+
+# What this update brought, in the words of its commits. Moving back to an older version lists nothing.
+show_changes() {
+  local list="${XDG_STATE_HOME:-$HOME/.local/state}/hyprdots/last-update.txt" count
+  count="$(git rev-list --no-merges --count "$1..HEAD")"
+  if (( count == 0 )); then
+    echo "Nothing new in this update."
+    return 0
+  fi
+  mkdir -p "$(dirname "$list")"
+  git log --no-merges --format='- %s' "$1..HEAD" > "$list"
+  echo
+  echo "What's new ($count):"
+  head -n 20 "$list"
+  (( count > 20 )) && echo "...and $(( count - 20 )) more, in $list"
+  command -v notify-send >/dev/null 2>&1 && notify-send "Update finished" "$count new. $(head -n 3 "$list")" || true
 }
 
 # By default, reapply symlinks and some dotfile tasks so the live system matches the repo.

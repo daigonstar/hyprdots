@@ -43,7 +43,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 ### Updates and bad changes have no way back
 
 - **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
-- **No release channel.** [checked] The newest tag is `0.2.5`, and updates follow `main`, so a bad push reaches everyone. A tested `stable` branch or tagged releases would fix it, plus a changelog shown after updating.
+- **Stable channel is built, not switched on.** [checked] New installs follow `stable` once it exists, and `install/promote.sh` moves it forward only on a version CI has passed. Each update lists what changed. Installs without a saved choice stay on `main` until they pick from the menu. CI cannot see the desktop, so a promotion still depends on someone using that version first.
 - **Safe mode is in, with gaps.** [checked] A Lua file that fails to load now falls back to its last working copy (`hypr/safe_config.lua`), with emergency keys if the keybinds have no copy, and Settings checks the config before reloading. Tested in a nested Hyprland, not yet through a real broken login. Not covered: a mistake in `hyprland.lua` or `safe_config.lua` themselves, a file that loads but does the wrong thing, and `autostart.lua` failing after it has registered its start-up, which would start things twice.
 
 ### Hardening
@@ -222,7 +222,7 @@ These were built this session but could not be clicked or pressed from the tools
 ## 10. Suggested order
 
 1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
-2. **Make it hard to break:** a stable channel, then snapshots before updates. Fix the small open items in section 7.
+2. **Make it hard to break:** snapshots before updates. Fix the small open items in section 7.
 3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.

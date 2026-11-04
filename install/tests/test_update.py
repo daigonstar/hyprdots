@@ -124,6 +124,47 @@ class Update(unittest.TestCase):
         self.assertEqual((self.home / ".config/ghostty/config").read_text(), "my terminal\n")
         self.assertEqual(list((self.home / ".config").glob("*.bak.*")), [])
 
+    def test_moving_to_an_older_stable_is_allowed_and_your_own_commits_still_stop_it(self):
+        git(self.dev, "push", "-q", "origin", "main:stable")
+        (self.dev / ".config/hypr/keybinds.lua").write_text("newest\n")
+        self.publish("newest")
+        self.assertEqual(self.update().returncode, 0)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "newest\n")
+        done = self.update(UPDATE_BRANCH="stable")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.read(".config/hypr/keybinds.lua"), "shipped\n")
+        self.assertIn("Nothing new", done.stdout)
+
+    def test_lists_what_changed(self):
+        (self.dev / ".config/hypr/keybinds.lua").write_text("new\n")
+        self.publish("Popups close when you click away")
+        done = self.update()
+        self.assertIn("What's new (1):\n- Popups close when you click away", done.stdout)
+        saved = Path(self.env["XDG_STATE_HOME"]) / "hyprdots/last-update.txt"
+        self.assertEqual(saved.read_text(), "- Popups close when you click away\n")
+
+    def promote(self, checks, answer="y\n"):
+        fake = self.home / "bin"
+        fake.mkdir(exist_ok=True)
+        (fake / "gh").write_text(f"#!/bin/sh\nprintf '%s\\n' '{checks}'\n")
+        (fake / "gh").chmod(0o755)
+        shutil.copy(REPO / "install/promote.sh", self.dev / "promote.sh")
+        return subprocess.run(["bash", "promote.sh"], cwd=self.dev, env={**self.env, "PATH": f"{fake}:{os.environ['PATH']}"},
+                              capture_output=True, text=True, input=answer, timeout=30)
+
+    def stable(self):
+        return subprocess.run(["git", "rev-parse", "--verify", "-q", "origin/stable"], cwd=self.dev, capture_output=True, text=True).stdout.strip()
+
+    def test_promote_only_moves_stable_on_a_passed_version(self):
+        for checks in ("completed failure", "in_progress ", "none"):
+            self.assertNotEqual(self.promote(checks).returncode, 0, checks)
+            self.assertEqual(self.stable(), "")
+        self.assertNotEqual(self.promote("completed success", "n\n").returncode, 0)
+        self.assertEqual(self.stable(), "")
+        done = self.promote("completed success")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotEqual(self.stable(), "")
+
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")
         (self.dev / ".config/hypr/new.lua").write_text("shipped\n")
