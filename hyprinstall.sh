@@ -39,6 +39,7 @@ done
 # With a terminal, install/tui.py asks the questions and runs this script again to do the work (HYPRINSTALL_TUI set)
 use_tui() { [[ -z "${HYPRINSTALL_TUI:-}" && "$PLAIN" == "false" && -t 0 && -t 1 && "${TERM:-dumb}" != "dumb" ]]; }
 # Progress marks that the interface reads; nothing in plain mode
+tui_can_start() { python3 -c 'import curses; curses.setupterm()' 2>/dev/null; }
 mark() { [[ -z "${HYPRINSTALL_TUI:-}" ]] || printf '::%s\n' "$*"; }
 
 # Logging helpers
@@ -166,13 +167,13 @@ echo "  EDITOR=nano visudo   # uncomment '%wheel ALL=(ALL:ALL) ALL'" >&2
 echo "Log out/in (or reboot) so the group membership takes effect, then re-run this script." >&2
 exit 1
 fi
-# The interface has the screen, and the first run through here already asked for the password
-if [[ -n "${HYPRINSTALL_TUI:-}" ]]; then
-  sudo -n -v || { echo "Your sudo password has expired. Run ./hyprinstall.sh again." >&2; exit 1; }
-else
-echo "Caching sudo credentials (you may be prompted for your password)..."
+# The full-screen interface asks later, in an overlay (install/askpass), once the questions are done: the run it starts
+# comes through here with HYPRINSTALL_TUI set, and sudo goes to that overlay.
+if use_tui && tui_can_start; then
+return
 fi
-if [[ -z "${HYPRINSTALL_TUI:-}" ]] && ! sudo -v; then
+[[ -n "${HYPRINSTALL_TUI:-}" ]] || echo "Caching sudo credentials (you may be prompted for your password)..."
+if ! sudo -v; then
 echo "Failed to obtain sudo privileges. Ensure your user is in the 'wheel' group and sudoers is configured." >&2
 exit 1
 fi
@@ -225,7 +226,7 @@ preflight_checks
 # The full-screen interface needs Python, which a bare system may not have yet. If it cannot start, the plain questions take over.
 if use_tui; then
   command -v python3 >/dev/null 2>&1 || run_cmd "sudo pacman -S --needed --noconfirm python" || true
-  if python3 -c 'import curses; curses.setupterm()' 2>/dev/null; then
+  if tui_can_start; then
     export UPDATE_BRANCH="$BRANCH"
     exec python3 "$BASE_DIR/install/tui.py" "$@"
   fi

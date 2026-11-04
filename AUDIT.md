@@ -34,12 +34,11 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 - **Nothing tests the desktop itself.** [gap] CI runs unit tests and a dry run. Nothing starts Hyprland, the bar or the tray, and this session's bugs (Dismiss could not be clicked, Alt+Tab crashed on some apps, a bad rule option) were all of the kind that only a real run finds. A headless Hyprland in CI could at least catch config errors and start-up crashes.
 - **Hand checks are outstanding.** [checked] See the list near the end.
 
-### If a background part dies, nothing brings it back
+### If a background part dies
 
-- **Nothing restarts what crashes.** [checked] The tray, bar, swaync, udiskie and hypridle are started once from `autostart.lua`. The only recovery is pressing `SUPER + N`, and that does not restart udiskie.
-- **A dead tray makes the bell look broken.** [checked] swaync's panel is now invisible behind the tray, so if the tray dies, the bell seems to do nothing and swaync's keyboard grab may stay until Escape. The same process also holds the volume popup, Alt+Tab, the overview and the battery warnings, so one crash loses all of them.
-- **Failures leave no trace.** [checked] Tray output goes nowhere when it is started from autostart. The PC Health monitor does not watch for dead desktop parts.
-- **Fix:** run these as systemd user services with `Restart=on-failure` and logs in the journal, optionally through `uwsm`, and have the health monitor report them.
+- **Restarts are in; a real login is still to be checked.** [checked] The bar, swaync, tray, udiskie and hypridle are now systemd user services (`hypr/systemd`, started by `scripts/desktop-services.sh`). Each was killed with `kill -9` on this PC and came back within 2.5 seconds. After 5 crashes in 2 minutes systemd stops, you get one notification, and `SUPER + N` brings it back. Logs are in the journal, and the health monitor reports parts that are down or keep crashing. This was run in a live session but not yet through a real log out and in.
+- **The tray holds a lot.** [checked] The same process holds the volume popup, Alt+Tab, the overview and the battery warnings, and its notification list is lost when it restarts.
+- **Not covered:** the clipboard watcher, wallpaper daemon and game workspace script are still started once. A crashing part restarted with `KillMode=process` can leave old helpers behind, such as a `swaync-client` from the bar.
 
 ### Updates and bad changes have no way back
 
@@ -223,7 +222,7 @@ These were built this session but could not be clicked or pressed from the tools
 ## 10. Suggested order
 
 1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
-2. **Make it hard to break:** systemd services with restarts, logs, snapshots before updates, and a stable channel. Fix the small open items in section 7.
+2. **Make it hard to break:** snapshots before updates, config safe mode, and a stable channel. Fix the small open items in section 7.
 3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
@@ -239,6 +238,7 @@ All are in git history.
 - **Desktop config:** hard-coded `DP-1` paths, old dispatchers, dead files, font names and rainbow border overrides are all gone.
 - **Assistant:** the listed command guard bypasses are closed, wrapped `sudo` always asks, secrets and browser profiles are blocked, and control characters are shown as text.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
+- **Installer password, 4 November:** the full-screen installer asks for your password in an overlay whenever sudo needs it, including from `makepkg` and `paru`.
 - **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
 - **4 November:** web calls ask first when they appear to carry private data, Hearthling's state folder and files are private to you, calls to Ollama have a timeout, and stale `.orig`/`.rej` files, `hypr-dock` and three unused scripts are gone.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

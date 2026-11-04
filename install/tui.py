@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The installer's full-screen interface. hyprinstall.sh starts this once it has your password. It asks every question up
-front, then runs the installer again with the answers and shows its progress, so nothing stops to ask halfway through a long
-install. Python's own curses only, since this runs on a bare system. hyprinstall.sh --plain skips it.
+"""The installer's full-screen interface. It asks every question up front, then runs the installer again with the answers and
+shows its progress, so nothing stops to ask halfway through a long install. The one exception is your password, which sudo
+asks for through an overlay when it needs it (install/askpass). Python's own curses only, since this runs on a bare system. hyprinstall.sh --plain skips it.
 
 Wizard and Progress hold the logic and do not touch the terminal, so they can be tested without one."""
 import curses
@@ -9,15 +9,20 @@ import glob
 import locale
 import os
 import re
+import shutil
 import signal
+import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INSTALLER = os.path.join(HERE, "..", "hyprinstall.sh")
 LOG = os.path.expanduser("~/.local/share/hyprinstall/hyprinstall.log")
 MIN_W, MIN_H = 60, 20
+ASKPASS_DIR = os.path.join(HERE, "askpass")
+RETRY_WINDOW = 15  # seconds: asked again this soon after an answer means sudo did not accept it
 KEEP_LINES = 50000  # of this run's output, for the log view
 
 LAYOUTS = (("us", "English (US)"), ("gb", "English (UK)"), ("de", "German"), ("fr", "French"), ("es", "Spanish"), ("it", "Italian"),
@@ -322,8 +327,87 @@ class LogView:
         return self.top, self.lines[self.top:self.top + height]
 
 
-def run_installer(wizard, args):
-    env = {**os.environ, **wizard.env(), "HYPRINSTALL_TUI": "1", "HYPRINSTALL_RESTARTED": "1"}
+class PasswordBroker:
+    """Where sudo's askpass helper asks for the password. A socket in a private folder, so the password is never in a file,
+    an argument or the log."""
+
+    def __init__(self):
+        self.folder = tempfile.mkdtemp(prefix="hyprinstall-")  # mode 700
+        self.path = os.path.join(self.folder, "askpass")
+        self.server = socket.socket(socket.AF_UNIX)
+        self.server.bind(self.path)
+        self.server.listen(4)
+        self.server.setblocking(False)
+        self.answered = None  # when the last password was sent
+
+    def env(self):
+        return {"SUDO_ASKPASS": os.path.join(ASKPASS_DIR, "askpass.py"), "HYPRINSTALL_ASKPASS_SOCKET": self.path,
+                "PATH": ASKPASS_DIR + os.pathsep + os.environ.get("PATH", "")}
+
+    def request(self):
+        """A PasswordBox if sudo is waiting for a password, else None."""
+        try:
+            link, _ = self.server.accept()
+        except BlockingIOError:
+            return None
+        link.settimeout(2)
+        try:
+            link.recv(4096)  # its prompt: says nothing the box does not
+        except OSError:
+            link.close()
+            return None
+        retry = self.answered is not None and time.monotonic() - self.answered < RETRY_WINDOW
+        return PasswordBox(link, retry)
+
+    def reply(self, box, cancelled=False):
+        try:
+            if not cancelled:
+                box.link.sendall(bytes(box.typed))
+                self.answered = time.monotonic()
+        except OSError:
+            pass
+        box.close()
+
+    def close(self):
+        self.server.close()
+        shutil.rmtree(self.folder, ignore_errors=True)
+
+
+class PasswordBox:
+    """The overlay's typing, without the terminal. getch gives UTF-8 a byte at a time, so that is how it is kept."""
+
+    def __init__(self, link, retry=False):
+        self.link, self.retry, self.typed = link, retry, bytearray()
+
+    def press(self, key):
+        """A key from getch. Returns "send", "cancel" or None."""
+        if key in (10, 13, curses.KEY_ENTER):
+            return "send" if self.typed else None  # an empty answer would look like cancelling
+        if key == 27:
+            return "cancel"
+        if key in (curses.KEY_BACKSPACE, 127, 8):
+            while self.typed and self.typed[-1] & 0xC0 == 0x80:  # the rest of a multi-byte letter
+                self.typed.pop()
+            if self.typed:
+                self.typed.pop()
+        elif key == 21:  # Ctrl+U
+            self.typed[:] = b"\0" * len(self.typed)
+            self.typed.clear()
+        elif 32 <= key <= 255 and key != 127:
+            self.typed.append(key)
+        return None
+
+    def letters(self):
+        return len(self.typed.decode("utf-8", "replace"))
+
+    def close(self):
+        self.typed[:] = b"\0" * len(self.typed)  # do not leave it sitting in memory
+        self.typed.clear()
+        self.link.close()
+
+
+def run_installer(wizard, args, broker):
+    env = {**os.environ, **wizard.env(), **broker.env(), "HYPRINSTALL_TUI": "1", "HYPRINSTALL_RESTARTED": "1"}
     return subprocess.Popen(["bash", INSTALLER, *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 
 
@@ -461,6 +545,27 @@ class Screen:
             self.put(5, 2, "Nothing has been printed yet.", curses.A_DIM)
         self.s.refresh()
 
+    def password(self, box, doing):
+        """The overlay, over whatever is on screen. The password itself is never drawn, only a dot for each letter."""
+        h, w = self.s.getmaxyx()
+        width = min(66, w - 4)
+        lines = [("The installer needs your password", self.accent()), ("", 0)]
+        lines += [(line, 0) for line in wrap(f"Your administrator password is needed to carry on: {doing}.", width - 6)]
+        lines.append(("", 0))
+        if box.retry:
+            bad = curses.color_pair(BAD) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+            lines += [(line, bad) for line in wrap("That did not work. Too many wrong tries can lock your account for a few minutes.", width - 6)]
+            lines.append(("", 0))
+        lines.append(("Password: " + ("\u2022" * box.letters())[:width - 18], curses.A_BOLD))
+        lines += [("", 0), ("Enter continue   Esc stop the install", curses.A_DIM)]
+        top, left = max(0, (h - len(lines) - 2) // 2), max(0, (w - width) // 2)
+        self.put(top, left, "\u250c" + "\u2500" * (width - 2) + "\u2510", self.accent())
+        for row, (text, attr) in enumerate(lines, top + 1):
+            self.put(row, left, "\u2502" + " " * (width - 2) + "\u2502", self.accent())
+            self.put(row, left + 3, text[:width - 6], attr)
+        self.put(top + len(lines) + 1, left, "\u2514" + "\u2500" * (width - 2) + "\u2518", self.accent())
+        self.s.refresh()
+
     def log_height(self):
         return max(1, self.s.getmaxyx()[0] - 7)
 
@@ -553,11 +658,19 @@ def wheel(view, height):
 def follow(screen, wiz, args):
     """Runs the install and shows it. Returns the installer's exit code."""
     prog = Progress()
-    child = run_installer(wiz, args)
+    broker = PasswordBroker()
+    try:
+        return follow_with(screen, wiz, args, prog, broker)
+    finally:
+        broker.close()
+
+
+def follow_with(screen, wiz, args, prog, broker):
+    child = run_installer(wiz, args, broker)
     stream = child.stdout.fileno()
     os.set_blocking(stream, False)
     screen.s.timeout(100)
-    buffer, confirm, code, view = b"", False, None, None
+    buffer, confirm, code, view, box = b"", False, None, None, None
     while True:
         if code is None:
             # Ask whether it has ended before reading, so that this read gets the last of its output. Do not wait for the
@@ -574,6 +687,26 @@ def follow(screen, wiz, args):
             if ended is not None and not data:
                 code = ended
                 prog.feed(buffer.decode("utf-8", "replace"))
+            box = box or broker.request()
+        if box and code is not None:  # the install ended while asking
+            broker.reply(box, cancelled=True)
+            box = None
+        if box:
+            # Takes every key until it is answered. The install keeps being read underneath, in case it has more to say.
+            if view:
+                screen.log_view(view, prog, code)
+            else:
+                screen.progress(prog, code, wiz.dry_run, False)
+            screen.password(box, prog.title())
+            action = box.press(screen.s.getch())
+            if action == "send":
+                broker.reply(box)
+                box = None
+            elif action == "cancel":
+                broker.reply(box, cancelled=True)
+                box = None
+                child.send_signal(signal.SIGTERM)
+            continue
         if view:
             screen.log_view(view, prog, code)
             key = screen.s.getch()
@@ -597,8 +730,28 @@ def follow(screen, wiz, args):
         elif code is not None and key in (10, 13, curses.KEY_ENTER, ord("q")):
             return code
         elif code == 0 and key == ord("r") and not wiz.dry_run:
-            subprocess.run(["sudo", "-n", "systemctl", "restart", "sddm"], check=False)
+            restart_login_screen(screen, prog, broker)
             return code
+
+
+def restart_login_screen(screen, prog, broker):
+    """sudo's permission may have lapsed by the time you press r, so this can ask too."""
+    env = {**os.environ, **broker.env()}
+    proc = subprocess.Popen(["sudo", "systemctl", "restart", "sddm"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    box = None
+    while proc.poll() is None:
+        box = box or broker.request()
+        if not box:
+            screen.s.getch()  # waits up to 100 ms
+            continue
+        screen.progress(prog, 0)
+        screen.password(box, "going to the login screen")
+        action = box.press(screen.s.getch())
+        if action:
+            broker.reply(box, cancelled=action == "cancel")
+            box = None
+    if box:
+        broker.reply(box, cancelled=True)
 
 
 def interface(stdscr, wiz, args):

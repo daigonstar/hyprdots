@@ -1,0 +1,4 @@
+#!/bin/sh
+# First on the PATH while the full-screen installer runs, so every sudo (makepkg and paru's too) asks through the interface
+# instead of writing on its screen and reading its keys.
+exec "${HYPRINSTALL_REAL_SUDO:-/usr/bin/sudo}" -A "$@"

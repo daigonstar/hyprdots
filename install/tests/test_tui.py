@@ -7,6 +7,7 @@ import re
 import select
 import shutil
 import signal
+import socket
 import struct
 import sys
 import tempfile
@@ -255,6 +256,105 @@ class Terminal:
 
 
 ENTER, ESC, DOWN, SPACE = "\r", "\x1b", "\x1bOB", " "  # the Down arrow as a terminal sends it in keypad mode
+
+# Stands in for sudo: asks through SUDO_ASKPASS as the real one does, three tries. The real one is never given a password here.
+FAKE_SUDO = """#!/bin/sh
+[ "$1" = -A ] || { echo "not asked to use askpass"; exit 3; }
+for try in 1 2 3; do
+    answer=$("$SUDO_ASKPASS" "[sudo] password: ") || { echo "sudo: no password was provided"; exit 1; }
+    [ "$answer" = "$FAKE_PASSWORD" ] && { echo "sudo accepted"; exit 0; }
+    echo "Sorry, try again."
+done
+exit 1
+"""
+FAKE_INSTALLER = """#!/bin/sh
+echo "::stage system"
+sudo pacman -Syu || { echo "password step failed"; exit 7; }
+echo "after the password"
+sleep 30
+"""
+DRIVER = """
+import curses, sys
+sys.path.insert(0, {install!r})
+import tui
+tui.INSTALLER = {installer!r}
+wiz = tui.Wizard(["amd"], ["DP-1"], "gb", 16, [("none", "None")], [])
+print("exit", curses.wrapper(lambda s: tui.follow(tui.Screen(s), wiz, [])))
+"""
+
+
+class PasswordOverlay(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        sudo, installer = self.dir / "fake-sudo", self.dir / "installer.sh"
+        sudo.write_text(FAKE_SUDO)
+        installer.write_text(FAKE_INSTALLER)
+        sudo.chmod(0o755)
+        installer.chmod(0o755)
+        driver = self.dir / "driver.py"
+        driver.write_text(DRIVER.format(install=str(INSTALL), installer=str(installer)))
+        os.environ.update(HYPRINSTALL_REAL_SUDO=str(sudo), FAKE_PASSWORD="hunter2")
+        self.addCleanup(os.environ.pop, "HYPRINSTALL_REAL_SUDO")
+        self.addCleanup(os.environ.pop, "FAKE_PASSWORD")
+        self.term = Terminal([sys.executable, str(driver)], str(self.dir))
+        self.addCleanup(self.term.close)
+
+    def test_wrong_then_right_and_it_is_never_shown(self):
+        self.term.wait_for("needs your password")
+        self.term.keys(*"wrong", ENTER)
+        self.term.wait_for("did not work")
+        self.term.keys(*"hunter2", ENTER)
+        self.term.wait_for("after the password")
+        self.assertNotIn("hunter2", self.term.text())
+        self.assertNotIn("wrong", self.term.text().replace("Too many wrong tries", ""))
+        self.assertIn("\u2022", self.term.text())
+
+    def test_esc_stops_the_install(self):
+        self.term.wait_for("needs your password")
+        self.term.keys(ESC)
+        self.term.wait_for("The install stopped")
+        self.assertNotIn("after the password", self.term.text())
+
+    def test_the_socket_folder_is_private_and_removed(self):
+        broker = tui.PasswordBroker()
+        folder = broker.folder
+        self.assertEqual(os.stat(folder).st_mode & 0o777, 0o700)
+        broker.close()
+        self.assertFalse(os.path.exists(folder))
+
+
+class PasswordTyping(unittest.TestCase):
+    def box(self):
+        a, b = socket.socketpair()
+        self.addCleanup(b.close)
+        box = tui.PasswordBox(a)
+        self.addCleanup(box.close)
+        return box
+
+    def test_keys(self):
+        box = self.box()
+        for key in b"ab":
+            box.press(key)
+        self.assertIsNone(box.press(127))
+        self.assertEqual(bytes(box.typed), b"a")
+        self.assertEqual(box.press(10), "send")
+        self.assertEqual(box.press(27), "cancel")
+
+    def test_enter_on_nothing_waits_and_timeouts_are_ignored(self):
+        box = self.box()
+        self.assertIsNone(box.press(10))
+        self.assertIsNone(box.press(-1))
+        self.assertEqual(bytes(box.typed), b"")
+
+    def test_backspace_takes_a_whole_letter(self):
+        box = self.box()
+        for key in "aé".encode():
+            box.press(key)
+        self.assertEqual(box.letters(), 2)
+        box.press(127)
+        self.assertEqual(bytes(box.typed), b"a")
 
 
 @unittest.skipUnless(shutil.which("pacman"), "the installer needs pacman")
