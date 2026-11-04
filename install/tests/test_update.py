@@ -213,6 +213,14 @@ class Update(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(self.read(".config/fastfetch/config.jsonc"), "my look\n")
 
+    def test_first_colours_makes_the_files_the_bar_and_rofi_import(self):
+        cfg = self.home / ".config"
+        (cfg / "waybar").mkdir(exist_ok=True)
+        (cfg / "rofi").mkdir(exist_ok=True)
+        subprocess.run(["bash", str(REPO / ".config/hypr/scripts/first-colours.sh")], env=self.env, check=True, capture_output=True)
+        self.assertTrue((cfg / "waybar/tablet.css").exists())
+        self.assertTrue((cfg / "rofi/touch.rasi").exists())
+
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")
         (self.dev / ".config/hypr/new.lua").write_text("shipped\n")

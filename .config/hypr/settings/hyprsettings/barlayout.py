@@ -154,6 +154,10 @@ def layout_path() -> Path:
     return waybar_dir() / "layout.json"
 
 
+# Saved layouts may name these. hyprland/workspaces sends a dispatcher the Lua config rejects, so its dots do nothing.
+RENAMED = {"hyprland/workspaces": "group/workspaces"}
+
+
 def read_layout(config: dict) -> dict[str, list[str]]:
     """Your arrangement, checked against the config: unknown modules are dropped. The default when there is none."""
     try:
@@ -162,7 +166,7 @@ def read_layout(config: dict) -> dict[str, list[str]]:
         return default_layout(config)
     allowed = set(available(config))
     position = saved.get("position") if saved.get("position") in dict(POSITIONS) else config.get("position", "top")
-    return {**{z: [m for m in saved.get(z, []) if m in allowed] for z in ZONES}, "position": position}
+    return {**{z: [m for m in (RENAMED.get(m, m) for m in saved.get(z, [])) if m in allowed] for z in ZONES}, "position": position}
 
 
 def write_layout(layout: dict[str, list[str]]) -> None:

@@ -6,26 +6,38 @@ Usage: workspace_dot.py <number>"""
 import json
 import os
 import socket
-import subprocess
 import sys
 
+SOCKETS = f"{os.environ['XDG_RUNTIME_DIR']}/hypr/{os.environ['HYPRLAND_INSTANCE_SIGNATURE']}"
+ALWAYS_SHOWN = 3  # higher ones only show while in use
 ACTIVE, DEFAULT = '\uf192', '\uf10c'
 REDRAW_ON = (b"workspace", b"focusedmon", b"createworkspace", b"destroyworkspace", b"openwindow", b"closewindow", b"movewindow")
 
 
+def ask(what: str):
+    """Straight from Hyprland's socket: this runs for every dot on every window event, too often to start hyprctl each time."""
+    with socket.socket(socket.AF_UNIX) as link:
+        link.connect(f"{SOCKETS}/.socket.sock")
+        link.sendall(f"j/{what}".encode())
+        answer = b""
+        while chunk := link.recv(65536):
+            answer += chunk
+    return json.loads(answer or b"null")
+
+
 def state(number: int) -> dict:
-    def ask(what):
-        return json.loads(subprocess.run(["hyprctl", what, "-j"], capture_output=True, text=True, timeout=5).stdout or "null")
     active = (ask("activeworkspace") or {}).get("id")
     used = any(w.get("id") == number and w.get("windows") for w in ask("workspaces") or [])
     kind = "active" if active == number else "occupied" if used else "empty"
+    if kind == "empty" and number > ALWAYS_SHOWN:
+        return {"text": "", "class": kind}  # no text: the bar hides the module
     return {"text": ACTIVE if kind == "active" else DEFAULT, "class": kind, "tooltip": f"Workspace {number}"}
 
 
 def main() -> None:
     number = int(sys.argv[1])
     print(json.dumps(state(number)), flush=True)
-    path = f"{os.environ['XDG_RUNTIME_DIR']}/hypr/{os.environ['HYPRLAND_INSTANCE_SIGNATURE']}/.socket2.sock"
+    path = f"{SOCKETS}/.socket2.sock"
     with socket.socket(socket.AF_UNIX) as events:
         events.connect(path)
         buffer = b""

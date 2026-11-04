@@ -14,6 +14,13 @@ for f in waybar/colors/colors.css rofi/colors.rasi swaync/wallust/colors-wallust
     fi
 done
 
+# Touch mode's files, empty until it writes them. The bar and rofi import them, and a missing import loses the bar's whole
+# style: a running bar reloads its style as soon as an update changes it, so tell it to look again once they exist.
+if [[ ! -e "$cfg/waybar/tablet.css" || ! -e "$cfg/rofi/touch.rasi" ]]; then
+    touch "$cfg/waybar/tablet.css" "$cfg/rofi/touch.rasi"
+    pkill -SIGUSR2 -x waybar 2>/dev/null
+fi
+
 link="$cfg/rofi/.current_wallpaper"
 if [[ ! -e "$link" ]]; then  # missing, or a link to a file that is gone
     walls="$HOME/Pictures/wallpapers"

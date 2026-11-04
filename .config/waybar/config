@@ -217,7 +217,7 @@
 
         "group/workspaces": {
             "orientation": "horizontal",
-            "modules": ["custom/ws1", "custom/ws2", "custom/ws3"]
+            "modules": ["custom/ws1", "custom/ws2", "custom/ws3", "custom/ws4", "custom/ws5", "custom/ws6"]
         },
         "custom/ws1": {
             "exec": "~/.config/waybar/scripts/workspace_dot.py 1",
@@ -233,6 +233,21 @@
             "exec": "~/.config/waybar/scripts/workspace_dot.py 3",
             "return-type": "json",
             "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 3 })'"
+        },
+        "custom/ws4": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 4",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 4 })'"
+        },
+        "custom/ws5": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 5",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 5 })'"
+        },
+        "custom/ws6": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 6",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 6 })'"
         },
         "custom/touchmode": {
             // Empty, so hidden, unless in touch mode. hypr/tray/touch_mode.py signals it
