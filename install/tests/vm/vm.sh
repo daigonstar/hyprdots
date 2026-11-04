@@ -33,7 +33,7 @@ start() {
   # A real GPU for Hyprland needs the packages qemu-hw-display-virtio-vga-gl and qemu-ui-egl-headless; the plain card does for an install
   local graphics=(-vga std -display none)
   if [[ -e /usr/lib/qemu/hw-display-virtio-vga-gl.so && -e /usr/lib/qemu/ui-egl-headless.so ]]; then
-    graphics=(-device virtio-vga-gl -display egl-headless,gl=on)
+    graphics=(-device virtio-vga-gl -display "egl-headless,gl=on")
   fi
   qemu-system-x86_64 -machine q35 -enable-kvm -cpu host -smp 8 -m 8G -daemonize -pidfile "$dir/pid" \
     -drive "file=$dir/disk.qcow2,if=virtio" \

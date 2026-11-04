@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import shutil
@@ -339,6 +340,7 @@ class Account(unittest.TestCase):
         (self.dir / "passwd").write_text("#!/bin/sh\nsleep 30\n")
         self.assertFalse(account.change_password("old", "new", timeout=0.5)[0])
 
+    @unittest.skipUnless(importlib.util.find_spec("gi"), "needs PyGObject")
     def test_picture_is_cropped_to_a_square(self):
         import gi
         gi.require_version("GdkPixbuf", "2.0")
@@ -351,6 +353,7 @@ class Account(unittest.TestCase):
         self.assertEqual((saved.get_width(), saved.get_height()), (256, 256))
         told.assert_called_once_with("SetIconFile", str(self.dir / ".face"))
 
+    @unittest.skipUnless(importlib.util.find_spec("gi"), "needs PyGObject")
     def test_a_file_that_is_not_a_picture_is_refused_and_keeps_the_old_one(self):
         (self.dir / "notes.txt").write_text("not a picture")
         (self.dir / ".face").write_text("the old one")
