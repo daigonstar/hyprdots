@@ -175,7 +175,8 @@ def collect():
     return findings
 
 def write_report(findings):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    STATE_DIR.chmod(0o700)  # reports quote journal lines
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     if findings:
         body = "\n".join(f"[{sev.upper()}] {msg}" for sev, _, msg in findings)

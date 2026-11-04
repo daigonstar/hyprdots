@@ -1,6 +1,6 @@
 # hyprdots audit
 
-Updated: 2026-11-03. This replaces the audit of 2026-10-19; what that one found and got fixed is summarised at the end, and the full text is in git history.
+Updated: 2026-11-04. This replaces the audit of 2026-10-19; what that one found and got fixed is summarised at the end, and the full text is in git history.
 
 **The goal:** a modern, sleek, reliable desktop with features that make it stand out, on a **desktop, a laptop and a tablet PC**. This lists everything found that stands between today and that goal, in the order it matters.
 
@@ -51,8 +51,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 - **No firewall in the dots.** [checked] `ufw` is installed on this PC, but the install list does not set one up.
 - **No disk encryption path.** [checked] This PC has none, and the installer says nothing about it. It matters most on a laptop or tablet that can be lost.
-- **Hearthling data handling.** [checked] `web_fetch` and `web_search` can still send anything out with no prompt, even after reading private data. See section 7.
-- **`failures.log` and notes are readable by other users.** [checked] `~/.local/state/hypr_agent` is mode 755, its files 644, and that log can contain tool output.
+- **Hearthling data handling.** See section 7: the web check is a safeguard, not a guarantee.
 
 ## 2. Foundation for three kinds of device
 
@@ -103,7 +102,7 @@ The strongest of the three. What is left:
 - **Screens keyed by port name.** [old] Displays stores `DP-1` and `DP-2`, so swapping cables loses settings. Use the monitor's description instead.
 - **Per-screen profiles.** [gap] "Docked", "just the main screen" and "TV" layouts you can switch between, which also matters for laptops.
 - **A wake-from-sleep and game check.** [gap] Game mode, VRR and sleep have not had a dedicated stress test. Game mode no longer restarts the bar, but a video wallpaper is not restored afterwards. [checked]
-- **Boot time.** [checked] 46.5 seconds on this PC, of which 16 is firmware and **16 is the boot loader**. The loader's wait looks like the easiest win.
+- **Boot time.** [checked] 34.7 seconds on one boot: 16.4 firmware, 4.9 loader, 6.5 kernel, 6.9 userspace. The firmware is now the largest part, so the loader is no longer the easy win it looked like.
 
 ## 6. Modern and sleek
 
@@ -133,11 +132,7 @@ Things people now expect, and the finish that makes it feel designed.
 - **Colour contrast is not guaranteed.** [gap] A role can land on a colour that is hard to read. The Theme page, or the wallust step, should enforce a minimum, instead of leaving it to the wallpaper. The amber update pill is one place it could show.
 - **Video wallpapers.** [gap] From reading the script, game mode does not restore one. How the lock screen and overview look with one has not been tried.
 - **Login to desktop handover.** [gap] Plymouth, the login screen, the lock screen and the desktop should look like one continuous thing. Not checked end to end at each scale.
-- **Stale leftovers.** [checked]
-  - `.config/hypr-dock` is not used by anything, and `hypr-dock` is not installed.
-  - `*.orig` and `*.rej` files are tracked in git: `keybinds.lua.orig`, `overrides.py.orig`, `schema.py.orig`, `store.py.orig`, `tui.py.orig`, and two `.rej` files.
-  - `scripts/ai.sh`, `pywall.sh` and `rainbowb.sh` are not called from anywhere. `ai.sh` also runs a file's contents as a command.
-  - Comments naming `JaKooLit` and odd names remain in older scripts.
+- **Stale leftovers.** [checked] Comments naming `JaKooLit` and odd names remain in older scripts.
 - **README screenshots.** [checked] They need a fresh set once the look settles, and the tray, overview and window rules have none.
 - **Very large files.** [checked] `tray/quick_tray.py` is 1,204 lines and `assistant/hypr_agent.py` is 5,116. They need splitting before more goes in.
 - **Deprecated calls.** [checked] `popup_calendar.py` still uses `GLib.unix_signal_add`.
@@ -149,14 +144,11 @@ Still open unless noted. Rechecked as far as a read of the code allows.
 
 ### Hearthling
 
-- **Data can leave with no prompt.** [checked] `web_fetch` and `web_search` take free-form URLs and queries, even after the model has read something private. The most serious item here.
+- **Data leaving through the web is only partly closed.** [checked] Web calls now ask first when the query or address the model wrote is very long, or contains an email address, the home path, this PC's name, a secret, an encoded string, a long number, or a phrase from your notes, calendar, images or files in your home folder. This recognises data; it cannot prove none left. A reworded or short fact gets through, and `resolvectl query` can still carry data out in a DNS lookup without asking.
 - **Untrusted text in the prompt.** [old] Journal text and calendar titles are not marked as untrusted. `_note_from_user` can save a note with no confirmation if it has no long words, and notes persist.
-- **No timeout on calls to Ollama.** [checked] It uses `ollama.chat` with no client timeout, so a stalled server hangs it.
-- **State files readable by others.** [checked] See section 1.
 - **`setup.sh`.** [checked] The SearXNG config is created mode 0600 and may be unreadable in the container, and its image is an unpinned `:latest`. [old] `vision_model = "same"` is passed to `ollama pull`, and Ollama can be started three different ways.
 - **`agent_monitor.py`.** [checked] The report is not written atomically, a missing `notify-send` would crash it, journal output has no limit, and the service has no timeout.
 - **Small.** [checked] A double-press race in `assistant-toggle.sh` (no lock), and dead `_page_excerpt`. [old] `/tmp` fallback paths, and a timed-out command may leave child processes (`killpg` is now used on some paths, so this needs a fresh look).
-- **Mangled comment.** [checked] `self.revise_round = 0` in `hypr_agent.py` has two comments run together.
 
 ### Settings app
 
@@ -231,8 +223,8 @@ These were built this session but could not be clicked or pressed from the tools
 ## 10. Suggested order
 
 1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
-2. **Make it hard to break:** systemd services with restarts, logs, snapshots before updates, a safe `update.sh`, and a stable channel. Fix the Hearthling data item and the small open items in section 7.
-3. **Tidy up:** remove the stale files, split the large files, and refresh the README's screenshots.
+2. **Make it hard to break:** systemd services with restarts, logs, snapshots before updates, and a stable channel. Fix the small open items in section 7.
+3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
 6. **Tablet:** confirm the Surface model first, then on-screen keyboard, rotation, gestures, and touch sizes, tested on the device.
@@ -248,4 +240,5 @@ All are in git history.
 - **Assistant:** the listed command guard bypasses are closed, wrapped `sudo` always asks, secrets and browser profiles are blocked, and control characters are shown as text.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
 - **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
+- **4 November:** web calls ask first when they appear to carry private data, Hearthling's state folder and files are private to you, calls to Ollama have a timeout, and stale `.orig`/`.rej` files, `hypr-dock` and three unused scripts are gone.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

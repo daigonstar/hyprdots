@@ -47,6 +47,7 @@ import localcal
 import agent_modes
 SETTINGS = usersettings.section("assistant", {
     "model": "gpt-oss:20b",
+    "ollama_timeout": 600,       # seconds to wait on Ollama with nothing arriving, so a stalled server cannot hang the assistant
     "vision_model": "qwen2.5vl:7b",
     "keep_alive": "30s",
     "num_ctx": 16384,
@@ -70,6 +71,7 @@ SETTINGS = usersettings.section("assistant", {
     "searxng_url": "",           # your own SearXNG (e.g. http://127.0.0.1:8888); searched first when set          # check each answer against what the tools found, and send it back to verify if needed
 })
 MODEL = SETTINGS["model"]
+OLLAMA = ollama.Client(timeout=SETTINGS["ollama_timeout"])
 VISION_MODEL = (SETTINGS["vision_model"] or "").strip()
 if VISION_MODEL.lower() in ("none", "off", "false"):
     VISION_MODEL = ""
@@ -460,7 +462,7 @@ def greeting():
 def model_installed(name):
     """True/False when Ollama says whether the model is pulled; None if it can't tell."""
     try:
-        listing = ollama.list()
+        listing = OLLAMA.list()
         entries = listing["models"] if isinstance(listing, dict) else listing.models
         names = set()
         for entry in entries:
@@ -679,7 +681,7 @@ def _reasoning_chat(model, messages, tools, options, spinner):
     for think in candidates:
         view, content, thinking, calls, last = ReasoningView(), [], [], [], None
         try:
-            for chunk in ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools,
+            for chunk in OLLAMA.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools,
                                      options=options, stream=True, think=think):
                 last, piece = chunk, _get(chunk, 'message')
                 if _get(piece, 'thinking'):
@@ -723,10 +725,10 @@ def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=Fal
                     return _reasoning_chat(model, messages, tools, options, spinner)
                 extra = {} if think is None else {"think": think}
                 try:
-                    return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options, **extra)
+                    return OLLAMA.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options, **extra)
                 except ollama.ResponseError as e:
                     if extra and _rejects_think(e):  # a model that rejects the option: ask again without it
-                        return ollama.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options)
+                        return OLLAMA.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools, options=options)
                     raise
             except ollama.ResponseError as e:
                 if "repeat limit" not in str(e) or sampling is LOOP_RETRY_SAMPLING:
@@ -3838,8 +3840,21 @@ SESSION_FILE = [None]
 SESSION_REPLY_CHARS = 500
 SESSION_LOG_CHARS = 4000
 
+def _secure_state():
+    """Notes, the failure log and health reports can hold tool output, so only this user may read them."""
+    try:
+        os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+        os.chmod(STATE_DIR, 0o700)
+        for name in os.listdir(STATE_DIR):
+            path = os.path.join(STATE_DIR, name)
+            if os.path.isfile(path) and not os.path.islink(path):
+                os.chmod(path, 0o600)
+    except OSError:
+        pass
+
 def start_session():
     """Creates this session's transcript file and removes ones left behind by sessions that crashed."""
+    _secure_state()
     folder = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
     for path in glob.glob(os.path.join(folder, "hypr_agent_session_*.jsonl")):
         pid = path.rsplit("_", 1)[-1].split(".", 1)[0]
@@ -3931,6 +3946,8 @@ def _failure_hint(error, response):
     """Best-guess cause and next step for a failure."""
     text = str(error or "").lower()
     if error is not None:
+        if "timed out" in text or "timeout" in type(error).__name__.lower():
+            return f"Ollama sent nothing for {SETTINGS['ollama_timeout']} seconds. Check `ollama ps` and `journalctl -u ollama -n 30`, or raise ollama_timeout in user_settings.toml."
         if "repeat limit" in text:
             return "The model got stuck repeating itself. Rephrase or ask again; the agent already retried once with a higher temperature."
         if "connection" in text or "refused" in text or "connect" in text:
@@ -3983,7 +4000,7 @@ def describe_failure(headline, messages, user_input, response=None, error=None):
 
 # --- Loop protection and context budgeting ---
 MUTATED = [False]  # set by tools that change state, so repeating a read-only check afterwards is legitimate
-DECLINED_PREFIXES = ("Command was not run", "Not written")
+DECLINED_PREFIXES = ("Command was not run", "Not written", "Not sent")
 FAILED_PREFIXES = ("calendar_events", "date_info failed", "Tool '", "Unknown tool", "Command not found", "web_fetch failed", "web_fetch blocked",
                    "web_fetch skipped", "web_search returned no results", "news_search failed", "news_search found no", "Screenshot failed",
                    "Vision Analysis Failed", "Write failed", "Usage:", "Invalid arguments", "Rejected:")
@@ -4152,6 +4169,40 @@ def _edits(a, b, limit=2):
         prev = cur
     return prev[-1]
 
+# A command that reads something in the home folder other than config (documents, downloads, notes, mail...)
+PRIVATE_READ_RE = re.compile(r"(?:~|" + re.escape(os.path.expanduser("~")) + r"|\$HOME)/(?!\.config/|hyprdots/|\.cache/)")
+WEB_SENDERS = ("web_search", "news_search", "web_fetch")
+OUTBOUND_LIMIT = 200  # characters of query a real search does not need
+OUTBOUND_PATTERNS = [
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "an email address"),
+    (re.compile(re.escape(os.path.expanduser("~")) + r"(?:/|\b)"), "your home folder path"),
+    (re.compile(r"\b(?:sk-[A-Za-z0-9]{8,}|ghp_\w{8,}|-----BEGIN)|\b(?:password|passwd|api[_ -]?key|token)\s*[=:]", re.I), "what looks like a secret"),
+    (re.compile(r"(?<![A-Za-z0-9+])[A-Za-z0-9+]{32,}"), "a long encoded string"),
+    (re.compile(r"(?<![\d.-])\d{7,}(?![\d.-])"), "a long number"),
+]
+if os.uname().nodename.lower() not in ("localhost", "arch", "archlinux", "linux", "desktop", "laptop", "pc"):  # words people search for
+    OUTBOUND_PATTERNS.append((re.compile(r"\b" + re.escape(os.uname().nodename) + r"\b", re.I), "this PC's name"))
+PLAIN_WORDS = set("the a an and or of to in on for with is are was were be my your this that it its at by from as "
+                  "user users wants prefers will".split())
+
+def _phrases(text):
+    """Three-word runs, and capitalised pairs (names), from text: enough to recognise it inside a query."""
+    words = re.findall(r"[^\W_]+(?:'[^\W_]+)?", str(text))
+    runs = set()
+    for i in range(len(words)):
+        three = [w.lower() for w in words[i:i + 3]]
+        if len(three) == 3 and sum(w not in PLAIN_WORDS for w in three) >= 2:
+            runs.add(" ".join(three))
+        if i + 1 < len(words) and words[i][:1].isupper() and words[i + 1][:1].isupper() and words[i].lower() not in PLAIN_WORDS:
+            runs.add(" ".join(w.lower() for w in words[i:i + 2]))
+    return runs
+
+def _outbound_text(name, args):
+    """What this call would actually send out: the query, or the URL with its escapes undone."""
+    if name != "web_fetch":
+        return str(args or "")
+    return urllib.parse.unquote_plus(_parse_fetch_args(args)[0])
+
 class LoopGuard:
     """Per-request watchdog. Notices identical or useless repeated calls, enforces tool budgets and a time limit,
     stops the model going round in circles, and records what really happened so the answer can be checked."""
@@ -4186,9 +4237,10 @@ class LoopGuard:
         self.held_back = False  # a system change was held back because no docs had been read (CHECK_FIRST)
         self.figures = set()  # every number seen in the prompt, the user's message and tool results
         self.names, self.renamed = set(), []  # identifiers seen in any text, and misspelt ones corrected in the answer
+        self.exact_urls, self.private = set(), _phrases(_read_text(MEMORY_FILE))  # links seen verbatim; phrases from private sources
         self.env_known, self.env_dropped = set(), []  # environment variable names seen in any text, and ones cut from the answer
         self.docs_round, self.docs_at_start = 0, len(RESEARCH["docs"])
-        self.revise_round = 0  # one round to fix what the checks found in a draft  # one extra round to check suggested systemd settings
+        self.revise_round = 0  # one round to fix what the checks found in a draft
         self.cut_commands, self.unit_problems = [], []
 
     @staticmethod
@@ -4203,6 +4255,7 @@ class LoopGuard:
         self.figures.update(float(n) for n in NUMBER_RE.findall(text.replace(",", "")) if len(n) < 15)
         for url in URL_RE.findall(text):
             self.known.add(_norm_url(url))
+            self.exact_urls.add(url.rstrip(".,;:!?*)]}>\"'`"))
         if bare:
             for domain in BARE_DOMAIN_RE.findall(text):
                 self.known.add(_norm_url(domain))
@@ -4316,6 +4369,33 @@ class LoopGuard:
             return True
         return False
 
+    def note_private(self, name, args, observation):
+        """Remembers what came from the user's own data, so it can be recognised if the model tries to send it out."""
+        if name in ("calendar_events", "screenshot_analysis", "ask_about_image") or \
+                (name == "run_command" and PRIVATE_READ_RE.search(str(args))):
+            self.private |= _phrases(observation)
+
+    def outbound_concern(self, name, args):
+        """Why a web call looks like it carries private data, or "" if it does not. The model has read notes, files and
+        calendars by now, and web content can ask it to pass them on, so a query or address it wrote itself is checked.
+        A link copied word for word from a page or the user's message cannot carry anything new."""
+        text = _outbound_text(name, args)
+        if name == "web_fetch" and _parse_fetch_args(args)[0] in self.exact_urls:
+            return ""
+        request = CURRENT_USER_TEXT[0] or ""
+        if len(text) > OUTBOUND_LIMIT and text not in request:
+            return f"it is unusually long ({len(text)} characters)"
+        for pattern, label in OUTBOUND_PATTERNS:
+            found = pattern.search(text)
+            if found and found.group(0) not in request:
+                return f"it contains {label}"
+        # A short message is the user's own words to search for; a long one may be a pasted file
+        said = _phrases(request) if len(request) < 1000 else set()
+        leaked = (_phrases(text) & self.private) - said
+        if leaked:
+            return f'it contains "{sorted(leaked)[0]}", from your notes or files'
+        return ""
+
     def before(self, name, args):
         """Returns a replacement observation if this call must not be executed, else None."""
         if MUTATED[0]:
@@ -4342,10 +4422,19 @@ class LoopGuard:
                 self.reason = f"{name} was requested again and again after its limit of {cap} per request was used up."
             return (f"BUDGET REACHED: {name} has already been used {cap} times for this request. Do not call it again. "
                     "Answer from what you have and say plainly what you could not confirm.")
+        if name in WEB_SENDERS:
+            concern = self.outbound_concern(name, args)
+            if concern:
+                sent = _outbound_text(name, args)
+                # sensitive: /allow does not skip this one
+                if not _confirm(f"Send this to the web? {_visible(sent[:300])} ({concern})", sensitive=True):
+                    return self.after(name, args, f"Not sent: {concern}, and the user did not approve sending it. Use general terms with nothing personal in them.")
+                self.private -= _phrases(sent)  # approved: do not ask again about the same words this request
         return None
 
     def after(self, name, args, observation):
         _note_research(name, args, observation)
+        self.note_private(name, args, observation)
         self.seen[self._key(name, args)] = observation
         self.counts[name] = self.counts.get(name, 0) + 1
         self.note_text(observation)
@@ -4861,7 +4950,7 @@ def _process(messages, user_input, guard=None):
 def ensure_ollama_running():
     """Starts 'ollama serve' in the background if the server isn't reachable."""
     try:
-        ollama.list()
+        OLLAMA.list()
         return True
     except Exception:
         pass
@@ -4873,7 +4962,7 @@ def ensure_ollama_running():
     for _ in range(20):
         time.sleep(0.5)
         try:
-            ollama.list()
+            OLLAMA.list()
             return True
         except Exception:
             continue
