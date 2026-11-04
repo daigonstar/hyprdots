@@ -145,8 +145,54 @@ class Following(unittest.TestCase):
         p.feed("::items nonsense")
         p.feed("::step nothing-we-know")
 
+    def test_the_log_keeps_the_whole_run(self):
+        p = tui.Progress()
+        for i in range(500):
+            p.feed(f"line {i}")
+        self.assertEqual(len(p.tail), 500)
+        self.assertEqual(p.tail[0], "line 0")
+
     def test_wrap(self):
         self.assertEqual(tui.wrap("one two three", 7), ["one two", "three"])
+
+
+class LogViewing(unittest.TestCase):
+    def setUp(self):
+        self.lines = [f"line {i}" for i in range(100)]
+        self.view = tui.LogView(self.lines)
+
+    def test_opens_on_the_newest_and_follows(self):
+        self.assertEqual(self.view.visible(10)[1][-1], "line 99")
+        self.lines.append("line 100")
+        self.assertEqual(self.view.visible(10)[1][-1], "line 100")
+
+    def test_scrolling_up_stops_following(self):
+        self.view.press("pageup", 10)
+        first, shown = self.view.visible(10)
+        self.assertEqual(first, 80)
+        self.lines.append("new")
+        self.assertEqual(self.view.visible(10)[0], 80)
+
+    def test_returning_to_the_end_follows_again(self):
+        self.view.press("up", 10)
+        self.view.press("end", 10)
+        self.lines.append("new")
+        self.assertEqual(self.view.visible(10)[1][-1], "new")
+
+    def test_stays_in_bounds(self):
+        self.view.press("home", 10)
+        self.assertEqual(self.view.visible(10)[0], 0)
+        self.view.press("up", 10)
+        self.assertEqual(self.view.visible(10)[0], 0)
+        for _ in range(50):
+            self.view.press("pagedown", 10)
+        self.assertEqual(self.view.visible(10)[0], 90)
+        self.view.press("left", 10)
+        self.assertEqual(self.view.left, 0)
+
+    def test_short_and_empty_logs(self):
+        self.assertEqual(tui.LogView([]).visible(10), (0, []))
+        self.assertEqual(tui.LogView(["a"]).visible(10), (0, ["a"]))
 
 
 class Terminal:
@@ -255,6 +301,37 @@ class RealRun(unittest.TestCase):
         self.assertIn("--set-keyboard", log)
         self.assertNotIn("[ERROR]", log)
         self.assertFalse((Path(self.home) / ".local/state/hyprdots/apps").exists(), "a preview must not save choices")
+
+    def finish_preview(self, term):
+        term.wait_for("PREVIEW")
+        while "Ready to install" not in term.text():
+            term.keys(ENTER)
+            term.pump(0.1)
+        term.keys(ENTER)
+
+    def test_the_log_opens_scrolls_and_returns_during_and_after_a_run(self):
+        term = self.start("--dry-run")
+        self.finish_preview(term)
+        term.keys("l")
+        term.wait_for("Log of this run")
+        term.keys("g", "G", "\x1bOA")
+        term.keys("l")  # back to the progress screen, while it is still going or just finished
+        term.wait_for("only a preview", timeout=120)
+        marker = len(term.text())
+        term.keys("l")
+        term.pump(0.3)
+        shown = term.text()[marker:]
+        self.assertIn("Log of this run", shown)
+        self.assertIn("finished", shown)
+        self.assertIn("line", shown)
+        term.keys("g")
+        term.pump(0.3)
+        self.assertIn("Starting hyprinstall", term.text()[marker:], "Home goes to the start of this run")
+        marker = len(term.text())
+        term.keys("\x1b")
+        term.pump(0.3)
+        term.keys(ENTER)
+        term.wait_for("Finished")
 
     def test_quitting_changes_nothing(self):
         term = self.start("--dry-run")

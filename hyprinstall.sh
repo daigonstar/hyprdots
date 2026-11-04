@@ -103,7 +103,11 @@ if [[ $st -eq 0 ]]; then
 else
     log "FAIL" "$cmd (exit $st)"
     log "FAIL" "Command output (first 200 lines):"
-    sed -n '1,200p' "$out" | sed "s/^/    /" >> "$LOGFILE"
+    if [[ -n "${HYPRINSTALL_TUI:-}" ]]; then
+        sed -n '1,200p' "$out" | sed "s/^/    /" | tee -a "$LOGFILE"  # so the interface's log view shows why it failed
+    else
+        sed -n '1,200p' "$out" | sed "s/^/    /" >> "$LOGFILE"
+    fi
     rm -f "$out"
     return $st
 fi

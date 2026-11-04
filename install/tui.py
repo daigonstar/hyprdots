@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INSTALLER = os.path.join(HERE, "..", "hyprinstall.sh")
 LOG = os.path.expanduser("~/.local/share/hyprinstall/hyprinstall.log")
 MIN_W, MIN_H = 60, 20
+KEEP_LINES = 50000  # of this run's output, for the log view
 
 LAYOUTS = (("us", "English (US)"), ("gb", "English (UK)"), ("de", "German"), ("fr", "French"), ("es", "Spanish"), ("it", "Italian"),
            ("pt", "Portuguese"), ("br", "Portuguese (Brazil)"), ("nl", "Dutch"), ("se", "Swedish"), ("no", "Norwegian"), ("dk", "Danish"),
@@ -266,7 +267,8 @@ class Progress:
             return
         if "[WARN]" in line or line.startswith("WARN"):
             self.warnings.append(line.split("[WARN]")[-1].strip())
-        self.tail = (self.tail + [line])[-200:]
+        self.tail.append(line)
+        del self.tail[:-KEEP_LINES]
 
     def fraction(self):
         """How far along, weighted by how long each stage tends to take. Stages that are skipped count as done."""
@@ -287,6 +289,37 @@ class Progress:
     def elapsed(self):
         seconds = int(time.monotonic() - self.started)
         return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+class LogView:
+    """Scrolling through this run's output. It stays on the newest line until you scroll away, and follows again when you
+    return to the end. Reads the same list the install keeps adding to, so the install carries on while you look."""
+
+    def __init__(self, lines):
+        self.lines, self.top, self.left, self.follow = lines, 0, 0, True
+
+    def press(self, key, height):
+        last = max(0, len(self.lines) - height)
+        if self.follow:
+            self.top = last
+        moves = {"up": -1, "down": 1, "pageup": -height, "pagedown": height}
+        if key in moves:
+            self.top = max(0, min(last, self.top + moves[key]))
+        elif key == "home":
+            self.top = 0
+        elif key == "end":
+            self.top = last
+        elif key == "left":
+            self.left = max(0, self.left - 20)
+        elif key == "right":
+            self.left += 20
+        self.follow = self.top >= last
+
+    def visible(self, height):
+        """(index of the first line shown, the lines)."""
+        last = max(0, len(self.lines) - height)
+        self.top = last if self.follow else min(self.top, last)
+        return self.top, self.lines[self.top:self.top + height]
 
 
 def run_installer(wizard, args):
@@ -318,7 +351,7 @@ class Screen:
         self.rows = {}  # screen line -> option index, for the mouse
         curses.curs_set(0)
         stdscr.keypad(True)
-        curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_PRESSED)
+        curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_PRESSED | curses.BUTTON4_PRESSED | curses.BUTTON5_PRESSED)
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
@@ -407,6 +440,30 @@ class Screen:
         if about:
             self.put(h - 4, 3, wrap(about, self.s.getmaxyx()[1] - 6)[0], curses.A_DIM)
 
+    def log_view(self, view, prog, finished):
+        if self.too_small():
+            return
+        h, w = self.s.getmaxyx()
+        height = self.log_height()
+        first, lines = view.visible(height)
+        state = "still running" if finished is None else "finished" if finished == 0 else "stopped"
+        where = f"line {first + len(lines)} of {len(view.lines)}" if view.lines else "nothing yet"
+        self.frame("Log of this run", f"{where}  ({state})",
+                   "Up/Down PgUp/PgDn scroll   Home/End jump   Left/Right sideways   l or Esc back")
+        for row, line in enumerate(lines):
+            attr = curses.A_NORMAL
+            if "[ERROR]" in line or "[FAIL]" in line:
+                attr = curses.color_pair(BAD) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+            elif "[WARN]" in line:
+                attr = curses.A_BOLD
+            self.put(5 + row, 2, line[view.left:view.left + w - 4], attr)
+        if not lines:
+            self.put(5, 2, "Nothing has been printed yet.", curses.A_DIM)
+        self.s.refresh()
+
+    def log_height(self):
+        return max(1, self.s.getmaxyx()[0] - 7)
+
     def progress(self, prog, finished=None, dry_run=False, confirm=False):
         if self.too_small():
             return
@@ -434,13 +491,13 @@ class Screen:
             message = ["Nothing was changed: that was only a preview."] if dry_run else \
                 ["The desktop is installed. Log in through the login screen to start it.", "A first-run welcome will show you around."]
             if prog.warnings:
-                message.append(f"{len(prog.warnings)} thing(s) need a look: press l to read them.")
+                message.append(f"{len(prog.warnings)} thing(s) need a look: press l to read the log.")
             for line in message:
                 self.put(y, 3, line, curses.color_pair(GOOD) if curses.has_colors() else 0)
                 y += 1
             y += 1
         elif finished:
-            self.put(y, 3, f"Something went wrong (code {finished}). The last lines are below, and the whole story is in:", curses.color_pair(BAD) if curses.has_colors() else 0)
+            self.put(y, 3, f"Something went wrong (code {finished}). Press l to read the whole log. It is also saved in:", curses.color_pair(BAD) if curses.has_colors() else 0)
             self.put(y + 1, 3, LOG)
             self.put(y + 2, 3, "Running ./hyprinstall.sh again is safe: it carries on past what is already done.")
             y += 4
@@ -476,16 +533,21 @@ def ask(screen, wiz):
             return result
 
 
-def show_log():
-    """less on the whole screen, then back to the interface."""
-    curses.def_prog_mode()
-    curses.endwin()
-    subprocess.run(["less", "+G", LOG], check=False) if shutil_which("less") else subprocess.run(["tail", "-n", "40", LOG], check=False)
-    curses.reset_prog_mode()
+LOG_KEYS = {curses.KEY_UP: "up", ord("k"): "up", curses.KEY_DOWN: "down", ord("j"): "down", curses.KEY_PPAGE: "pageup", curses.KEY_NPAGE: "pagedown",
+            ord(" "): "pagedown", curses.KEY_HOME: "home", ord("g"): "home", curses.KEY_END: "end", ord("G"): "end", curses.KEY_LEFT: "left", curses.KEY_RIGHT: "right"}
 
 
-def shutil_which(name):
-    return any(os.access(os.path.join(p, name), os.X_OK) for p in os.environ.get("PATH", "").split(":"))
+def wheel(view, height):
+    """A mouse wheel on the log."""
+    try:
+        state = curses.getmouse()[4]
+    except curses.error:
+        return
+    for _ in range(3):
+        if state & curses.BUTTON4_PRESSED:
+            view.press("up", height)
+        elif state & curses.BUTTON5_PRESSED:
+            view.press("down", height)
 
 
 def follow(screen, wiz, args):
@@ -495,7 +557,7 @@ def follow(screen, wiz, args):
     stream = child.stdout.fileno()
     os.set_blocking(stream, False)
     screen.s.timeout(100)
-    buffer, confirm, code = b"", False, None
+    buffer, confirm, code, view = b"", False, None, None
     while True:
         if code is None:
             # Ask whether it has ended before reading, so that this read gets the last of its output. Do not wait for the
@@ -512,10 +574,20 @@ def follow(screen, wiz, args):
             if ended is not None and not data:
                 code = ended
                 prog.feed(buffer.decode("utf-8", "replace"))
+        if view:
+            screen.log_view(view, prog, code)
+            key = screen.s.getch()
+            if key in (ord("l"), ord("q"), 27, 10, 13, curses.KEY_ENTER):
+                view = None
+            elif key == curses.KEY_MOUSE:
+                wheel(view, screen.log_height())
+            elif key in LOG_KEYS:
+                view.press(LOG_KEYS[key], screen.log_height())
+            continue
         screen.progress(prog, code, wiz.dry_run, confirm)
         key = screen.s.getch()
         if key == ord("l"):
-            show_log()
+            view, confirm = LogView(prog.tail), False
         elif code is None and confirm:
             confirm = False
             if key == ord("y"):
