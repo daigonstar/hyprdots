@@ -34,7 +34,7 @@ class SavedLayouts(unittest.TestCase):
             path = Path(tmp) / "layout.json"
             path.write_text(json.dumps({"modules-center": ["hyprland/window", "hyprland/workspaces"]}))
             with mock.patch.object(barlayout, "layout_path", return_value=path):
-                layout = barlayout.read_layout(barlayout.read_config())
+                layout = barlayout.read_layout({"hyprland/window": {}, "hyprland/workspaces": {}, "group/workspaces": {}})
         self.assertEqual(layout["modules-center"], ["hyprland/window", "group/workspaces"])
 
 
