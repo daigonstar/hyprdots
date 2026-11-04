@@ -67,6 +67,8 @@ fi
 # The on-screen keyboard's layouts, with Super and Ctrl for desktop shortcuts
 mkdir -p "$HOME/.local/share/squeekboard/keyboards"
 cp "$BASE_DIR"/squeekboard/*.yaml "$HOME/.local/share/squeekboard/keyboards/"
+gtk_css="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/gtk.css"
+grep -qs 'sq_button.gap-s' "$gtk_css" || { mkdir -p "$(dirname "$gtk_css")"; cat "$BASE_DIR/squeekboard/gtk.css" >> "$gtk_css"; }
 
 # The power button sleeps rather than shuts down
 LOGIND_CONF=/etc/systemd/logind.conf.d/hyprdots-surface.conf
@@ -74,6 +76,18 @@ if ! cmp -s "$BASE_DIR/logind-surface.conf" "$LOGIND_CONF"; then
     echo "Making the power button sleep"
     sudo install -Dm644 "$BASE_DIR/logind-surface.conf" "$LOGIND_CONF" && sudo systemctl kill -s HUP systemd-logind ||
         echo "Warning: could not install $LOGIND_CONF." >&2
+fi
+
+# This driver refuses iwd's roaming ("already connected"), which drops the connection, and scans then fail until a reboot
+IWD_CONF=/etc/iwd/main.conf
+if has_marvell_wifi && ! grep -qs '^DisableRoamingScan=true' "$IWD_CONF"; then
+    if grep -qs '^\[Scan\]' "$IWD_CONF"; then
+        echo "Warning: add DisableRoamingScan=true under [Scan] in $IWD_CONF, for this Wi-Fi to stay connected." >&2
+    else
+        echo "Stopping the Wi-Fi from roaming, which this driver cannot do"
+        printf '\n[Scan]\nDisableRoamingScan=true\n' | sudo tee -a "$IWD_CONF" >/dev/null && sudo systemctl try-restart iwd.service ||
+            echo "Warning: could not update $IWD_CONF." >&2
+    fi
 fi
 
 if has_marvell_wifi && ! cmp -s "$BASE_DIR/mwifiex-sleep" "$SLEEP_HOOK"; then

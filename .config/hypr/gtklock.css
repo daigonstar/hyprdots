@@ -50,45 +50,47 @@ window {
     color: #ff8a8a;
 }
 
-/* The on-screen keyboard (install/gtklock-keyboard.c): keys big enough for a finger */
+/* The on-screen keyboard (install/gtklock-keyboard.c): the same colours and sizes as the desktop's and the login screen's */
 #keyboard-panel {
-    margin-bottom: 16px;
     padding: 12px;
-    border-radius: 16px;
-    background-color: rgba(0, 0, 0, 0.72);
+    background-color: #1b1d1d;
 }
 
 #keyboard-panel button {
-    min-height: 64px;
+    min-height: 66px;
+    padding: 0;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     box-shadow: none;
     background-image: none;
-    background-color: rgba(255, 255, 255, 0.14);
-    color: rgba(255, 255, 255, 0.93);
-    font-size: 24px;
+    background-color: #292c2c;
+    color: #E4F5F6;
+    font-size: 26px;
 }
 
 #keyboard-panel button:active {
-    background-color: rgba(255, 255, 255, 0.4);
+    background-color: #5c6060;
 }
 
 #keyboard-key {
-    min-width: 64px;
-    padding: 0;
+    min-width: 78px;
 }
 
 #keyboard-function {
+    min-width: 117px;
+    background-color: #3a3e3e;
+    font-size: 20px;
+}
+
+#keyboard-space {
     min-width: 96px;
-    background-color: rgba(255, 255, 255, 0.08);
-    font-size: 18px;
 }
 
 #keyboard-enter {
-    min-width: 128px;
-    background-color: rgba(112, 207, 179, 0.8);
+    min-width: 117px;
+    background-color: #70CFB3;
     color: black;
-    font-size: 18px;
+    font-size: 20px;
 }
 
 #keyboard-toggle {

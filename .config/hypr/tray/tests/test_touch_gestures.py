@@ -134,26 +134,6 @@ class Reader(unittest.TestCase):
         self.assertEqual((reader.width, reader.height), (1152, 1728))
 
 
-class AppsTouch(unittest.TestCase):
-    def test_apps_lose_touch_only_while_two_fingers_are_down(self):
-        g = tg.Gestures(lambda *a: None)
-        g.apps_touch = mock.Mock()
-        g.down(0, 1, 1, 0.0)
-        g.apps_touch.assert_not_called()
-        g.down(1, 2, 2, 0.0)
-        g.apps_touch.assert_called_once_with(False)
-        g.up(0)
-        g.up(1)
-        g.apps_touch.assert_called_with(True)
-
-    def test_one_finger_never_touches_it(self):
-        g = tg.Gestures(lambda *a: None)
-        g.apps_touch = mock.Mock()
-        g.down(0, 1, 1, 0.0)
-        g.up(0)
-        g.apps_touch.assert_not_called()
-
-
 class LostEvents(unittest.TestCase):
     def setUp(self):
         self.done = []

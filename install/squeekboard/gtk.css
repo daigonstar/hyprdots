@@ -1,0 +1,2 @@
+/* hyprdots: the gaps in the on-screen keyboard's split layout. install/surface.sh adds this to ~/.config/gtk-3.0/gtk.css */
+sq_button.gap, sq_button.gap-s { background: transparent; box-shadow: none; }

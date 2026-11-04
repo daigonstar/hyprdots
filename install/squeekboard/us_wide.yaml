@@ -1,38 +1,43 @@
 # Language: English (US)
-# Squeekboard's own layout, with an Arch logo Super key and Ctrl in place of its layout button, and Esc and Tab with the
-# numbers: desktop shortcuts need them. install/surface.sh copies this to ~/.local/share/squeekboard/keyboards.
+# The same layout as the lock screen (install/gtklock-keyboard.c) and the login screen (SDDM/sugar-dark/Components/TouchKeys.qml):
+# install/tests/test_keyboards.py checks they agree. Split in two for the thumbs, on a wide screen.
+# Squeekboard's own, with an Arch logo Super key and Ctrl in place of its layout button, and Esc and Tab with the numbers.
+# install/surface.sh copies this to ~/.local/share/squeekboard/keyboards.
 ---
 outlines:
     default:       { width: 53.76,  height: 42 }
     change-view:   { width: 80.64,  height: 42 }
     change-view-2: { width: 94.08,  height: 42 }
     large:         { width: 53.76,  height: 42 }
-    spaceline:     { width: 188.16, height: 42 }
+    spaceline:     { width: 94.08, height: 42 }
+    spaceline2:    { width: 148.0, height: 42 }
     special:       { width: 53.76,  height: 42 }
     special-2:     { width: 80.64,  height: 42 }
     special-3:     { width: 94.08,  height: 42 }
+    gap:           { width: 600,    height: 42 }
+    gap-s:         { width: 192.48, height: 42 }
 
 views:
     base:
-        - "q w e r t y u i o p"
-        - "a s d f g h j k l"
-        - "show_upper z x c v b n m BackSpace"
-        - "show_numbers super ctrl space . Return"
+        - "q w e r t gap y u i o p"
+        - "a s d f g gap h j k l '"
+        - "show_upper z x c v gap b n m , BackSpace"
+        - "show_numbers super ctrl space gap-s left up down right gap-s space2 . Return"
     upper:
-        - "Q W E R T Y U I O P"
-        - "A S D F G H J K L"
-        - "show_upper Z X C V B N M BackSpace"
-        - "show_numbers super ctrl space . Return"
+        - "Q W E R T gap Y U I O P"
+        - "A S D F G gap H J K L '"
+        - "show_upper Z X C V gap B N M , BackSpace"
+        - "show_numbers super ctrl space gap-s left up down right gap-s space2 . Return"
     numbers:
-        - "1 2 3 4 5 6 7 8 9 0"
-        - "esc @ # $ % & - _ + ( ) tab"
-        - "show_symbols , \" ' : ; ! ? BackSpace"
-        - "show_letters super ctrl space . Return"
+        - "1 2 3 4 5 gap 6 7 8 9 0"
+        - "@ # $ % & gap - _ + ( )"
+        - "show_symbols , \" ' : gap ; ! ? / BackSpace"
+        - "show_letters esc tab space gap-s left up down right gap-s space2 . Return"
     symbols:
-        - "~ ` | · √ π τ ÷ × ¶"
-        - "© ® £ € ¥ ^ ° * { }"
-        - "show_numbers_from_symbols \\ / < > = [ ] BackSpace"
-        - "show_letters super ctrl space . Return"
+        - "~ ` | · √ gap π τ ÷ × ¶"
+        - "© ® £ € ¥ gap ^ ° * { }"
+        - "show_numbers_from_symbols \\ / < > gap = [ ] ¬ BackSpace"
+        - "show_letters esc tab space gap-s left up down right gap-s space2 . Return"
 
 buttons:
     show_upper:
@@ -87,6 +92,31 @@ buttons:
     space:
         outline: "spaceline"
         text: " "
+    space2:
+        outline: "spaceline2"
+        text: " "
+    gap:
+        outline: "gap"
+        text: ""
+    gap-s:
+        outline: "gap-s"
+        text: ""
+    left:
+        keysym: "Left"
+        outline: "special"
+        label: "←"
+    up:
+        keysym: "Up"
+        outline: "special"
+        label: "↑"
+    down:
+        keysym: "Down"
+        outline: "special"
+        label: "↓"
+    right:
+        keysym: "Right"
+        outline: "special"
+        label: "→"
     Return:
         outline: "special-3"
         icon: "key-enter"

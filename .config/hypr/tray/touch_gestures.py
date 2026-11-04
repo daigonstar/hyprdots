@@ -1,8 +1,7 @@
 """Touchscreen gestures, for tablet_mode.py (Hyprland's own gestures are for touchpads). Swipe up from the bottom edge for the
 launcher; two fingers across to change workspace; hold a window with two fingers to pick it up, and let go on the bin that
 appears to close it (touch_lift.py). The hold is what tells that last one from zooming or scrolling.
-One finger still reaches the app as well, as this only listens. Two fingers belong to the desktop: while they are down Hyprland
-stops passing touches on, or apps would open a right-click menu for the hold. install/70-hyprdots-touchscreen.rules lets your session read the
+Only listens: touches still reach the app as well. install/70-hyprdots-touchscreen.rules lets your session read the
 touchscreen and nothing else, so no program needs the input group, which could read every key you press."""
 import fcntl
 import json
@@ -39,7 +38,6 @@ number of "carry" and a "drop", each with where the fingers are."""
 
     def __init__(self, act):
         self.act = act
-        self.apps_touch = lambda on: None  # whether apps get touches: replaced by open_touchscreen
         self.height = 0.0
         self.bar = BAR_DEFAULT
         self.fingers: dict[int, tuple[float, float]] = {}
@@ -61,8 +59,6 @@ number of "carry" and a "drop", each with where the fingers are."""
         for other, where in self.fingers.items():  # measured from when the last finger lands: the first may have shifted by then
             self.begun[other] = where
         self.resting_since = now
-        if len(self.fingers) == 2:
-            self.apps_touch(False)
         self.most = max(self.most, len(self.fingers))
 
     def move(self, slot: int, x: float, y: float) -> None:
@@ -76,8 +72,6 @@ number of "carry" and a "drop", each with where the fingers are."""
         self.fingers.pop(slot, None)
         if self.fingers:
             return
-        if self.most >= 2:
-            self.apps_touch(True)
         if self.carrying:
             self.carrying = False
             self.done = True
@@ -149,14 +143,6 @@ def built_in(monitors) -> dict | None:
 
 
 launcher_opened = [-LAUNCHER_WAIT]
-
-
-def set_apps_touch(on: bool) -> None:
-    """Whether Hyprland passes touches on to apps. This reads the device itself, so it carries on seeing them either way."""
-    names = [d["name"] for d in (hypr_json("devices") or {}).get("touch", [])]
-    for name in names:
-        subprocess.Popen(["hyprctl", "eval", f'hl.device({{ name = "{name}", enabled = {"true" if on else "false"} }})'],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def perform(action: str) -> None:
@@ -274,8 +260,6 @@ def open_touchscreen() -> tuple[int, TouchReader] | None:
         return None
     reader = TouchReader(Gestures(perform), axis_range(fd, ABS_MT_POSITION_X), axis_range(fd, ABS_MT_POSITION_Y))
     reader.slots_down = lambda: slots_down(fd)
-    reader.gestures.apps_touch = set_apps_touch
-    set_apps_touch(True)  # in case the last run ended with two fingers down
     return fd, reader
 
 

@@ -362,7 +362,6 @@ def main() -> int:
     finally:
         if sensor:
             sensor.terminate()
-        touch_gestures.set_apps_touch(True)
         mode.stop()
     return 0
 
