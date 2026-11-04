@@ -83,7 +83,7 @@ Add more any time with `install/apps.sh`. To answer ahead of time, use `HYPR_APP
 
 #### Updating
 
-New installs follow the `stable` branch, which only moves once a version has passed its tests; `main` is the newest and may break. The branch you follow is kept in `.update-branch`, so change or delete that file to switch. Each update lists what changed, and keeps the list in `~/.local/state/hyprdots/last-update.txt`.
+Each update lists what changed, and keeps the list in `~/.local/state/hyprdots/last-update.txt`. Everything follows `main` for now; a tested `stable` branch is planned from version 1.0.
 
 `update.sh` (or `hyprupdate`) leaves your settings alone. Everything the settings app saves is in local files git ignores, and those are never touched, along with any files you added yourself. If you edited a shipped file by hand, your edit is put back on top of the update. If it clashes with the update, the new version goes in and yours is saved in `~/.local/state/hyprdots/update-backups/`, with a notification. If you have commits that are not pushed, the update stops and changes nothing. Updates only add packages the desktop itself needs, never the optional apps.
 

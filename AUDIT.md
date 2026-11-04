@@ -20,7 +20,7 @@ These are judgement calls, not measurements.
 | | Today | What is missing most |
 |---|---|---|
 | **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
-| **Fresh install on another PC** | About 75% | A real install has never been run |
+| **Fresh install on another PC** | About 85% | Passes in a virtual machine with default answers; real graphics drivers tested by hand only |
 | **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
 | **Tablet** | About 15% | No on-screen keyboard, rotation or touch gestures, and much of the desktop assumes a keyboard or a hover |
 
@@ -30,7 +30,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 ### Nothing has been proven on a blank machine
 
-- **No real install has ever been run.** [checked] CI and the local check are dry runs, which print what they would do. A real run in a virtual machine is the most useful next test, and it should become a repeatable one.
+- **A real install now passes in a virtual machine.** [checked] `install/tests/vm/vm.sh test` takes a blank Arch disk through the full-screen installer, a reboot, two logins and checks, in about 15 minutes. First passed on 4 November, after fixing what only a blank machine shows: `pipewire-jack` stopping the install, Flathub setup failing without `sudo`, no wallpaper at first login, no Python for the installer, and `makepkg` asking for the password again (it runs `sudo -k`). It covers the default answers only, with no extra apps, no assistant and a plain virtual card, so real graphics drivers and bare metal are still untested. It needs KVM, so it does not run in CI.
 - **Nothing tests the desktop itself.** [gap] CI runs unit tests and a dry run. Nothing starts Hyprland, the bar or the tray, and this session's bugs (Dismiss could not be clicked, Alt+Tab crashed on some apps, a bad rule option) were all of the kind that only a real run finds. A headless Hyprland in CI could at least catch config errors and start-up crashes.
 - **Hand checks are outstanding.** [checked] See the list near the end.
 
@@ -43,7 +43,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 ### Updates and bad changes have no way back
 
 - **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
-- **Stable channel is built, not switched on.** [checked] New installs follow `stable` once it exists, and `install/promote.sh` moves it forward only on a version CI has passed. Each update lists what changed. Installs without a saved choice stay on `main` until they pick from the menu. CI cannot see the desktop, so a promotion still depends on someone using that version first.
+- **Stable channel waits for 1.0.** [checked] Decided 4 November: no branches until there is a good 1.0, so everything follows `main` until then. The support is in and stays dormant: with no `stable` branch there is no menu and nothing is saved. Running `install/promote.sh` creates the branch and switches it on for new installs. Each update already lists what changed.
 - **Safe mode is in, with gaps.** [checked] A Lua file that fails to load now falls back to its last working copy (`hypr/safe_config.lua`), with emergency keys if the keybinds have no copy, and Settings checks the config before reloading. Tested in a nested Hyprland, not yet through a real broken login. Not covered: a mistake in `hyprland.lua` or `safe_config.lua` themselves, a file that loads but does the wrong thing, and `autostart.lua` failing after it has registered its start-up, which would start things twice.
 
 ### Hardening
@@ -221,7 +221,7 @@ These were built this session but could not be clicked or pressed from the tools
 
 ## 10. Suggested order
 
-1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
+1. **Prove it works:** run the hand checks.
 2. **Make it hard to break:** snapshots before updates. Fix the small open items in section 7.
 3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
@@ -240,6 +240,7 @@ All are in git history.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
 - **Installer password, 4 November:** the full-screen installer asks for your password in an overlay whenever sudo needs it, including from `makepkg` and `paru`.
 - **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
+- **Settings and drivers, 4 November:** a User page in Settings for your name, picture and password, with the picture on the quick tray and lock screen. A graphics card with no drivers is now noticed at login and in `update.sh`.
 - **Popups and icons, 4 November:** a click outside closes popups and hides toasts (`hypr/click_away.lua`; touchscreen taps do not trigger it). Icons are centred by using the Nerd Font's Propo cut.
 - **4 November:** web calls ask first when they appear to carry private data, Hearthling's state folder and files are private to you, calls to Ollama have a timeout, and stale `.orig`/`.rej` files, `hypr-dock` and three unused scripts are gone.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

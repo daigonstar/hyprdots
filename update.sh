@@ -4,7 +4,7 @@ set -euo pipefail
 # update.sh
 # Brings this repository up to date and leaves your settings and files alone.
 # Usage: ./update.sh [remote] [branch]
-# - Defaults: remote 'origin', branch 'main'. New installs follow 'stable', which only moves when install/promote.sh
+# - Defaults: remote 'origin', branch 'main'. Once a 'stable' branch exists new installs follow it; it only moves when install/promote.sh
 #   passes on a version that CI has passed. The branch you pick is kept in .update-branch.
 # Behavior:
 # - Fetches the remote first; nothing is touched if that fails.
@@ -118,7 +118,8 @@ main() {
     branch="$(<"$repo_root/.update-branch")"
   fi
   # If not provided, offer an interactive menu when running in a terminal
-  if [[ -z "$branch" && -t 0 ]]; then
+  # (only once there is a stable branch to choose: picking it before then would break every later update)
+  if [[ -z "$branch" && -t 0 ]] && git ls-remote --exit-code --heads "$remote" stable >/dev/null 2>&1; then
     echo "Which version do you want to follow?"
     echo "  1) stable: tested first (recommended)"
     echo "  2) main: the newest, and may break"
@@ -227,11 +228,26 @@ main() {
 
   install_new_packages
   apply_symlinks
+  install_missing_gpu_drivers
   "$HOME/.config/hypr/scripts/first-colours.sh" || true
   # Re-apply the settings Theme page to the files the reset just put back (best-effort)
   PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh || true
   show_changes "$before"
   exit 0
+}
+
+# A graphics card without its drivers: offered in a terminal, otherwise only mentioned
+install_missing_gpu_drivers() {
+  [[ "${SKIP_PACKAGES:-0}" == "1" ]] && return 0
+  local vendor answer pkgs=()
+  while IFS= read -r vendor; do
+    [[ -n "$vendor" ]] && mapfile -t -O "${#pkgs[@]}" pkgs < <(sed 's/#.*//; /^[[:space:]]*$/d' "$repo_root/install/gpu-$vendor.txt")
+  done < <("$repo_root/.config/hypr/scripts/gpu-check.sh")
+  (( ${#pkgs[@]} > 0 )) || return 0
+  echo "This PC's graphics drivers are not installed: ${pkgs[*]}"
+  [[ -t 0 ]] || return 0
+  read -rp "Install them now? [Y/n] " answer || return 0
+  [[ "$answer" == [nN]* ]] || sudo pacman -S --needed --noconfirm "${pkgs[@]}" || echo "Could not install them. See the error above." >&2
 }
 
 # What this update brought, in the words of its commits. Moving back to an older version lists nothing.

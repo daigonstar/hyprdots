@@ -687,7 +687,10 @@ def follow_with(screen, wiz, args, prog, broker):
             if ended is not None and not data:
                 code = ended
                 prog.feed(buffer.decode("utf-8", "replace"))
-            box = box or broker.request()
+            if not box:
+                box = broker.request()
+                if box:  # sudo may have just written straight to the terminal (its first-time lecture), so draw it all again
+                    screen.s.clearok(True)
         if box and code is not None:  # the install ended while asking
             broker.reply(box, cancelled=True)
             box = None

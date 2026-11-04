@@ -143,3 +143,6 @@ hl.window_rule({
     center = true,
     animation = "popin 85%",
 })
+
+-- Hyprland's own "updated to..." window, on top of the first login, is no use to someone who just installed this
+hl.config({ ecosystem = { no_update_news = true } })

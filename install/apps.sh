@@ -197,7 +197,7 @@ if (( ${#pacman_pkgs[@]} > 0 )); then
   fi
 fi
 for app in "${flatpaks[@]+"${flatpaks[@]}"}"; do
-  flatpak install -y --noninteractive --or-update flathub "$app" || echo "Could not install $app." >&2
+  sudo flatpak install --system -y --noninteractive --or-update flathub "$app" || echo "Could not install $app." >&2
 done
 [[ -n "$browser_cmd" ]] && set_browser "$browser_cmd" "$browser_file"
 echo "Done. Docker and CoolerControl need their services on: sudo systemctl enable --now docker coolercontrold"

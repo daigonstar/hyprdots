@@ -259,6 +259,7 @@ ENTER, ESC, DOWN, SPACE = "\r", "\x1b", "\x1bOB", " "  # the Down arrow as a ter
 
 # Stands in for sudo: asks through SUDO_ASKPASS as the real one does, three tries. The real one is never given a password here.
 FAKE_SUDO = """#!/bin/sh
+echo "LECTURE-ON-THE-TERMINAL" > /dev/tty 2>/dev/null
 [ "$1" = -A ] || { echo "not asked to use askpass"; exit 3; }
 for try in 1 2 3; do
     answer=$("$SUDO_ASKPASS" "[sudo] password: ") || { echo "sudo: no password was provided"; exit 1; }
@@ -303,6 +304,8 @@ class PasswordOverlay(unittest.TestCase):
 
     def test_wrong_then_right_and_it_is_never_shown(self):
         self.term.wait_for("needs your password")
+        after_lecture = self.term.out.split(b"LECTURE-ON-THE-TERMINAL")[-1]
+        self.assertRegex(after_lecture, rb"\x1b\[[23]?J", "the screen is wiped, so what sudo wrote does not stay behind the box")
         self.term.keys(*"wrong", ENTER)
         self.term.wait_for("did not work")
         self.term.keys(*"hunter2", ENTER)

@@ -1,5 +1,6 @@
 """Runs the real update.sh against a throwaway remote and home: an update must not cost you a setting or a file."""
 import os
+import pty
 import shutil
 import subprocess
 import tempfile
@@ -173,6 +174,32 @@ class Update(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("...and 6 more", done.stdout)
         self.assertNotEqual(self.stable(), "")
+
+    def test_no_menu_in_a_terminal_until_there_is_a_stable_branch(self):
+        main, other = pty.openpty()
+        self.addCleanup(os.close, main)
+        env = {k: v for k, v in self.env.items() if k != "UPDATE_BRANCH"}
+        done = subprocess.run(["bash", str(self.pc / "update.sh")], cwd=self.pc, env=env, stdin=other, capture_output=True, text=True, timeout=60)
+        os.close(other)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("Which version", done.stdout)
+        self.assertFalse((self.pc / ".update-branch").exists())
+
+    def test_gpu_check_only_names_cards_without_their_drivers(self):
+        fake = self.home / "bin"
+        fake.mkdir(exist_ok=True)
+        (fake / "lspci").write_text("#!/bin/sh\necho '03:00.0 VGA compatible controller [0300]: NVIDIA Corporation [10de:2684]'\necho '13:00.0 VGA compatible controller [0300]: Advanced Micro Devices [1002:164e]'\n")
+        script = REPO / ".config/hypr/scripts/gpu-check.sh"
+
+        def run(installed):
+            (fake / "pacman").write_text(f"#!/bin/sh\ncase \" {installed} \" in *\" $2 \"*) exit 0;; esac\necho \"$2\"\nexit 127\n")
+            for tool in ("lspci", "pacman"):
+                (fake / tool).chmod(0o755)
+            return subprocess.run(["bash", str(script)], env={**self.env, "PATH": f"{fake}:{os.environ['PATH']}"}, capture_output=True, text=True).stdout.split()
+
+        self.assertEqual(run("nvidia-utils vulkan-radeon"), [])
+        self.assertEqual(run("vulkan-radeon"), ["nvidia"])
+        self.assertEqual(run(""), ["nvidia", "amd"])
 
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")

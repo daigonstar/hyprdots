@@ -30,7 +30,8 @@ hl.on("hyprland.start", function()
         -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
-        "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\" && PYTHONPATH=\"$HOME/.config/hypr/settings\" python3 -m hyprsettings.design refresh",
+        "~/.config/hypr/scripts/login-wallpaper.sh",
+        "sleep 8 && ~/.config/hypr/scripts/gpu-check.sh --notify",
         "python3 ~/.config/hypr/welcome/welcome.py",  -- only at the first login
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
