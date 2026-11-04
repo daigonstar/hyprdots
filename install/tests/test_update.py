@@ -201,6 +201,18 @@ class Update(unittest.TestCase):
         self.assertEqual(run("vulkan-radeon"), ["nvidia"])
         self.assertEqual(run(""), ["nvidia", "amd"])
 
+    def test_files_that_stop_being_shipped_stay_with_you(self):
+        (self.dev / ".config/fastfetch/config.jsonc").write_text("my look\n")
+        self.publish("ship a look")
+        self.assertEqual(self.update().returncode, 0)
+        self.assertEqual(self.read(".config/fastfetch/config.jsonc"), "my look\n")
+        git(self.dev, "rm", "-q", "--cached", ".config/fastfetch/config.jsonc")
+        (self.dev / ".gitignore").write_text((self.dev / ".gitignore").read_text() + "/.config/fastfetch/config.jsonc\n")
+        self.publish("stop shipping it")
+        done = self.update()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.read(".config/fastfetch/config.jsonc"), "my look\n")
+
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")
         (self.dev / ".config/hypr/new.lua").write_text("shipped\n")

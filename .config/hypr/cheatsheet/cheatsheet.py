@@ -54,6 +54,8 @@ def load():
             continue
         if row["id"] in OPTIONAL_APPS and not installed(OPTIONAL_APPS[row["id"]]):
             continue
+        if row["id"] == "assistant" and not shutil.which("ollama"):
+            continue
         group = row["group"] or "Other"
         if group not in index:
             index[group] = len(groups)

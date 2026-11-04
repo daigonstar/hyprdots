@@ -6,7 +6,7 @@ I have borrowed some code from the dots I like (especially JaKoolIt) but have al
 
 I have also made an install script that should install everything nicely (I even left in the dry-run command just so you can see exactly what it is doing)
 
-I have added some wallpapers I've collected (will probably add more as I go)
+I have added some wallpapers I generated (will probably add more as I go)
 
 ### **Keybinds**
 
@@ -16,7 +16,7 @@ I have added some wallpapers I've collected (will probably add more as I go)
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + C = PC assistant (optional, see below)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + CTRL + C = Clipboard history  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + E = File Manager (Thunar is default)  
-<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + B = Browser (Zen is default)  
+<img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + B = Browser (the one you choose when installing)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + A = App Store (Bazaar is default)  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> + N = Refresh waybar  
 <img src="screens/tux.svg" alt="Tux" width="25" height="25" /> SHIFT + N = Launch waybar (used if waybar crashes)  
@@ -46,6 +46,8 @@ The bar's bell opens one panel, like a phone's: quick settings (Wi-Fi, Bluetooth
 
 Anything your PC lacks is left out, so battery, brightness, touchpad and airplane mode only show on a laptop. The same background process (`.config/hypr/tray/`) draws the volume popup, Alt+Tab and the overview, warns when a battery runs low, and puts the PC to sleep at 3%. swaync is still the notification daemon behind it. Notification buttons such as Reply work on the popups, not in the tray.
 
+![image](screens/tray.png)
+
 USB drives mount when you plug them in, with a notification to open them, and drives inside the PC are left alone (`.config/hypr/udiskie.yml`). When a screen comes back, its workspaces return to it.
 
 ### Powermenu
@@ -54,7 +56,7 @@ Full screen, with a PC (a laptop when a battery is found) in the middle and the 
 
 ### Install:
 
-The installer is for **Arch Linux** (it uses `pacman` and `paru`) and expects a Hyprland 0.55+ session with the Lua config. Run it as your normal user; it asks for `sudo` when needed. It opens a full-screen installer: answer a few questions (keyboard, graphics drivers, browser, extra apps, Hearthling), check the summary, and it does the rest while showing its progress. Try `./hyprinstall.sh --dry-run` first: you get the same screens, and nothing is installed or changed. `--plain` asks in plain text instead.
+The installer is for **Arch Linux** (it uses `pacman` and `paru`) and sets up everything from a plain Arch install, including Hyprland and the login screen. Run it as your normal user; it asks for `sudo` when needed. It opens a full-screen installer: answer a few questions (keyboard, graphics drivers, browser, extra apps, Hearthling), check the summary, and it does the rest while showing its progress. Try `./hyprinstall.sh --dry-run` first: you get the same screens, and nothing is installed or changed. `--plain` asks in plain text instead.
 
 ```bash
 git clone https://github.com/daigonstar/hyprdots.git
@@ -86,6 +88,12 @@ Add more any time with `install/apps.sh`. To answer ahead of time, use `HYPR_APP
 Each update lists what changed, and keeps the list in `~/.local/state/hyprdots/last-update.txt`. Everything follows `main` for now; a tested `stable` branch is planned from version 1.0.
 
 `update.sh` (or `hyprupdate`) leaves your settings alone. Everything the settings app saves is in local files git ignores, and those are never touched, along with any files you added yourself. If you edited a shipped file by hand, your edit is put back on top of the update. If it clashes with the update, the new version goes in and yours is saved in `~/.local/state/hyprdots/update-backups/`, with a notification. If you have commits that are not pushed, the update stops and changes nothing. Updates only add packages the desktop itself needs, never the optional apps.
+
+On a btrfs system the installer offers to keep a copy of the system from before each `pacman` or `paru` run, using snapper and snap-pac. `hyprundo` puts the last run back. It cannot undo an update that changed the kernel, and your home folder is never touched. To turn it on later: `sudo install/snapshots.sh`.
+
+A graphics card without its drivers is mentioned at login, and `update.sh` offers to install them.
+
+To test a real install, `install/tests/vm/vm.sh test` takes a blank Arch virtual machine through the installer and two logins. It needs qemu and KVM, not sudo.
 
 ### PC assistant (optional)
 
@@ -119,6 +127,7 @@ Click the cog in the quick tray (or run `~/.config/hypr/scripts/settings.sh`) fo
 
 | Page | What you can change |
 | --- | --- |
+| User | Your name, your picture (shown on the quick tray and lock screen) and your password |
 | Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
 | Calendar | Add, rename or remove calendars (links stay private) |
@@ -142,13 +151,10 @@ The settings app edits these files for you; you can also edit `~/.config/hypr/us
 
 Private values go in `~/.config/hypr/user_settings.local.toml` (git-ignored, created by the installer from `user_settings.local.toml.example`). To show Google Calendar events in the clock popup, copy your calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar) into `sources` there, then click the clock.
 
-#### For my SDDM Greeter I use [SDDM Astronaut Theme](https://github.com/Keyitdev/sddm-astronaut-theme)
-Please install that for a better greeter theme
-
 ### Notes
 
 - Zen browser: if you sign in with a returning Mozilla account that has a custom wallpaper, set `zen.urlbar.replace-newtab` to `false` in `about:config`, otherwise the new-tab page will not show again on launch.
 
 ### License
 
-MIT, see [LICENSE](LICENSE). The rEFInd theme (`.config/refind`) and the SDDM theme (`SDDM/sugar-dark`) keep their own licenses. Wallpapers are collected from around the web and belong to their respective creators.
+MIT, see [LICENSE](LICENSE). The rEFInd theme (`.config/refind`) and the SDDM theme (`SDDM/sugar-dark`) keep their own licenses. The wallpapers were generated by me.
