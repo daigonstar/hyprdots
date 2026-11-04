@@ -282,14 +282,29 @@ class Overrides(unittest.TestCase):
         autostart = _paths.HYPR / "autostart.lua"
         script = f'dofile("{autostart}"); print(table.concat(execs, "\\n"))'
         everything = self.harness(None, script).stdout
-        for app in ("vesktop", "solaar", "coolercontrol", "waybar", "swaync"):
+        for app in ("vesktop", "solaar", "coolercontrol", "desktop-services.sh login"):
             self.assertIn(app, everything)
         fewer = self.harness(overrides.render([], {}, ["vesktop", "solaar"]), script)
         self.assertEqual(fewer.returncode, 0, fewer.stderr)
         self.assertNotIn("vesktop", fewer.stdout)
         self.assertNotIn("solaar", fewer.stdout)
-        for kept in ("coolercontrol", "waybar", "swaync", "hypridle"):
+        for kept in ("coolercontrol", "desktop-services.sh login"):
             self.assertIn(kept, fewer.stdout)
+
+    def test_desktop_parts_come_back_after_a_crash(self):
+        units = _paths.HYPR / "systemd"
+        for name in ("waybar.service.d/hyprdots.conf", "swaync.service.d/hyprdots.conf", "hypridle.service.d/hyprdots.conf",
+                     "hyprdots-tray.service", "hyprdots-usb.service"):
+            text = (units / name).read_text()
+            self.assertIn("Restart=on-failure", text, name)
+            self.assertIn("KillMode=process", text, name)  # apps opened from it must survive it restarting
+            self.assertIn("OnFailure=hyprdots-part-failed@", text, name)
+            self.assertLess(text.index("StartLimitBurst"), text.index("[Service]"), name)  # ignored in [Service]
+        for name in ("waybar", "swaync", "hypridle"):
+            self.assertIn("ExecStart=\nExecStart=", (units / f"{name}.service.d/hyprdots.conf").read_text())
+        script = (_paths.HYPR / "scripts/desktop-services.sh").read_text()
+        for part in ("waybar", "swaync", "hypridle", "hyprdots-tray", "hyprdots-usb"):
+            self.assertIn(part, script)
 
     def test_startup_markers_match_the_lua_file(self):
         apps = overrides.startup_apps(_paths.HYPR / "autostart.lua")

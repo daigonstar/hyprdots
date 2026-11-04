@@ -62,6 +62,9 @@ def restart(path: Path) -> bool:
     running = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True).returncode == 0
     if not running:
         return False
+    # As a service it reads the file by itself when started (scripts/idle-start.sh)
+    if subprocess.run(["systemctl", "--user", "restart", "hypridle.service"], capture_output=True).returncode == 0:
+        return True
     subprocess.run(["pkill", "-x", "hypridle"], capture_output=True)
     subprocess.Popen(["hypridle", "-c", str(path)], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)

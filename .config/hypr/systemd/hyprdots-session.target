@@ -1,0 +1,5 @@
+[Unit]
+Description=The Hyprland session
+# graphical-session.target refuses to be started by hand: this is the usual way in
+BindsTo=graphical-session.target
+Before=graphical-session.target

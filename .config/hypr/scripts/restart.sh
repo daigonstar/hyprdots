@@ -1,22 +1,3 @@
 #!/usr/bin/env bash
-case "$1" in
-    swaync)
-        pkill swaync || true
-        sleep 0.1
-        ~/.config/swaync/launch.sh &
-        python3 ~/.config/hypr/tray/quick_tray.py &  # does nothing if it is still running
-        ;;
-    waybar)
-        pkill waybar || true
-        sleep 0.1
-        ~/.config/waybar/launch.sh &
-        ;;
-    all|"")
-        pkill swaync || true
-        pkill waybar || true
-        sleep 0.2
-        ~/.config/waybar/launch.sh &
-        ~/.config/swaync/launch.sh &
-        python3 ~/.config/hypr/tray/quick_tray.py &  # does nothing if it is still running
-        ;;
-esac
+# SUPER + N and the settings pages: restart the bar, the notification centre, or (all) those and anything else that is down.
+exec "$HOME/.config/hypr/scripts/desktop-services.sh" restart "${1:-all}"

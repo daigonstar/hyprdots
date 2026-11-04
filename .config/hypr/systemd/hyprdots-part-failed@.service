@@ -1,0 +1,8 @@
+[Unit]
+Description=Tell the user %i keeps crashing
+# Runs after every crash in a loop, so it must never be rate-limited itself
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/hypr/scripts/desktop-services.sh failed %i

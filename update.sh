@@ -311,11 +311,7 @@ apply_symlinks() {
 
   # What runs in the background picks up the update now, rather than at the next login
   if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
-    pkill -f '^python3? .*[h]ypr/tray/quick_tray' || true
-    sleep 0.3
-    (setsid python3 "$HOME/.config/hypr/tray/quick_tray.py" >/dev/null 2>&1 </dev/null &)
-    swaync-client -R -sw >/dev/null 2>&1 || true
-    pgrep -f '[u]diskie -c' >/dev/null || { command -v udiskie >/dev/null && (setsid udiskie -c "$HOME/.config/hypr/udiskie.yml" >/dev/null 2>&1 </dev/null &); }
+    "$HOME/.config/hypr/scripts/desktop-services.sh" start || true
   fi
 
   # Keep Thunar's "Open Terminal Here" working (stand-in helper in ~/.local/bin, keeps your chosen terminal)

@@ -25,24 +25,17 @@ end
 
 hl.on("hyprland.start", function()
     local commands = {
-        "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP QT_QPA_PLATFORMTHEME",
-        "systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP QT_QPA_PLATFORMTHEME",
-        "systemctl --user start graphical-session.target",
+        -- The bar, notifications, tray, USB mounting and idle: services that come back by themselves if they crash
+        "~/.config/hypr/scripts/desktop-services.sh login",
         -- (optional apps are started separately below, so hypr-settings can switch them off)
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
         "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\" && PYTHONPATH=\"$HOME/.config/hypr/settings\" python3 -m hyprsettings.design refresh",
         "systemctl --user start hyprpolkitagent",
         "systemctl --user enable --now hyprpolkitagent.service",
-        "~/.config/waybar/launch.sh",  -- puts the default theme.css in place first if there is none
-        "~/.config/swaync/launch.sh",  -- puts the default theme.css in place first if there is none
-        "python3 ~/.config/hypr/tray/quick_tray.py",  -- opens and closes with the notification centre
-        "udiskie -c ~/.config/hypr/udiskie.yml",  -- mounts USB drives, with a notification to open them
         "python3 ~/.config/hypr/welcome/welcome.py",  -- only at the first login
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",
-        -- hypr-settings (Power & lock page) writes hypridle.local.conf; without it the shipped hypridle.conf is used
-        "c=~/.config/hypr/hypridle.local.conf; if [ -f \"$c\" ]; then exec hypridle -c \"$c\"; else exec hypridle; fi",
         "wl-paste --watch clipvault store",
         -- Detects games launched from Steam, Lutris, Heroic, or bare
         -- Wine/Proton/gamescope wrappers (no shared window class exists

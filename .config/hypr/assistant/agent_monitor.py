@@ -66,6 +66,27 @@ def check_failed_units():
                 findings.append(("warn", f"unit:{scope}:{unit}", f"Failed {scope} unit: {unit}"))
     return findings
 
+DESKTOP_PARTS = {"waybar": "the bar", "swaync": "notifications", "hypridle": "idle and lock", "hyprdots-tray": "the quick tray",
+                 "hyprdots-usb": "USB mounting"}
+
+def check_desktop_parts():
+    """Desktop parts that are down, or keep crashing and coming back. A part systemd gave up on is a failed unit, above."""
+    if run(["systemctl", "--user", "is-active", "graphical-session.target"]) != "active":
+        return []  # nobody is logged in to a desktop
+    findings = []
+    for unit, label in DESKTOP_PARTS.items():
+        state = dict(line.split("=", 1) for line in run(["systemctl", "--user", "show", unit + ".service", "-p", "ActiveState",
+                                                         "-p", "NRestarts", "-p", "ConditionResult", "-p", "LoadState"]).splitlines() if "=" in line)
+        if state.get("LoadState") != "loaded":
+            continue  # not set up yet: the next login does that
+        if state.get("ActiveState") == "inactive" and state.get("ConditionResult") != "no":
+            findings.append(("warn", f"desktop:{unit}:down", f"{label} is not running. Press SUPER + N to bring it back."))
+        restarts = int(state.get("NRestarts") or 0)
+        if restarts >= 3:
+            findings.append(("info", f"desktop:{unit}:restarts", f"{label} has crashed and restarted {restarts} times since it was last "
+                             f"started. Log: journalctl --user -u {unit}"))
+    return findings
+
 def check_disks():
     findings, seen = [], set()
     for line in Path("/proc/mounts").read_text().splitlines():
@@ -162,7 +183,7 @@ def check_updates():
         findings.append(("info", "updates:core", f"Core updates pending: {', '.join(critical)}"))
     return findings
 
-CHECKS = [check_failed_units, check_disks, check_memory, check_temps, check_journal,
+CHECKS = [check_desktop_parts, check_failed_units, check_disks, check_memory, check_temps, check_journal,
           check_coredumps, check_reboot_needed, check_updates]
 
 def collect():
