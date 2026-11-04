@@ -10,12 +10,30 @@ UNITS="$HOME/.config/hypr/systemd"
 USER_DIR="$HOME/.config/systemd/user"
 
 install_units() {
+    # Only reloads systemd when something changed: at login that would hold up everything else
     mkdir -p "$USER_DIR"
-    local item
+    local item link changed=
     for item in "$UNITS"/*; do
-        ln -sfn "$item" "$USER_DIR/$(basename "$item")"
+        link="$USER_DIR/$(basename "$item")"
+        [[ "$(readlink "$link")" == "$item" ]] && continue
+        ln -sfn "$item" "$link"
+        changed=1
     done
-    systemctl --user daemon-reload
+    for link in "$USER_DIR"/*; do  # units since removed from the dots
+        [[ -L "$link" && ! -e "$link" && "$(readlink "$link")" == "$UNITS"/* ]] && { rm -f "$link"; changed=1; }
+    done
+    [[ -n "$changed" ]] && systemctl --user daemon-reload
+    systemctl --user -q is-enabled hyprpolkitagent.service 2>/dev/null || systemctl --user enable hyprpolkitagent.service 2>/dev/null
+}
+
+wait_for_session() {
+    # Hyprland starts hyprland-session.target itself and draws nothing until that finishes. Starting services before then
+    # holds it up: 24 seconds of frozen login, until they time out waiting for the compositor they are holding up.
+    local _
+    for _ in $(seq 600); do  # the bar's own unit refuses to start before it, so this must outlast any delay
+        systemctl --user -q is-active hyprland-session.target && return
+        sleep 0.1
+    done
 }
 
 import_session() {
@@ -45,7 +63,7 @@ case "${1:-}" in
     login|start)
         install_units
         [[ "$1" == login ]] && import_session
-        systemctl --user start hyprdots-session.target
+        wait_for_session
         stop_strays
         # shellcheck disable=SC2046
         systemctl --user reset-failed $(units_of) 2>/dev/null
@@ -72,8 +90,10 @@ case "${1:-}" in
         esac
         ;;
     failed)
-        # systemd calls this after every crash; only tell the user when it has stopped trying
+        # systemd calls this after every crash; only tell the user when it has stopped trying. Logging out ends every
+        # part with an error as the compositor goes, which is not a crash.
         systemctl --user -q is-failed "${2:-}" || exit 0
+        hyprctl version >/dev/null 2>&1 || exit 0
         message="${2:-A desktop part} keeps crashing and was not restarted again. Press SUPER + N to try again; the log is in: journalctl --user -u ${2:-}"
         # The failed part may be the notification daemon itself
         timeout 3 notify-send -u critical "Desktop problem" "$message" || hyprctl notify 3 20000 0 "$message" || true

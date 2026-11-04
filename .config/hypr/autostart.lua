@@ -31,8 +31,6 @@ hl.on("hyprland.start", function()
         "hyprctl setcursor Future-cursors 24",
         "awww-daemon --format xrgb",
         "sleep 1 && wallust run \"$(awww query | grep -oP 'image: \\K.*' | head -n1)\" && PYTHONPATH=\"$HOME/.config/hypr/settings\" python3 -m hyprsettings.design refresh",
-        "systemctl --user start hyprpolkitagent",
-        "systemctl --user enable --now hyprpolkitagent.service",
         "python3 ~/.config/hypr/welcome/welcome.py",  -- only at the first login
         -- lets Thunar ("Open terminal here") and other exo-open callers find your terminal
         "~/.config/hypr/scripts/exo-terminal.sh '" .. terminal:gsub("'", "'\\''") .. "'",

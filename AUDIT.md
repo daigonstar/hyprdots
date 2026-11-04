@@ -36,7 +36,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 ### If a background part dies
 
-- **Restarts are in; a real login is still to be checked.** [checked] The bar, swaync, tray, udiskie and hypridle are now systemd user services (`hypr/systemd`, started by `scripts/desktop-services.sh`). Each was killed with `kill -9` on this PC and came back within 2.5 seconds. After 5 crashes in 2 minutes systemd stops, you get one notification, and `SUPER + N` brings it back. Logs are in the journal, and the health monitor reports parts that are down or keep crashing. This was run in a live session but not yet through a real log out and in.
+- **Restarts are in; a real login is still to be checked.** [checked] The bar, swaync, tray, udiskie and hypridle are now systemd user services (`hypr/systemd`, started by `scripts/desktop-services.sh`). Each was killed with `kill -9` on this PC and came back within 2.5 seconds. After 5 crashes in 2 minutes systemd stops, you get one notification, and `SUPER + N` brings it back. Logs are in the journal, and the health monitor reports parts that are down or keep crashing. A first version froze login for 24 seconds by racing Hyprland's own session target; that fix still needs a real log out and in to confirm.
 - **The tray holds a lot.** [checked] The same process holds the volume popup, Alt+Tab, the overview and the battery warnings, and its notification list is lost when it restarts.
 - **Not covered:** the clipboard watcher, wallpaper daemon and game workspace script are still started once. A crashing part restarted with `KillMode=process` can leave old helpers behind, such as a `swaync-client` from the bar.
 

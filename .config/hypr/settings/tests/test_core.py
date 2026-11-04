@@ -302,7 +302,10 @@ class Overrides(unittest.TestCase):
             self.assertLess(text.index("StartLimitBurst"), text.index("[Service]"), name)  # ignored in [Service]
         for name in ("waybar", "swaync", "hypridle"):
             self.assertIn("ExecStart=\nExecStart=", (units / f"{name}.service.d/hyprdots.conf").read_text())
+        # Hyprland waits for its own session target at startup; a second one holds up every login
+        self.assertFalse((units / "hyprdots-session.target").exists())
         script = (_paths.HYPR / "scripts/desktop-services.sh").read_text()
+        self.assertLess(script.index("wait_for_session\n        stop_strays"), script.index("systemctl --user restart $(units_of)"))
         for part in ("waybar", "swaync", "hypridle", "hyprdots-tray", "hyprdots-usb"):
             self.assertIn(part, script)
 
