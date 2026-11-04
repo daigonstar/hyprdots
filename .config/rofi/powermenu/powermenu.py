@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Full-screen power menu: a PC (or a laptop when a battery is found) in the middle, the power options in a ring around it.
 
-Keys: arrows / Tab move, Enter picks, l s o r p jump straight to an option, Esc closes. The mouse works too.
+Keys: arrows / Tab move, Enter picks, l s o r p jump straight to an option, Esc closes. The mouse and touch work too:
+a second tap on an option that asks first says yes, a tap anywhere else says no.
 Run through powermenu.sh (it preloads gtk4-layer-shell, which has to be loaded before GTK).
 --dry-run prints the command instead of running it."""
 
@@ -140,9 +141,9 @@ class Menu(Gtk.DrawingArea):
         self.set_hover(self.item_at(x, y))
 
     def on_click(self, _g, _n, x, y):
-        if self.pending is not None:
-            return self.cancel()
         i = self.item_at(x, y)
+        if self.pending is not None:
+            return self.run(i) if i == self.pending else self.cancel()
         if i is None:
             return self.win.close()
         self.focus = i
@@ -300,7 +301,7 @@ class Menu(Gtk.DrawingArea):
         if self.pending is not None:
             _k, label, _g, _cmd, _c = ACTIONS[self.pending]
             self.text(cr, f"{label}?", cx, mid - shh * 0.14, max(16, int(sww * 0.085)), c["fg"], bold=True)
-            self.text(cr, "Enter  yes     Esc  no", cx, mid + shh * 0.16, max(10, int(sww * 0.04)), c["accent"])
+            self.text(cr, "Tap again or Enter  yes     Elsewhere or Esc  no", cx, mid + shh * 0.16, max(10, int(sww * 0.04)), c["accent"])
         else:
             _k, label, glyph, _cmd, _c = ACTIONS[self.focus]
             self.text(cr, time.strftime("%H:%M"), cx, mid - shh * 0.16, max(20, int(sww * 0.15)), c["fg"], bold=True)

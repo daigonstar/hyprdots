@@ -1,6 +1,8 @@
 @import url("colors/colors.css");
 /* Colour roles and font chosen on the settings Theme page (falls back to theme.default.css, see launch.sh) */
 @import url("theme.css");
+/* Bigger targets while no keyboard is attached: hypr/tray/tablet_mode.py writes it, empty otherwise */
+@import url("tablet.css");
 
 * {
     color: @theme_text;

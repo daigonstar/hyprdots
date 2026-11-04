@@ -112,7 +112,7 @@ Pane {
 
         Loader {
             id: virtualKeyboard
-            source: "Components/VirtualKeyboard.qml"
+            source: config.TouchKeyboard == "true" ? "Components/TouchKeys.qml" : "Components/VirtualKeyboard.qml"
             state: "hidden"
             property bool keyboardActive: item ? item.active : false
             onKeyboardActiveChanged: keyboardActive ? state = "visible" : state = "hidden"

@@ -19,7 +19,7 @@
             "drawer": {
                 "transition-duration": 600,
                 "transition-to-left": true,
-                "click-to-reveal": false
+                "click-to-reveal": true  // there is no hovering on a touchscreen
             },
             "modules": [
                 "custom/trayarrow",
@@ -32,7 +32,7 @@
             "drawer": {
                 "transition-duration": 600,
                 "transition-to-left": false,
-                "click-to-reveal": false
+                "click-to-reveal": true  // there is no hovering on a touchscreen
             },
             "modules": [
                 "custom/settingsarrow",

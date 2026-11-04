@@ -55,6 +55,27 @@ if ! cmp -s "$BASE_DIR/70-hyprdots-touchscreen.rules" "$TOUCH_RULES"; then
         sudo udevadm trigger --subsystem-match=input --action=change || echo "Warning: could not install $TOUCH_RULES." >&2
 fi
 
+# The login screen's on-screen keyboard, in the theme itself: see SDDM/sugar-dark/Components/TouchKeys.qml
+THEME=/usr/share/sddm/themes/sugar-dark
+if [[ -d $THEME ]] && { ! diff -rq --exclude=theme.conf.user "$BASE_DIR/../SDDM/sugar-dark" "$THEME" >/dev/null 2>&1 ||
+    ! grep -qs 'TouchKeyboard=true' "$THEME/theme.conf.user"; }; then
+    echo "Adding the on-screen keyboard to the login screen"
+    sudo cp -rT "$BASE_DIR/../SDDM/sugar-dark" "$THEME" && echo 'TouchKeyboard=true' | sudo tee "$THEME/theme.conf.user" >/dev/null ||
+        echo "Warning: could not update the login screen." >&2
+fi
+
+# The on-screen keyboard's layouts, with Super and Ctrl for desktop shortcuts
+mkdir -p "$HOME/.local/share/squeekboard/keyboards"
+cp "$BASE_DIR"/squeekboard/*.yaml "$HOME/.local/share/squeekboard/keyboards/"
+
+# The power button sleeps rather than shuts down
+LOGIND_CONF=/etc/systemd/logind.conf.d/hyprdots-surface.conf
+if ! cmp -s "$BASE_DIR/logind-surface.conf" "$LOGIND_CONF"; then
+    echo "Making the power button sleep"
+    sudo install -Dm644 "$BASE_DIR/logind-surface.conf" "$LOGIND_CONF" && sudo systemctl kill -s HUP systemd-logind ||
+        echo "Warning: could not install $LOGIND_CONF." >&2
+fi
+
 if has_marvell_wifi && ! cmp -s "$BASE_DIR/mwifiex-sleep" "$SLEEP_HOOK"; then
     echo "Keeping the Wi-Fi working after sleep (Marvell driver reload)"
     sudo install -Dm755 "$BASE_DIR/mwifiex-sleep" "$SLEEP_HOOK" || echo "Warning: could not install $SLEEP_HOOK." >&2

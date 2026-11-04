@@ -33,6 +33,38 @@ INPUT_DEVICES = Path("/proc/bus/input/devices")
 NOT_A_KEYBOARD = re.compile(r"button|video-bus|consumer|audio|power|sleep|hotkey|virtual|wmi")
 TRANSFORMS = {"normal": 0, "left-up": 1, "bottom-up": 2, "right-up": 3}  # iio-sensor-proxy's words, Hyprland's numbers
 ORIENTATION = re.compile(r"(?:orientation changed: |orientation: )([a-z-]+)")
+BAR_STYLE = Path.home() / ".config/waybar/tablet.css"
+BAR_TOUCH_CSS = """/* Written by hypr/tray/tablet_mode.py while no keyboard is attached */
+window#waybar * { font-size: 22px; }
+window#waybar #workspaces button { min-width: 44px; min-height: 44px; padding: 0 8px; }
+""" + """window#waybar #clock,
+window#waybar #custom-assistant,
+window#waybar #pulseaudio,
+window#waybar #battery,
+window#waybar #network,
+window#waybar #bluetooth,
+window#waybar #idle_inhibitor,
+window#waybar #custom-updates,
+window#waybar #custom-recording,
+window#waybar #custom-power,
+window#waybar #custom-noti,
+window#waybar #custom-trayarrow,
+window#waybar #custom-settingsarrow,
+window#waybar #cpu,
+window#waybar #memory,
+window#waybar #temperature,
+window#waybar #tray,
+window#waybar #cava,
+window#waybar #disk,
+window#waybar #backlight,
+window#waybar #mpris,
+window#waybar #language,
+window#waybar #custom-wallpaper,
+window#waybar #custom-drive,
+window#waybar #custom-keys,
+window#waybar #custom-userconfig,
+window#waybar #window { min-height: 44px; padding: 0 16px; }
+"""
 TICK_MS = 2000
 # Long enough for Hyprland's layersIn fade (window.lua) to darken the screen, and for the screen to settle before fading back
 FADE_IN_MS = 170
@@ -53,6 +85,16 @@ def devices() -> dict:
         return json.loads(run("hyprctl", "devices", "-j") or "{}")
     except json.JSONDecodeError:
         return {}
+
+
+def bar_for_touch(wanted: bool) -> None:
+    """The bar reloads its style by itself when this changes."""
+    text = BAR_TOUCH_CSS if wanted else ""
+    try:
+        if not BAR_STYLE.exists() or BAR_STYLE.read_text() != text:
+            BAR_STYLE.write_text(text)
+    except OSError:
+        pass
 
 
 def has_keyboard(found: dict) -> bool:
@@ -240,6 +282,7 @@ class TabletMode:
             return
         self.tablet = tablet
         self.on_screen_keyboard(tablet)
+        bar_for_touch(tablet)
         if self.button:
             self.button.present_for(tablet)
         self.follow_sensor()
@@ -253,6 +296,7 @@ class TabletMode:
 
     def stop(self) -> None:
         self.on_screen_keyboard(False)
+        bar_for_touch(False)
         rotate(0)
 
 

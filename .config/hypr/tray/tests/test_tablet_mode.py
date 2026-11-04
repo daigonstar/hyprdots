@@ -79,6 +79,9 @@ class Modes(unittest.TestCase):
     def setUp(self):
         self.mode = tablet_mode.TabletMode()
         self.mode.on_screen_keyboard = mock.Mock()
+        patcher = mock.patch.object(tablet_mode, "bar_for_touch")
+        self.bar = patcher.start()
+        self.addCleanup(patcher.stop)
         self.rotate = self.mode.turn_to = mock.Mock()
 
     def test_with_a_keyboard_the_screen_ignores_the_sensor(self):
@@ -101,6 +104,12 @@ class Modes(unittest.TestCase):
             self.mode.orientation = "left-up"
             self.mode.follow_sensor()
         self.rotate.assert_not_called()
+
+    def test_the_bar_grows_only_in_tablet_mode(self):
+        self.mode.set_tablet(True)
+        self.bar.assert_called_with(True)
+        self.mode.set_tablet(False)
+        self.bar.assert_called_with(False)
 
     def test_no_change_does_nothing_twice(self):
         self.mode.set_tablet(True)
