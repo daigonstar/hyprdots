@@ -8,7 +8,7 @@ local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == 
 local optional_apps = {
     { id = "vesktop", label = "Vesktop", cmd = "vesktop" },
     { id = "nextcloud", label = "Nextcloud sync", cmd = "com.nextcloud.desktopclient.nextcloud --background" },
-    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "openrgb --startminimized -p ICE.orp" },
+    { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "~/.config/hypr/scripts/openrgb-start.sh" },
     { id = "coolercontrol", label = "CoolerControl (fans and cooling)", cmd = "coolercontrol" },
     { id = "solaar", label = "Solaar (Logitech devices)", cmd = "solaar --w hide" },
     { id = "bitwarden", label = "Bitwarden", cmd = "com.bitwarden.desktop --hidden" },

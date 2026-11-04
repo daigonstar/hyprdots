@@ -103,7 +103,7 @@ class Schema(unittest.TestCase):
         for key, value in (("gaps_in", 5), ("gaps_out", 10), ("border_size", 2), ("rounding", 18)):
             self.assertIn(f"{key} = {value}", window, key)
         self.assertIn('layout = "dwindle"', window)
-        self.assertIn('kb_layout = "gb"', (_paths.HYPR / "input.lua").read_text())
+        self.assertIn('kb_layout = "us"', (_paths.HYPR / "input.lua").read_text())
 
 
 class StoreTests(unittest.TestCase):

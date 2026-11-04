@@ -22,6 +22,13 @@ def default_hypr_dir() -> Path:
     return Path(env) if env else Path(__file__).resolve().parents[2]
 
 
+def _can_start(app: dict) -> bool:
+    program = app["cmd"].split()[0]
+    if program.startswith("~/") and "openrgb" in program:
+        program = "openrgb"
+    return program.startswith("~/") or shutil.which(program) is not None
+
+
 class Store:
     def __init__(self, hypr_dir: Path | str | None = None):
         self.dir = Path(hypr_dir) if hypr_dir else default_hypr_dir()
@@ -164,7 +171,8 @@ class Store:
 
     # ---- startup apps (a list in the file, a checkbox per app in the UI) ---------------------------------
     def startup_apps(self) -> list[dict]:
-        return overrides.startup_apps(self.autostart_path)
+        """The ones you can start: an app you did not install has nothing to switch on."""
+        return [a for a in overrides.startup_apps(self.autostart_path) if _can_start(a)]
 
     def disabled_startup(self) -> list[str]:
         if STARTUP_ID in self.staged:

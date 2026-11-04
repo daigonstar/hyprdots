@@ -1,6 +1,6 @@
 hl.config({
     input = {
-        kb_layout = "gb",
+        kb_layout = "us",
         kb_variant = "",
         kb_model = "",
         kb_options = "",
@@ -11,9 +11,4 @@ hl.config({
             natural_scroll = false,
         },
     },
-})
-
-hl.device({
-    name = "epic-mouse-v1",
-    sensitivity = 0,
 })

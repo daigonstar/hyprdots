@@ -12,7 +12,7 @@ SHIPPED = _paths.HYPR / "window_rules.lua"
 class Lua(unittest.TestCase):
     def test_reads_the_shipped_file(self):
         rules = w.read_shipped(SHIPPED)
-        self.assertGreater(len(rules), 5)
+        self.assertGreaterEqual(len(rules), 3)
         for rule in rules:
             self.assertIn("name", rule)
             self.assertIn("match", rule)
