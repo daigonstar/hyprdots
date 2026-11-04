@@ -224,6 +224,7 @@ class CalendarPopup(Gtk.Window):
         self.armed = None  # uid of the event whose delete button was clicked once
 
         GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "calendar")
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
@@ -270,7 +271,6 @@ class CalendarPopup(Gtk.Window):
         self.card.pack_start(self.events_box, False, False, 0)
 
         self.connect("key-press-event", self.on_key)
-        self.connect("focus-out-event", lambda *_: self.close_popup())
         self.connect("button-press-event", lambda *_: False)
 
         self.render()
