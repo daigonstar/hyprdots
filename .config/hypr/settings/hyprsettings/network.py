@@ -222,7 +222,8 @@ def _prefix_mask(cidr: str) -> tuple[str, str]:
 
 # ==== Wi-Fi ==============================================================================================
 def wifi_device() -> str:
-    return next((i["name"] for i in interfaces() if i["kind"] == "wifi"), "")
+    wifi = [i for i in interfaces() if i["kind"] == "wifi"]
+    return next((i["name"] for i in wifi if i["up"]), wifi[0]["name"] if wifi else "")  # with two cards, the one in use
 
 
 def _nm_split(line: str) -> list[str]:

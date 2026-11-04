@@ -1,0 +1,4 @@
+# Microsoft Surface: installed by install/surface.sh, only on a Surface
+iio-sensor-proxy   # the rotation and light sensors
+squeekboard        # on-screen keyboard
+wireless-regdb     # without it the Wi-Fi falls back to the world regulatory settings

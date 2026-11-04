@@ -4,3 +4,4 @@ vulkan-intel
 lib32-mesa
 lib32-vulkan-intel
 intel-media-driver
+libva-intel-driver   # video acceleration on chips older than Broadwell, which intel-media-driver does not support

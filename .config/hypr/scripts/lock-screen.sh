@@ -3,6 +3,8 @@
 #   lock-screen.sh [KEEP]       lock; with KEEP, the other screens are switched off until you unlock
 #   lock-screen.sh wake [KEEP]  switch the screens back on after idle (while locked, only KEEP)
 # KEEP is "all" (every screen stays on), "focused" (the screen you were using) or a screen name such as DP-1.
+# hyprlock is the lock screen. Where it cannot run (it crashes at the start on some older graphics, before locking),
+# gtklock takes over, so the screen never stays unlocked. hyprlock exits 0 only after you have unlocked.
 
 screens_except() {  # names of the screens that are not the one to keep
     hyprctl monitors -j | python3 -c '
@@ -16,6 +18,10 @@ if keep and keep != "all" and any(m["name"] == keep for m in mons):
 ' "$1"
 }
 
+keyboard_attached() {  # a real keyboard, not the other things that report as one (power and volume buttons, a dock's audio)
+    hyprctl devices -j | jq -e '[.keyboards[].name | select(test("button|video-bus|consumer|audio|power|sleep|hotkey|virtual|wmi") | not)] | length > 0' >/dev/null
+}
+
 dpms() {  # dpms on|off [screen]
     if [[ -n ${2:-} ]]; then
         hyprctl dispatch "hl.dsp.dpms({ action = \"$1\", monitor = \"$2\" })" >/dev/null
@@ -26,7 +32,7 @@ dpms() {  # dpms on|off [screen]
 
 if [[ ${1:-} == wake ]]; then
     keep=${2:-all}
-    if pidof hyprlock >/dev/null && [[ $keep != all ]]; then
+    if pidof hyprlock gtklock >/dev/null && [[ $keep != all ]]; then
         # still locked: wake only the screen that shows the lock screen
         mapfile -t others < <(screens_except "$keep")
         dpms on
@@ -37,7 +43,7 @@ if [[ ${1:-} == wake ]]; then
     exit 0
 fi
 
-pidof hyprlock >/dev/null && exit 0   # already locked
+pidof hyprlock gtklock >/dev/null && exit 0   # already locked
 keep=${1:-all}
 
 # Your look from the Power & lock page when you have saved one; the shipped hyprlock.conf otherwise
@@ -51,5 +57,14 @@ fi
 
 mapfile -t others < <(screens_except "$keep")
 for m in "${others[@]}"; do dpms off "$m"; done
-hyprlock "${args[@]}"
+if ! hyprlock "${args[@]}"; then
+    gtklock_look=(--style "$HOME/.config/hypr/gtklock.css" --background "$HOME/.config/rofi/.current_wallpaper")
+    keyboard="$HOME/.local/lib/hyprdots/gtklock-keyboard.so"  # built by install/surface.sh
+    # Without the keyboard if that fails: gtklock refuses to start at all with a module from another major version
+    if [[ -f $keyboard ]]; then
+        GTKLOCK_KEYBOARD=$(keyboard_attached || echo show) gtklock "${gtklock_look[@]}" --modules "$keyboard" || gtklock "${gtklock_look[@]}"
+    else
+        gtklock "${gtklock_look[@]}"
+    fi
+fi
 for m in "${others[@]}"; do dpms on "$m"; done

@@ -28,6 +28,8 @@ def render(lock_after: int, screen_off_after: int, suspend_after: int, lock_befo
     out = [BANNER, "\ngeneral {\n",
            f"    lock_cmd = {LOCK_SCRIPT} {keep}\n",
            f"    before_sleep_cmd = {'loginctl lock-session' if lock_before_sleep else 'true'}\n",
+           # Hold off sleep until the screen is really locked: "auto" only waits when lock_cmd names hyprlock
+           f"    inhibit_sleep = {3 if lock_before_sleep else 1}\n",
            f"    after_sleep_cmd = {wake}\n",
            "    ignore_dbus_inhibit = false\n",  # video players and games can still keep the PC awake
            "}\n"]

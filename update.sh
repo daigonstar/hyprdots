@@ -220,6 +220,7 @@ main() {
   echo "Update complete. Local branch '$branch' now matches '$remote/$branch'."
 
   install_new_packages
+  [[ "${SKIP_PACKAGES:-0}" == "1" ]] || bash "$repo_root/install/surface.sh" || true
   apply_symlinks
   "$HOME/.config/hypr/scripts/first-colours.sh" || true
   # Re-apply the settings Theme page to the files the reset just put back (best-effort)

@@ -103,7 +103,7 @@ def lock_preview_button(win, column: Gtk.Box) -> None:
         import os
         from pathlib import Path
         from .. import lockscreen
-        if subprocess.run(["pidof", "hyprlock"], capture_output=True).returncode == 0:
+        if subprocess.run(["pidof", "hyprlock", "gtklock"], capture_output=True).returncode == 0:
             return win.toast("The screen is already locked.")
         path = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "hyprlock-preview.conf"
         lockscreen.write(path, lockscreen.render(win.store.lock_options()))

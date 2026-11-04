@@ -685,6 +685,10 @@ run_cmd "sudo systemctl daemon-reload"
 rm -f "$GENERATED_WESTON_INI"
 log "OK" "Login screen set up on Wayland${MAIN_MONITOR:+ ($MAIN_MONITOR only)}, keyboard ${KB_LAYOUT:-us}."
 
+# A Microsoft Surface needs a little more (does nothing on any other PC)
+
+run_cmd "bash \"$BASE_DIR/install/surface.sh\""
+
 # Hide unwanted apps from launcher
 
 mark step finish

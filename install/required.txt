@@ -6,6 +6,7 @@
 hyprland
 hypridle
 hyprlock
+gtklock   # the lock screen where hyprlock cannot run on the graphics
 hyprpolkitagent
 hyprshot-git
 xdg-desktop-portal-hyprland

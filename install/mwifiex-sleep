@@ -1,0 +1,21 @@
+#!/bin/sh
+# systemd runs this around every sleep (installed to /usr/lib/systemd/system-sleep by install/surface.sh).
+# The Marvell 88W8897 Wi-Fi in older Surfaces can wake with its scans stuck: the adapter is there but sees no networks
+# until the driver is reloaded, so it is unloaded before sleep and loaded again after.
+MARK=/run/hyprdots-mwifiex-unloaded
+
+case "$1" in
+    pre)
+        if [ -d /sys/module/mwifiex_pcie ] && modprobe -r mwifiex_pcie; then
+            touch "$MARK"
+        fi
+        ;;
+    post)
+        # Only put back what was taken out: someone may have unloaded it on purpose
+        if [ -e "$MARK" ]; then
+            rm -f "$MARK"
+            modprobe mwifiex_pcie
+        fi
+        ;;
+esac
+exit 0

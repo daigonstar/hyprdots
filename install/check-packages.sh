@@ -13,7 +13,7 @@ missing=()
 aur_candidates=()
 while read -r pkg; do
   pacman -Si "$pkg" >/dev/null 2>&1 || aur_candidates+=("$pkg")
-done < <(read_pacman required.txt gpu-*.txt apps/*.txt; printf '%s\n' firefox zen-browser-bin chromium brave-bin)
+done < <(read_pacman required.txt surface.txt gpu-*.txt apps/*.txt; printf '%s\n' firefox zen-browser-bin chromium brave-bin)
 
 if ((${#aur_candidates[@]})); then
   query=""

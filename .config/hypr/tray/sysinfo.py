@@ -86,6 +86,10 @@ def has_bluetooth(sys: Path = SYS) -> bool:
     return root.is_dir() and any(root.iterdir())
 
 
+def has_accelerometer(sys: Path = SYS) -> bool:
+    return any(_read(name) == "accel_3d" for name in (sys / "bus/iio/devices").glob("*/name"))
+
+
 def cpu_times(proc: Path = PROC) -> tuple[int, int]:
     """(busy, total) jiffies since boot."""
     fields = [int(x) for x in _read(proc / "stat").splitlines()[0].split()[1:9]]

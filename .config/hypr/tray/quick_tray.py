@@ -39,6 +39,7 @@ import sysinfo  # noqa: E402
 
 THEME = HERE / "theme.css"
 SOUND_OFF = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quick-tray/sounds-off"
+ROTATION_LOCK = Path.home() / ".local/state/hyprdots/rotation-locked"  # read by tablet_mode.py
 SOUND_DIR = Path("/usr/share/sounds/freedesktop/stereo")
 SOUNDLESS_APPS = ("Screenshot", "Screen recording", "Colour picker")  # they have their own sound, or you just asked for them
 LOCK = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "quick-tray.lock"
@@ -54,7 +55,7 @@ ICON = {
     "wifi": "\U000f05a9", "wifi_off": "\U000f05aa", "ethernet": "\U000f0200", "bluetooth": "\U000f00af",
     "bluetooth_off": "\U000f00b2", "bell": "\U000f009a", "bell_off": "\U000f009b", "game": "\U000f0297",
     "awake": "\U000f0176", "vpn": "\U000f099d", "night": "\U000f0594", "airplane": "\U000f001d", "profile": "\U000f04c5",
-    "touchpad": "\U000f0322", "volume": "\U000f057e", "volume_off": "\U000f0581", "mic": "\U000f036c",
+    "touchpad": "\U000f0322", "rotation": "\U000f0d5c", "volume": "\U000f057e", "volume_off": "\U000f0581", "mic": "\U000f036c",
     "mic_off": "\U000f036d", "brightness": "\U000f00e0", "settings": "\U000f0493", "lock": "\U000f033e",
     "power": "\U000f0425", "screenshot": "\U000f0100", "clipboard": "\U000f0147", "wallpaper": "\U000f02e9",
     "keybinds": "\U000f030c", "monitor": "\U000f0128", "chevron": "\U000f0140", "check": "\U000f012c",
@@ -461,6 +462,7 @@ class Tray(Gtk.Window):
         self.profile = Tile(ICON["profile"], "Power profile", self.next_profile)
         self.airplane = Tile(ICON["airplane"], "Airplane mode", self.toggle_airplane)
         self.touchpad = Tile(ICON["touchpad"], "Touchpad", self.toggle_touchpad)
+        self.rotation = Tile(ICON["rotation"], "Rotation lock", self.toggle_rotation)
         tiles = Gtk.FlowBox()
         tiles.set_selection_mode(Gtk.SelectionMode.NONE)
         tiles.set_min_children_per_line(2)
@@ -470,7 +472,7 @@ class Tray(Gtk.Window):
         tiles.set_row_spacing(8)
         tiles.set_can_focus(False)
         for tile in (self.wifi, self.ethernet, self.bluetooth, self.vpn, self.dnd_tile, self.awake, self.game,
-                     self.record, self.sounds, self.night, self.profile, self.airplane, self.touchpad):
+                     self.record, self.sounds, self.night, self.profile, self.airplane, self.touchpad, self.rotation):
             tiles.add(tile)
             tile.get_parent().set_can_focus(False)
         panel.pack_start(tiles, False, False, 0)
@@ -578,6 +580,8 @@ class Tray(Gtk.Window):
         self.profile.present(self.has_profiles)
         self.airplane.present(self.laptop)
         self.touchpad.present(False)
+        self.rotation.present(sysinfo.has_accelerometer())
+        self.rotation.show_state(ROTATION_LOCK.exists(), "On" if ROTATION_LOCK.exists() else "Off")
         self.vpn.present(False)
         self.wifi.present(False)
         self.ethernet.present(False)
@@ -721,6 +725,15 @@ class Tray(Gtk.Window):
         for pad in pads:
             run("hyprctl", "eval", f'hl.device({{ name = "{pad}", enabled = {"false" if self.touchpad_off else "true"} }})')
         self.poll()
+
+    def toggle_rotation(self):
+        """tablet_mode.py looks for the file."""
+        if ROTATION_LOCK.exists():
+            ROTATION_LOCK.unlink()
+        else:
+            ROTATION_LOCK.parent.mkdir(parents=True, exist_ok=True)
+            ROTATION_LOCK.touch()
+        self.rotation.show_state(ROTATION_LOCK.exists(), "On" if ROTATION_LOCK.exists() else "Off")
 
     def toggle_vpn(self):
         vpns = self.state.get("vpns") or []

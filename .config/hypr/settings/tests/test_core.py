@@ -306,7 +306,7 @@ class Overrides(unittest.TestCase):
         self.assertFalse((units / "hyprdots-session.target").exists())
         script = (_paths.HYPR / "scripts/desktop-services.sh").read_text()
         self.assertLess(script.index("wait_for_session\n        stop_strays"), script.index("systemctl --user restart $(units_of)"))
-        for part in ("waybar", "swaync", "hypridle", "hyprdots-tray", "hyprdots-usb"):
+        for part in ("waybar", "swaync", "hypridle", "hyprdots-tray", "hyprdots-usb", "hyprdots-tablet"):
             self.assertIn(part, script)
 
     def test_startup_markers_match_the_lua_file(self):
@@ -377,6 +377,13 @@ class Models(unittest.TestCase):
 
 
 import unittest.mock  # noqa: E402
+
+class IdleSleepLock(unittest.TestCase):
+    def test_sleep_waits_for_the_lock_when_locking_before_sleep(self):
+        from hyprsettings import idle
+        self.assertIn("inhibit_sleep = 3", idle.render(5, 0, 0, True))
+        self.assertNotIn("inhibit_sleep = 3", idle.render(5, 0, 0, False))  # it would hold off sleep for a lock that never comes
+
 
 if __name__ == "__main__":
     unittest.main()

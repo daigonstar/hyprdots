@@ -9,6 +9,22 @@ import _paths  # noqa: F401
 from hyprsettings import network
 
 
+class WifiDevice(unittest.TestCase):
+    def pick(self, *cards):
+        found = [{"name": name, "kind": kind, "up": up} for name, kind, up in cards]
+        with mock.patch.object(network, "interfaces", return_value=found):
+            return network.wifi_device()
+
+    def test_the_card_in_use_beats_an_idle_one_listed_first(self):
+        self.assertEqual(self.pick(("enp1", "ethernet", True), ("mlan0", "wifi", False), ("wlan4", "wifi", True)), "wlan4")
+
+    def test_an_idle_card_when_none_is_in_use(self):
+        self.assertEqual(self.pick(("wlan0", "wifi", False)), "wlan0")
+
+    def test_no_card(self):
+        self.assertEqual(self.pick(("enp1", "ethernet", True)), "")
+
+
 class Fake:
     """Stands in for network.run: answers by the first matching command prefix and records every call."""
     def __init__(self, answers=None):

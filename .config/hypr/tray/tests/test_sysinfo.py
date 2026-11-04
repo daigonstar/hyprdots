@@ -16,6 +16,13 @@ def tree(root: Path, files: dict[str, str]) -> Path:
 
 
 class Hardware(unittest.TestCase):
+    def test_accelerometer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tree(Path(tmp), {"bus/iio/devices/iio:device1/name": "als\n"})
+            self.assertFalse(sysinfo.has_accelerometer(root))
+            tree(root, {"bus/iio/devices/iio:device2/name": "accel_3d\n"})
+            self.assertTrue(sysinfo.has_accelerometer(root))
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
