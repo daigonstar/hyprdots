@@ -20,7 +20,7 @@ from typing import Any, Callable
 import copy
 import datetime
 
-from . import cloud, displays, mimeapps, models, network
+from . import cloud, displays, mimeapps, models, network, overrides
 from .schema import BY_ID, PAGE_INTRO, PAGES, Setting, for_page
 from .store import RESET, STARTUP_ID, Store
 
@@ -1141,6 +1141,10 @@ class App:
             self.notice += " Takes effect " + ", ".join(effects) + "."
 
     def reload_hyprland(self) -> None:
+        problem = overrides.config_problem()
+        if problem:
+            self.message("Not reloaded", ["Your running desktop is unchanged. This needs fixing first:", problem])
+            return
         result = subprocess.run(["hyprctl", "reload"], capture_output=True, text=True)
         errors = subprocess.run(["hyprctl", "configerrors"], capture_output=True, text=True).stdout.strip()
         if errors and errors != "[]":

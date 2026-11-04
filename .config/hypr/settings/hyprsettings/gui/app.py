@@ -13,7 +13,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from .. import theme  # noqa: E402
+from .. import overrides, theme  # noqa: E402
 from ..schema import BY_ID, CLOUD_EFFECT, PAGES  # noqa: E402
 from ..store import Store  # noqa: E402
 from . import pages, ui  # noqa: E402
@@ -193,6 +193,10 @@ class Window(Adw.ApplicationWindow):
             then()
 
     def reload_hyprland(self) -> None:
+        problem = overrides.config_problem()
+        if problem:
+            ui.message(self, "Not reloaded", "Your running desktop is unchanged. This needs fixing first:\n\n" + problem)
+            return
         result = subprocess.run(["hyprctl", "reload"], capture_output=True, text=True)
         errors = subprocess.run(["hyprctl", "configerrors"], capture_output=True, text=True).stdout.strip()
         if errors and errors != "[]":

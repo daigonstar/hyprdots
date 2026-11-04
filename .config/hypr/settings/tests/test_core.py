@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+import unittest.mock
 import http.server
 from pathlib import Path
 
@@ -210,6 +211,95 @@ class StoreTests(unittest.TestCase):
         self.assertIn('terminal = "kitty"', lua)
         self.assertNotIn("qwen", lua)
         self.assertNotIn("rounding", lua)
+
+
+SAFE_RIG = r"""
+-- Stands in for Hyprland: its require records a failure and returns an empty table, without the path a real load returns
+local dir = arg[1]
+package.path = dir .. "/?.lua"
+hooks, binds = {}, 0
+hl = {
+    on = function(_, fn) hooks[#hooks + 1] = fn end,
+    bind = function() binds = binds + 1 end,
+    unbind = function() binds = 0 end,
+    dsp = {exec_cmd = function() end, exit = function() end},
+    notification = {create = function(o) print("NOTICE " .. o.text) end},
+}
+local lua_require = require
+require = function(name)
+    local ok, value, where = pcall(lua_require, name)
+    if not ok and tostring(value):find("not found") then error(value, 2) end
+    if not ok then return {} end
+    return value, where
+end
+local safe = lua_require("safe_config")
+safe.load("keybinds")
+local has, optional = pcall(require, "not_there")
+print("optional", has)
+print("value", require("settings").value)
+safe.finish()
+for _, fn in ipairs(hooks) do fn() end
+print("binds", binds)
+"""
+
+
+@unittest.skipUnless(LUA, "needs lua")
+class SafeConfig(unittest.TestCase):
+    """safe_config.lua falls back to the last copy that worked. Tested for real in a nested Hyprland when it was written."""
+    GOOD = {"keybinds": 'hl.bind("a")\nhl.bind("b")\n', "settings": "return {value = 'good'}\n"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        shutil.copy(Path(_paths.__file__).parents[2] / "safe_config.lua", self.dir)
+        (self.dir / "rig.lua").write_text(SAFE_RIG)
+        self.write(self.GOOD)
+
+    def write(self, files):
+        for name, text in files.items():
+            (self.dir / f"{name}.lua").write_text(text)
+
+    def run_rig(self):
+        env = {"HOME": str(self.dir), "XDG_STATE_HOME": str(self.dir / "state"), "PATH": "/usr/bin:/bin"}
+        done = subprocess.run([LUA, str(self.dir / "rig.lua"), str(self.dir)], capture_output=True, text=True, env=env, timeout=10)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def saved(self, name):
+        return (self.dir / "state/hyprdots/last_good" / f"{name}.lua").read_text()
+
+    def test_clean_load_is_saved_and_a_missing_optional_file_is_no_problem(self):
+        out = self.run_rig()
+        self.assertIn("binds\t2", out)
+        self.assertNotIn("NOTICE", out)
+        self.assertEqual(self.saved("keybinds"), self.GOOD["keybinds"])
+
+    def test_a_broken_file_uses_its_copy_without_overwriting_it(self):
+        self.run_rig()
+        self.write({"settings": "oops("})
+        out = self.run_rig()
+        self.assertIn("value\tgood", out)
+        self.assertIn("NOTICE Safe mode: settings", out)
+        self.assertEqual(self.saved("settings"), self.GOOD["settings"])
+
+    def test_keybinds_failing_part_way_are_not_doubled(self):
+        self.run_rig()
+        self.write({"keybinds": 'hl.bind("a")\nerror("boom")\n'})
+        self.assertIn("binds\t2", self.run_rig())
+
+    def test_keybinds_with_no_copy_still_give_a_way_out(self):
+        self.write({"keybinds": "oops("})
+        self.assertIn("binds\t2", self.run_rig())  # the two emergency keys
+
+
+class ConfigProblem(unittest.TestCase):
+    def test_reports_the_error_and_stays_quiet_when_it_cannot_check(self):
+        fake = subprocess.CompletedProcess([], 1, "noise\n======== Config parsing result:\n\nkeybinds.lua:1: bad\n", "")
+        with unittest.mock.patch("subprocess.run", return_value=fake):
+            self.assertEqual(overrides.config_problem(), "keybinds.lua:1: bad")
+        with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(overrides.config_problem(), "")
 
 
 class Overrides(unittest.TestCase):

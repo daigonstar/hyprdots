@@ -44,7 +44,7 @@ A desktop feels unreliable when one failure leaves you stuck, so these come befo
 
 - **No system snapshots.** [gap] This PC's root is btrfs with subvolumes, but nothing takes a snapshot before an update, so a bad update has no undo. Snapper or Timeshift, with a boot menu entry, would be a real step up.
 - **No release channel.** [checked] The newest tag is `0.2.5`, and updates follow `main`, so a bad push reaches everyone. A tested `stable` branch or tagged releases would fix it, plus a changelog shown after updating.
-- **A config mistake has no safe mode.** [gap] A broken Lua file leaves Hyprland showing an error, or a desktop with no keybinds. Check generated files before reloading everywhere (Window rules already does this), and keep a last-known-good copy to fall back to.
+- **Safe mode is in, with gaps.** [checked] A Lua file that fails to load now falls back to its last working copy (`hypr/safe_config.lua`), with emergency keys if the keybinds have no copy, and Settings checks the config before reloading. Tested in a nested Hyprland, not yet through a real broken login. Not covered: a mistake in `hyprland.lua` or `safe_config.lua` themselves, a file that loads but does the wrong thing, and `autostart.lua` failing after it has registered its start-up, which would start things twice.
 
 ### Hardening
 
@@ -222,7 +222,7 @@ These were built this session but could not be clicked or pressed from the tools
 ## 10. Suggested order
 
 1. **Prove it works:** run the hand checks, then a real install in a virtual machine, and turn that into a repeatable test.
-2. **Make it hard to break:** snapshots before updates, config safe mode, and a stable channel. Fix the small open items in section 7.
+2. **Make it hard to break:** a stable channel, then snapshots before updates. Fix the small open items in section 7.
 3. **Tidy up:** split the large files, and refresh the README's screenshots.
 4. **Build the foundation for three devices:** device profile, first-run choices, and HiDPI.
 5. **Laptop:** lid, power profiles, gestures, and battery-aware idle. A real laptop is needed from here.
@@ -240,5 +240,6 @@ All are in git history.
 - **Settings:** the display popup can be cancelled, a built-in screen is never saved as off, the cheatsheet works again, and the settings window is now GTK.
 - **Installer password, 4 November:** the full-screen installer asks for your password in an overlay whenever sudo needs it, including from `makepkg` and `paru`.
 - **Updates and installs, 3 November:** updates keep hand edits, untracked files and your own configs, stop on unpushed commits, and are tested against a throwaway remote. The installer is now a full-screen interface asking for keyboard, graphics, browser, optional apps, Hearthling and more up front, then showing live progress. `install/apps.sh` adds more later. Update tests and install-choice tests run in CI.
+- **Popups and icons, 4 November:** a click outside closes popups and hides toasts (`hypr/click_away.lua`; touchscreen taps do not trigger it). Icons are centred by using the Nerd Font's Propo cut.
 - **4 November:** web calls ask first when they appear to carry private data, Hearthling's state folder and files are private to you, calls to Ollama have a timeout, and stale `.orig`/`.rej` files, `hypr-dock` and three unused scripts are gone.
 - **Added on 2 November:** the quick tray, notifications in one panel, volume and brightness popups, Alt+Tab, the workspace overview, screenshot actions, screen recording, emoji and colour pickers, night light, system sounds, low battery warnings, USB handling, screen hotplug handling, Qt theming, new animations, a first-run welcome, the Window rules page and wizard, and a cleaned-up bar.

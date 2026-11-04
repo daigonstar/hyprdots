@@ -312,6 +312,10 @@ apply_symlinks() {
   # What runs in the background picks up the update now, rather than at the next login
   if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
     "$HOME/.config/hypr/scripts/desktop-services.sh" start || true
+    # Safe mode keeps the desktop usable if a file fails to load, but you should still hear about it
+    if command -v Hyprland >/dev/null && ! Hyprland --verify-config -c "$HOME/.config/hypr/hyprland.lua" >/dev/null 2>&1; then
+      echo "Warning: the Hyprland config has a problem after this update. Run: hyprctl configerrors"
+    fi
   fi
 
   # Keep Thunar's "Open Terminal Here" working (stand-in helper in ~/.local/bin, keeps your chosen terminal)
