@@ -31,7 +31,7 @@ fetch() {
 start() {
   [[ -f "$dir/disk.qcow2" ]] || { echo "No disk: run $0 fresh" >&2; exit 1; }
   # A real GPU for Hyprland needs the packages qemu-hw-display-virtio-vga-gl and qemu-ui-egl-headless; the plain card does for an install
-  local graphics=(-vga std -display none)
+  local graphics=(-vga none -device "VGA,edid=on,xres=${HYPRDOTS_VM_WIDTH:-1280},yres=${HYPRDOTS_VM_HEIGHT:-800}" -display none)
   if [[ -e /usr/lib/qemu/hw-display-virtio-vga-gl.so && -e /usr/lib/qemu/ui-egl-headless.so ]]; then
     graphics=(-device virtio-vga-gl -display "egl-headless,gl=on")
   fi
@@ -43,8 +43,13 @@ start() {
 }
 
 stop() {
-  [[ -f "$dir/pid" ]] && kill "$(cat "$dir/pid")" 2>/dev/null || true
-  rm -f "$dir/pid"
+  if [[ -f "$dir/pid" ]]; then
+    local pid
+    pid="$(cat "$dir/pid")"
+    kill "$pid" 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done  # it holds a lock on the disk until it has gone
+    rm -f "$dir/pid"
+  fi
 }
 
 # The image's user is arch, password arch: published by Arch, and only reachable from this PC
@@ -96,8 +101,8 @@ run_installer() {
       vm 'tmux send-keys -t i arch Enter'
       echo "  note  it asked for the password in the terminal before the interface started"
       sleep 15
-    elif [[ "$started" == false ]] && grep -q 'Step 1 of 8' <<<"$screen"; then
-      vm 'for i in 1 2 3 4 5 6 7 8; do tmux send-keys -t i Enter; sleep 0.8; done'
+    elif [[ "$started" == false ]] && grep -q 'Step 1 of ' <<<"$screen"; then
+      vm 'while tmux capture-pane -p -t i | grep -qE "Step [0-9]+ of [0-9]+"; do tmux send-keys -t i Enter; sleep 0.8; done'
       started=true
     elif grep -q 'needs your password' <<<"$screen"; then
       prompts=$((prompts + 1))
@@ -142,6 +147,7 @@ case "${1:-}" in
     echo "First login:"
     desktop_checks
     check "the welcome opens" 'hyprctl clients | grep -q com.hyprdots.welcome'
+    check "a pacman run leaves a snapshot" 'echo arch | sudo -S -p "" pacman -S --noconfirm cowsay && echo arch | sudo -S -p "" snapper -c root list | grep -q post'
     "$0" screenshot "$dir/first-login.png"
     vm "$vm_env hyprctl dispatch 'hl.dsp.exit()'" || true
     sleep 8

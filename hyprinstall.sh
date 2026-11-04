@@ -725,6 +725,12 @@ run_cmd "sudo cp \"$REPO_DIR/SDDM/sddm.conf\" /etc/sddm.conf.d/sddm.conf"
 
 # Plymouth Configuration
 
+# Undo for updates, on a btrfs system (see install/snapshots.sh). Last, so the install itself is not what gets kept.
+if [[ "$(findmnt -no FSTYPE / 2>/dev/null)" == btrfs ]] && [[ "${HYPR_SNAPSHOTS:-ask}" != no ]] &&
+  { [[ "${HYPR_SNAPSHOTS:-ask}" == yes ]] || yesno_prompt "Keep a copy of the system before each update, so a bad one can be undone?" "y"; }; then
+  run_cmd "sudo bash \"$BASE_DIR/install/snapshots.sh\"" || log "WARN" "Could not turn on snapshots; run sudo $BASE_DIR/install/snapshots.sh to try again"
+fi
+
 # The theme, the plymouth hook and "quiet splash" on the kernel command line (see install/plymouth.sh)
 run_cmd "sudo bash \"$BASE_DIR/install/plymouth.sh\"" || log "WARN" "Boot splash setup failed; run sudo $BASE_DIR/install/plymouth.sh later"
 
