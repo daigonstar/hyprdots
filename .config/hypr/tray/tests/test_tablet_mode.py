@@ -72,19 +72,20 @@ class Screen(unittest.TestCase):
 
 
 class Fade(unittest.TestCase):
+    # The window itself needs a display, which CI does not have: these are about the decision, so it stands in for itself
     def test_nothing_shows_when_the_screen_is_already_that_way(self):
-        fade = tablet_mode.ScreenFade()
+        fade = mock.Mock(turning=False)
         with mock.patch.object(tablet_mode, "screen_to_rotate", return_value=None):
-            fade.rotate(0)
-        self.assertFalse(fade.get_visible())
+            tablet_mode.ScreenFade.rotate(fade, 0)
+        fade.show.assert_not_called()
         self.assertFalse(fade.turning)
 
     def test_one_turn_at_a_time(self):
-        fade = tablet_mode.ScreenFade()
-        fade.turning = True
+        fade = mock.Mock(turning=True)
         with mock.patch.object(tablet_mode, "screen_to_rotate") as asked:
-            fade.rotate(1)
+            tablet_mode.ScreenFade.rotate(fade, 1)
         asked.assert_not_called()
+        fade.show.assert_not_called()
 
 
 class Modes(unittest.TestCase):
