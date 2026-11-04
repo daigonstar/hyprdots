@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import keyspec, overrides, tomledit
+from . import account, keyspec, overrides, tomledit
 from .schema import APP_CANDIDATES, BY_ID, GTK_NOW, INSTALLED_CHOICES, SETTINGS, Setting
 
 RESET = object()  # staged marker: remove the key from the local file
@@ -283,7 +283,10 @@ class Store:
 
     def lock_options(self) -> dict:
         """The lock screen settings as they stand, including unsaved changes (the Preview button uses this)."""
-        return {s.key: self.get(s)[0] for s in SETTINGS if s.section == "lockscreen"}
+        options = {s.key: self.get(s)[0] for s in SETTINGS if s.section == "lockscreen"}
+        if account.picture_path().exists():
+            options["picture"] = str(account.picture_path())
+        return options
 
     def write_overrides(self) -> None:
         config, apps = [], {}

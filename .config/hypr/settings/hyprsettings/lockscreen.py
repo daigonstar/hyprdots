@@ -78,6 +78,11 @@ def render(o: dict, header: str = "", accent: str | None = None) -> str:
     if o["show_user"]:
         parts.append(f"label {{\n    monitor =\n    text = $USER\n    color = $soft\n    font_size = 15\n    font_family = $font\n"
                      f"{shadow}    position = {user_pos}\n    halign = center\n    valign = {user_valign}\n}}\n\n")
+    if o.get("picture"):  # below the name with a box in the middle, or above it at the bottom of the screen
+        x, y = (int(n) for n in user_pos.split(", "))
+        picture_y = y - 60 if user_valign == "center" else y + 60
+        parts.append(f"image {{\n    monitor =\n    path = {o['picture']}\n    size = 72\n    rounding = -1\n    border_size = 0\n"
+                     f"    position = {x}, {picture_y}\n    halign = center\n    valign = {user_valign}\n}}\n\n")
     return "".join(parts).rstrip("\n") + "\n"
 
 

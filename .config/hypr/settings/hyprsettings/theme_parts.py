@@ -126,10 +126,10 @@ def write_hypr(o: dict) -> None:
 
 
 def write_lock(store) -> None:
-    """Only rewrites the lock screen when you have saved your own look (the shipped one stays as it is)."""
-    from . import lockscreen
+    """Only rewrites the lock screen when you have saved your own look or chosen a picture (else the shipped one stays as it is)."""
+    from . import account, lockscreen
     path = lockscreen.local_path(store.dir)
-    if path.exists():
+    if path.exists() or account.picture_path().exists():
         lockscreen.write(path, lockscreen.render(store.lock_options(), accent=design.resolved(design.theme_options(store))["accent"]))
 
 

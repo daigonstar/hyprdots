@@ -11,6 +11,7 @@ mode only on a laptop. popups.py and overview.py have the volume level, Alt+Tab 
 import fcntl
 import json
 import os
+import pwd
 import shlex
 import shutil
 import signal
@@ -20,6 +21,7 @@ import sys
 import threading
 import time
 from collections import deque
+from math import pi
 from pathlib import Path
 
 import gi
@@ -159,6 +161,35 @@ def hand_cursor(widget):
         if w.get_window():
             w.get_window().set_cursor(Gdk.Cursor.new_from_name(w.get_display(), "pointer"))
     widget.connect("enter-notify-event", enter)
+
+
+class Avatar(Gtk.DrawingArea):
+    """Your picture from the User page of Settings, in a circle. Takes no room if you have none."""
+    SIZE = 36
+
+    def __init__(self):
+        super().__init__()
+        self.set_size_request(self.SIZE, self.SIZE)
+        self.set_valign(Gtk.Align.CENTER)
+        self.set_no_show_all(True)
+        self.picture = None
+        self.connect("draw", self._draw)
+
+    def reload(self):
+        try:
+            self.picture = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(Path.home() / ".face"), self.SIZE, self.SIZE, False)
+        except GLib.Error:
+            self.picture = None
+        self.set_visible(self.picture is not None)
+        self.queue_draw()
+
+    def _draw(self, _area, cr):
+        if self.picture:
+            cr.arc(self.SIZE / 2, self.SIZE / 2, self.SIZE / 2, 0, 2 * pi)
+            cr.clip()
+            Gdk.cairo_set_source_pixbuf(cr, self.picture, 0, 0)
+            cr.paint()
+        return False
 
 
 def icon_button(icon, tooltip, action, css="round"):
@@ -437,8 +468,11 @@ class Tray(Gtk.Window):
 
         # Who and how long, then the session buttons
         top = Gtk.Box(spacing=6)
+        self.avatar = Avatar()
+        top.pack_start(self.avatar, False, False, 2)
         words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        words.pack_start(label(socket.gethostname(), "host"), False, False, 0)
+        self.who = label(socket.gethostname(), "host")
+        words.pack_start(self.who, False, False, 0)
         self.uptime = label("", "dim")
         words.pack_start(self.uptime, False, False, 0)
         top.pack_start(words, True, True, 0)
@@ -619,6 +653,8 @@ class Tray(Gtk.Window):
 
     def open(self):
         self.show()
+        self.avatar.reload()
+        self.who.set_text(pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0].strip() or socket.gethostname())
         self._fit_to_screen()
         self.poll()
         self.poll_timer = GLib.timeout_add_seconds(SAMPLE_SECONDS, self.poll)

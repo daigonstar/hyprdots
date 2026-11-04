@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -9,7 +10,7 @@ import http.server
 from pathlib import Path
 
 import _paths
-from hyprsettings import models, overrides, schema, tomledit
+from hyprsettings import account, lockscreen, models, overrides, schema, tomledit
 from hyprsettings.store import RESET, Store
 
 LUA = shutil.which("lua5.4") or shutil.which("lua")
@@ -291,6 +292,80 @@ class SafeConfig(unittest.TestCase):
     def test_keybinds_with_no_copy_still_give_a_way_out(self):
         self.write({"keybinds": "oops("})
         self.assertIn("binds\t2", self.run_rig())  # the two emergency keys
+
+
+FAKE_PASSWD = """#!/bin/sh
+echo "Changing password for you."
+printf "Current password: "; read -r current
+[ "$current" = old ] || { echo "passwd: Authentication token manipulation error"; exit 10; }
+printf "New password: "; read -r new
+[ "$new" = short ] && { echo "BAD PASSWORD: The password is shorter than 8 characters"; exit 10; }
+printf "Retype new password: "; read -r again
+[ "$new" = "$again" ] || exit 10
+echo "$new" > "$PASSWD_RESULT"
+echo "passwd: password updated successfully"
+"""
+
+
+class Account(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        fake = self.dir / "passwd"
+        fake.write_text(FAKE_PASSWD)
+        fake.chmod(0o755)
+        env = {"PATH": f"{self.dir}:{os.environ['PATH']}", "PASSWD_RESULT": str(self.dir / "changed"), "HOME": str(self.dir)}
+        patcher = unittest.mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_password_changes_with_the_right_current_one(self):
+        self.assertEqual(account.change_password("old", "new secret")[0], True)
+        self.assertEqual((self.dir / "changed").read_text(), "new secret\n")
+
+    def test_a_wrong_current_password_says_so_and_never_repeats_it(self):
+        worked, message = account.change_password("wrong secret", "new secret")
+        self.assertFalse(worked)
+        self.assertIn("current password", message)
+        self.assertNotIn("secret", message)
+
+    def test_a_refused_new_password_gives_the_reason(self):
+        worked, message = account.change_password("old", "short")
+        self.assertFalse(worked)
+        self.assertIn("shorter than 8", message)
+
+    def test_a_stuck_passwd_does_not_hang_the_page(self):
+        (self.dir / "passwd").write_text("#!/bin/sh\nsleep 30\n")
+        self.assertFalse(account.change_password("old", "new", timeout=0.5)[0])
+
+    def test_picture_is_cropped_to_a_square(self):
+        import gi
+        gi.require_version("GdkPixbuf", "2.0")
+        from gi.repository import GdkPixbuf
+        wide = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 400, 100)
+        wide.savev(str(self.dir / "wide.png"), "png", [], [])
+        with unittest.mock.patch.object(account, "_accounts", return_value="") as told:
+            account.set_picture(self.dir / "wide.png")
+        saved = GdkPixbuf.Pixbuf.new_from_file(str(self.dir / ".face"))
+        self.assertEqual((saved.get_width(), saved.get_height()), (256, 256))
+        told.assert_called_once_with("SetIconFile", str(self.dir / ".face"))
+
+    def test_a_file_that_is_not_a_picture_is_refused_and_keeps_the_old_one(self):
+        (self.dir / "notes.txt").write_text("not a picture")
+        (self.dir / ".face").write_text("the old one")
+        with self.assertRaises(ValueError):
+            account.set_picture(self.dir / "notes.txt")
+        self.assertEqual((self.dir / ".face").read_text(), "the old one")
+
+    def test_a_name_cannot_break_the_account_file(self):
+        with self.assertRaises(ValueError):
+            account.set_real_name("Robb, the second")
+
+    def test_lock_screen_shows_the_picture_only_when_there_is_one(self):
+        o = dict(lockscreen.DEFAULTS, show_user=True)
+        self.assertNotIn("image {", lockscreen.render(o))
+        self.assertIn("path = /home/x/.face", lockscreen.render({**o, "picture": "/home/x/.face"}))
 
 
 class ConfigProblem(unittest.TestCase):
