@@ -19,7 +19,7 @@ These are judgement calls, not measurements.
 
 | | Today | What is missing most |
 |---|---|---|
-| **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
+| **Desktop (this PC)** | About 95% | Real-world use |
 | **Fresh install on another PC** | About 85% | Passes in a virtual machine with default answers; real graphics drivers tested by hand only |
 | **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
 | **Tablet** | About 60% | Works on a Surface Pro 3. Pen, and clicking away by touch, are still open, and only that one device is proven |
@@ -206,16 +206,10 @@ The strongest thing this has that others do not. Today it is a separate chat win
 
 These need real hardware or a person. `vm.sh click` now covers clicks in a VM, and `vm.sh key` key presses.
 
-- [ ] Change your password, trying a wrong current one once, then log in with the new one. Have the old one written down until you have
 - [ ] Bar: the system tray arrow opens on click (it was hover, which touch does not have)
-- [ ] Bar: clicking a workspace dot switches to it
-- [ ] Window rules: add a rule with the wizard and press the real Save, then switch one off
-- [ ] Unplug a screen for real and plug it back in (it was only simulated by turning one off)
-- [ ] Sleep and wake with the tray open
-- [ ] OpenRGB: your lighting profile loads at login
 - [ ] Optional, as it changes your system: `sudo ~/hyprdots/install/snapshots.sh`, run `pacman -S` on something small, then `hyprundo` and check it is gone
 
-Passed by hand on 4 November: User page picture and name, Alt+Tab, Super+Tab, screenshots, recording, emoji, a picked colour, night light, USB, and logging out and back in with udiskie. Click-away passed with real clicks in a VM: the quick tray, bell, calendar, clock, toasts, rofi and cheatsheet.
+Passed by hand on 4 November: User page picture and name, Alt+Tab, Super+Tab, screenshots, recording, emoji, a picked colour, night light, USB, logging out and back in with udiskie, changing your password, unplugging a screen, workspace dots, window rules, sleep and wake, and OpenRGB at login. Click-away passed with real clicks in a VM: the quick tray, bell, calendar, clock, toasts, rofi and cheatsheet.
 
 ## 10. Suggested order
 
