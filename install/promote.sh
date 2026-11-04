@@ -27,7 +27,9 @@ else
 fi
 
 echo "Moving stable to ${commit:0:7}. Everyone on stable gets:"
-git log --no-merges --format='- %s' "$range" | head -n 40
-read -rp "Go ahead? [y/N] " answer
+git log --no-merges -n 40 --format='- %s' "$range"
+count="$(git rev-list --no-merges --count "$range")"
+(( count > 40 )) && echo "...and $(( count - 40 )) more"
+read -rp "Go ahead? [y/N] " answer || answer=""
 [[ "$answer" == [yY] ]] || { echo "Not promoted."; exit 1; }
 git push origin "$commit:refs/heads/stable"

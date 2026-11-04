@@ -165,6 +165,15 @@ class Update(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertNotEqual(self.stable(), "")
 
+    def test_promote_still_asks_after_a_long_list(self):
+        for n in range(45):
+            subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", f"change {n}"], cwd=self.dev, env=self.env, check=True)
+        git(self.dev, "push", "-q", "origin", "main")
+        done = self.promote("completed success")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("...and 6 more", done.stdout)
+        self.assertNotEqual(self.stable(), "")
+
     def test_a_file_of_yours_with_a_new_shipped_name_is_saved(self):
         (self.pc / ".config/hypr/new.lua").write_text("mine\n")
         (self.dev / ".config/hypr/new.lua").write_text("shipped\n")
