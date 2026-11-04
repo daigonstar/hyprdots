@@ -188,7 +188,8 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(store.get(self.s("hyprland.gaps_in"))[1], "default")
 
     def test_startup_apps_and_calendar(self):
-        self.assertIn("vesktop", [a["id"] for a in self.store.startup_apps()])
+        with unittest.mock.patch("shutil.which", return_value="/usr/bin/vesktop"):
+            self.assertIn("vesktop", [a["id"] for a in self.store.startup_apps()])
         self.store.set_startup("vesktop", False)
         self.store.set_startup("solaar", False)
         self.store.set_calendar_sources(["Home|https://example.com/x.ics"])
