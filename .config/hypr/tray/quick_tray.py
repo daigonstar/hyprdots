@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Quick tray: phone-style quick settings, a system monitor and your notifications in one panel (GTK3 + layer-shell).
 
-It runs in the background and opens and closes with swaync's control centre, which is kept open invisibly behind it:
-swaync stays in charge of notifications, popups and clicking away or pressing Escape to close, so the bar's bell
-button and `swaync-client -t` still open it. notifications.py keeps the list this panel draws.
+It runs in the background and opens and closes with swaync's control centre, which has no window of its own: swaync
+stays in charge of notifications and popups, so the bar's bell button and `swaync-client -t` still open it, and
+click_away.lua closes it on a click outside. notifications.py keeps the list this panel draws.
 
 Anything this PC does not have is left out: no Wi-Fi card, no Wi-Fi tile; battery, brightness, touchpad and airplane
 mode only on a laptop. popups.py and overview.py have the volume level, Alt+Tab and Super+Tab, which run in this process too. Colours come from the settings Theme page (theme.css, see theme_parts.tray_css).

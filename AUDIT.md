@@ -22,7 +22,7 @@ These are judgement calls, not measurements.
 | **Desktop (this PC)** | About 90% | Real-world use, and the hand checks below |
 | **Fresh install on another PC** | About 85% | Passes in a virtual machine with default answers; real graphics drivers tested by hand only |
 | **Laptop** | About 50% | Lid, power profiles, gestures, sleep on battery. What exists has only run on simulated hardware |
-| **Tablet** | About 15% | No on-screen keyboard, rotation or touch gestures, and much of the desktop assumes a keyboard or a hover |
+| **Tablet** | About 60% | Works on a Surface Pro 3. Pen, and clicking away by touch, are still open, and only that one device is proven |
 
 ## 1. Reliability: fix these first
 
@@ -204,37 +204,18 @@ The strongest thing this has that others do not. Today it is a separate chat win
 
 ## 9. Hand checks still to do
 
-These cannot be clicked or pressed from the tools used.
+These need real hardware or a person. `vm.sh click` now covers clicks in a VM, and `vm.sh key` key presses.
 
-**Popups**
-- [ ] Click inside a popup: it stays open. Click outside, on another screen and on the desktop: it closes
-- [ ] Click the bell or the clock while its popup is open: it closes and does not reopen
-- [ ] A toast: clicking elsewhere hides it, and it stays listed in the quick tray
-
-**User page**
-- [ ] Choose a picture with the file picker, then remove it
-- [ ] Change your name
 - [ ] Change your password, trying a wrong current one once, then log in with the new one. Have the old one written down until you have
-
-**Desktop**
-- [ ] Hold Alt and tap Tab, with windows on both screens
-- [ ] Overview (`SUPER + TAB`): click a window, click a workspace, and drag a window to another
-- [ ] Bar: the system tray arrow still opens on hover
+- [ ] Bar: the system tray arrow opens on click (it was hover, which touch does not have)
+- [ ] Bar: clicking a workspace dot switches to it
 - [ ] Window rules: add a rule with the wizard and press the real Save, then switch one off
-- [ ] Night light on and off
-- [ ] Screenshot: Open, Show in folder and Edit buttons, and region and window modes
-- [ ] Emoji typed into an app, and a picked colour pasted
-- [ ] Record an area with the mouse, and stop from the REC badge
-
-**Hardware**
-- [ ] Plug in a USB stick: mounts, notifies, opens and ejects from the tray
-- [ ] Log out and back in: udiskie and the tray both start, and the login is quick
 - [ ] Unplug a screen for real and plug it back in (it was only simulated by turning one off)
 - [ ] Sleep and wake with the tray open
 - [ ] OpenRGB: your lighting profile loads at login
+- [ ] Optional, as it changes your system: `sudo ~/hyprdots/install/snapshots.sh`, run `pacman -S` on something small, then `hyprundo` and check it is gone
 
-**Optional: undo for updates on your PC** (this changes your system, so it has not been done there)
-- [ ] `sudo ~/hyprdots/install/snapshots.sh`, run `pacman -S` on something small, then `hyprundo` and check it is gone
+Passed by hand on 4 November: User page picture and name, Alt+Tab, Super+Tab, screenshots, recording, emoji, a picked colour, night light, USB, and logging out and back in with udiskie. Click-away passed with real clicks in a VM: the quick tray, bell, calendar, clock, toasts, rofi and cheatsheet.
 
 ## 10. Suggested order
 

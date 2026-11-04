@@ -1,4 +1,4 @@
-/* Wallpaper picker: full screen like the app launcher, with each wallpaper shown in its own aspect ratio.
+/* Wallpaper picker: a dark card, so a click outside it closes it (click_away.lua), with each wallpaper shown in its own aspect ratio.
    Colours come from wallust (../colors.rasi). The thumbnail size is set by wallpaper.sh to fit the screen. */
 
 @import "colors.rasi"
@@ -6,6 +6,9 @@
 
 configuration {
   modi: "dmenu";
+  /* one click or tap picks, rather than two */
+  me-select-entry: "";
+  me-accept-entry: "MousePrimary";
   show-icons: true;
 }
 
@@ -13,19 +16,18 @@ window {
   transparency: "real";
   location: center;
   anchor: center;
-  fullscreen: true;
-  width: 100%;
-  height: 100%;
+  width: 80%;
+  height: 80%;
   margin: 0px;
   padding: 0px;
   border: 0px;
-  border-radius: 0px;
-  background-color: black / 50%;
+  border-radius: 18px;
+  background-color: black / 75%;
 }
 
 mainbox {
   spacing: 60px;
-  padding: 80px 150px;
+  padding: 30px 40px;
   background-color: transparent;
   children: [ "inputbar", "listview" ];
 }

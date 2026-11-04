@@ -3,7 +3,7 @@ set -euo pipefail
 
 # vm.sh
 # A blank Arch virtual machine for testing a real install. Needs qemu and KVM, not sudo.
-# Usage: vm.sh test [--local] | fresh | start | stop | ssh [command] | screenshot FILE | key KEYS...
+# Usage: vm.sh test [--local] | fresh | start | stop | ssh [command] | screenshot FILE | key KEYS... | click X Y
 #   test: the whole thing on a blank disk: the real installer, a reboot, a login, checks, then a second login. --local
 #   puts your uncommitted changes on top of what it clones. About 15 minutes, and it downloads several GB.
 # Everything lives in ~/.cache/hyprdots-vm. The base image is Arch's own and stays untouched: fresh copies it.
@@ -135,6 +135,8 @@ desktop_checks() {
   check "nothing failed" '[ -z "$(systemctl --user --failed --no-legend)" ]'
   check "a wallpaper is showing" 'awww query | grep -q image:'
   check "bar showing" 'hyprctl layers | grep -q waybar'
+  check "the bar has its style" '! journalctl --user -b -u waybar --no-pager | grep -q "Failed to import"'
+  check "workspace dots running" 'pgrep -f workspace_dot'
   check "safe mode has copies" '[ "$(ls ~/.local/state/hyprdots/last_good | wc -l)" -gt 5 ]'
   check "sound running" 'wpctl status'
 }
@@ -171,6 +173,10 @@ case "${1:-}" in
   stop) stop ;;
   ssh) shift; exec ssh "${ssh_opts[@]}" arch@127.0.0.1 "$@" ;;
   screenshot) monitor_cmd "screendump $2.ppm"; sleep 1; magick "$2.ppm" "$2" 2>/dev/null || python3 -c "from PIL import Image; import sys; Image.open(sys.argv[1]).save(sys.argv[2])" "$2.ppm" "$2"; rm -f "$2.ppm" ;;
+  click)  # a real left click, for a logged-in VM: emulated movement does not reach Hyprland, so it moves the cursor itself
+    vm "$vm_env hyprctl dispatch 'hl.dsp.cursor.move({ x = $2, y = $3 })' >/dev/null; sleep 0.4"
+    monitor_cmd "mouse_button 1"; sleep 0.15; monitor_cmd "mouse_button 0"; sleep 0.8
+    ;;
   key) shift; for k in "$@"; do monitor_cmd "sendkey $k"; sleep 0.15; done ;;
   *) sed -n 6,8p "$0"; exit 2 ;;
 esac

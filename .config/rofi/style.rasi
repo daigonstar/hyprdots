@@ -4,6 +4,9 @@
 
 /*****----- Configuration -----*****/
 configuration {
+    /* one click or tap picks, rather than two */
+    me-select-entry: "";
+    me-accept-entry: "MousePrimary";
     modi:                       "drun,run,filebrowser";
     show-icons:                 true;
     display-drun:               "  apps";

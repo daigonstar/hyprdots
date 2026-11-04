@@ -9,7 +9,7 @@ local close = {
     powermenu = "pkill -f '[p]owermenu/powermenu.py'",
     calendar = 'kill "$(cat "$XDG_RUNTIME_DIR/waybar-calendar.pid")"',
     ["quick-tray-overview"] = "pkill -HUP -f '[h]ypr/tray/quick_tray'",
-    ["swaync-control-center"] = "swaync-client -cp -sw",
+    ["quick-tray"] = "swaync-client -cp -sw",  -- opens and closes with swaync's panel, which swaync 0.12 draws no window for
 }
 -- swaync's toast window is as tall as the screen, so its size says nothing about where the toasts are. All of them are
 -- hidden on every click, after the wait so a click on a toast still counts. They stay listed in the quick tray.
@@ -22,12 +22,11 @@ end
 local function clicked()
     local at = hl.get_cursor_pos()
     if not at then return end
-    local on_bar, on_tray, open = false, false, {}
+    local on_bar, open = false, {}
     for _, layer in ipairs(hl.get_layers()) do
         if layer.mapped then
             local inside = contains(layer, at)
             on_bar = on_bar or (inside and layer.namespace == "waybar")
-            on_tray = on_tray or (inside and layer.namespace == "quick-tray")
             if layer.namespace == "swaync-notification-window" then
                 open[HIDE_TOASTS] = true
             elseif close[layer.namespace] and not inside then
@@ -35,8 +34,6 @@ local function clicked()
             end
         end
     end
-    -- The tray is drawn over an invisible control centre, which may be on the other screen
-    if on_tray then open["swaync-control-center"] = nil end
     for what in pairs(open) do
         local command = close[what]
         hl.exec_cmd(command and ((on_bar and BAR_WAIT or "") .. command) or what)
