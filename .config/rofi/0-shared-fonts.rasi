@@ -7,6 +7,6 @@
 /* The font comes from the settings Theme page: it is written into colors.rasi, which every rofi theme imports.
    To set one by hand anyway, uncomment this (the font has to be installed):
 configuration {
-  font: "CaskaydiaCove Nerd Font 13";
+  font: "CaskaydiaCove Nerd Font Propo,CaskaydiaCove Nerd Font 13";
 }
 */

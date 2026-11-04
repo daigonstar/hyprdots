@@ -14,7 +14,7 @@
 @define-color theme_surface_fill alpha(@color2, 0.8);
 
 * {
-    font-family: "CaskaydiaCove Nerd Font";
+    font-family: "CaskaydiaCove Nerd Font Propo", "CaskaydiaCove Nerd Font";
     font-size: 15px;
 }
 

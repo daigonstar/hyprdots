@@ -21,7 +21,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk, Gtk4LayerShell, Pango, PangoCairo  # noqa: E402
 
 DRY_RUN = "--dry-run" in sys.argv
-FONT = "CaskaydiaCove Nerd Font"   # icons
+FONT = "CaskaydiaCove Nerd Font Propo"   # icons
 TEXT_FONT = "Sans"
 COLORS_FILE = Path.home() / ".config/rofi/colors.rasi"
 

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 COLORS_FILE = Path.home() / ".config/rofi/colors.rasi"
-ICON_FONT = "CaskaydiaCove Nerd Font"
+ICON_FONT = "CaskaydiaCove Nerd Font Propo"
 LOGOS = {"arch": "", "tux": ""}
 
 
