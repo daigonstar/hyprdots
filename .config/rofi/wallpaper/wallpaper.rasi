@@ -102,3 +102,6 @@ element-text, element-text selected, element-text normal, element-text alternate
   horizontal-align: 0.5;
   cursor: inherit;
 }
+
+/* Bigger rows and one tap to pick, in touch mode: hypr/tray/touch_mode.py writes it, empty otherwise */
+@import "~/.config/rofi/touch.rasi"

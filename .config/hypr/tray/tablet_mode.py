@@ -19,6 +19,7 @@ from pathlib import Path
 
 import touch_gestures
 import touch_lift
+import touch_mode
 
 import cairo
 import gi
@@ -33,38 +34,6 @@ INPUT_DEVICES = Path("/proc/bus/input/devices")
 NOT_A_KEYBOARD = re.compile(r"button|video-bus|consumer|audio|power|sleep|hotkey|virtual|wmi")
 TRANSFORMS = {"normal": 0, "left-up": 1, "bottom-up": 2, "right-up": 3}  # iio-sensor-proxy's words, Hyprland's numbers
 ORIENTATION = re.compile(r"(?:orientation changed: |orientation: )([a-z-]+)")
-BAR_STYLE = Path.home() / ".config/waybar/tablet.css"
-BAR_TOUCH_CSS = """/* Written by hypr/tray/tablet_mode.py while no keyboard is attached */
-window#waybar * { font-size: 22px; }
-window#waybar #workspaces button { min-width: 44px; min-height: 44px; padding: 0 8px; }
-""" + """window#waybar #clock,
-window#waybar #custom-assistant,
-window#waybar #pulseaudio,
-window#waybar #battery,
-window#waybar #network,
-window#waybar #bluetooth,
-window#waybar #idle_inhibitor,
-window#waybar #custom-updates,
-window#waybar #custom-recording,
-window#waybar #custom-power,
-window#waybar #custom-noti,
-window#waybar #custom-trayarrow,
-window#waybar #custom-settingsarrow,
-window#waybar #cpu,
-window#waybar #memory,
-window#waybar #temperature,
-window#waybar #tray,
-window#waybar #cava,
-window#waybar #disk,
-window#waybar #backlight,
-window#waybar #mpris,
-window#waybar #language,
-window#waybar #custom-wallpaper,
-window#waybar #custom-drive,
-window#waybar #custom-keys,
-window#waybar #custom-userconfig,
-window#waybar #window { min-height: 44px; padding: 0 16px; }
-"""
 TICK_MS = 2000
 # Long enough for Hyprland's layersIn fade (window.lua) to darken the screen, and for the screen to settle before fading back
 FADE_IN_MS = 170
@@ -85,16 +54,6 @@ def devices() -> dict:
         return json.loads(run("hyprctl", "devices", "-j") or "{}")
     except json.JSONDecodeError:
         return {}
-
-
-def bar_for_touch(wanted: bool) -> None:
-    """The bar reloads its style by itself when this changes."""
-    text = BAR_TOUCH_CSS if wanted else ""
-    try:
-        if not BAR_STYLE.exists() or BAR_STYLE.read_text() != text:
-            BAR_STYLE.write_text(text)
-    except OSError:
-        pass
 
 
 def has_keyboard(found: dict) -> bool:
@@ -147,20 +106,31 @@ class InputWatch:
         return False
 
 
+def bar_is_shown(monitor: dict, layers: dict) -> bool:
+    """A hidden bar stays in the list of layers, but reserves no space: whatever is reserved beyond the keyboard is the bar's."""
+    keyboard = sum(surface.get("h", 0) for screen in layers.values() for level in screen.get("levels", {}).values()
+                   for surface in level if surface.get("namespace") == "osk")
+    return sum((monitor.get("reserved") or [0, 0, 0, 0])[1::2]) > keyboard
+
+
 def button_margin(layers: dict) -> int:
     """How far up from the bottom the button goes: above the keyboard while it is up. hyprctl layers -j gives the layers."""
     heights = [surface.get("h", 0) for monitor in layers.values() for level in monitor.get("levels", {}).values()
                for surface in level if surface.get("namespace") == "osk"]
-    return BUTTON_MARGIN + max(heights, default=0)
+    bar = [surface.get("h", 0) for monitor in layers.values() for level in monitor.get("levels", {}).values()
+           for surface in level if surface.get("namespace") == "waybar" and surface.get("y", 0) > 0]
+    return BUTTON_MARGIN + max(heights, default=0) + max(bar, default=0)
 
 
 class KeyboardButton(Gtk.Window):
-    """Puts squeekboard away and brings it back, through the switch it offers on D-Bus."""
+    """While the on-screen keyboard is up: a button to put it away, as squeekboard has no key for that, and the bar out of the way.
+    The bar's Touch badge brings it up (waybar/config), through the same switch squeekboard offers on D-Bus."""
 
     def __init__(self):
         super().__init__()
         self.proxy = None
         self.margin = None
+        self.wanted = False
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "tablet-keyboard-button")
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
@@ -168,11 +138,11 @@ class KeyboardButton(Gtk.Window):
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, BUTTON_MARGIN)
-        self.button = Gtk.Button(label="\u2328")
+        self.button = Gtk.Button(label="Hide keyboard \u25be")
         self.button.set_can_focus(False)  # the text field keeps the focus, or the keyboard would close by itself
-        self.button.set_tooltip_text("Show or hide the on-screen keyboard")
-        self.button.connect("clicked", self.toggle)
+        self.button.connect("clicked", self.put_away)
         self.add(self.button)
+        self.button.show()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
             window { background: transparent; }
@@ -184,34 +154,123 @@ class KeyboardButton(Gtk.Window):
             widget.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     def present_for(self, wanted: bool) -> None:
-        if wanted:
-            self.proxy = self.proxy or Gio.DBusProxy.new_for_bus_sync(
+        self.wanted = wanted
+        if wanted and not self.proxy:
+            self.proxy = Gio.DBusProxy.new_for_bus_sync(
                 Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START, None, "sm.puri.OSK0", "/sm/puri/OSK0", "sm.puri.OSK0", None)
-            self.proxy.connect("g-properties-changed", lambda *_a: GLib.timeout_add(250, self.update))
-            self.show_all()
-            self.update()
-        else:
-            self.proxy = None
-            self.hide()
+            self.proxy.connect("g-properties-changed", lambda *_a: GLib.timeout_add(150, self.update))
+        self.update()
 
     def visible(self) -> bool:
         value = self.proxy.get_cached_property("Visible") if self.proxy else None
         return bool(value and value.get_boolean())
 
-    def toggle(self, _button) -> None:
+    def put_away(self, _button) -> None:
         if self.proxy:
-            self.proxy.call("SetVisible", GLib.Variant("(b)", (not self.visible(),)), Gio.DBusCallFlags.NONE, -1, None, None)
+            self.proxy.call("SetVisible", GLib.Variant("(b)", (False,)), Gio.DBusCallFlags.NONE, -1, None, None)
 
     def update(self) -> bool:
         """After the keyboard comes or goes, and every tick: it changes height when the screen turns."""
-        self.button.set_label("Hide keyboard \u25be" if self.visible() else "\u2328")
+        keyboard_up = self.wanted and self.visible()
+        self.set_visible(keyboard_up)
         try:
-            margin = button_margin(json.loads(run("hyprctl", "layers", "-j") or "{}"))
+            layers = json.loads(run("hyprctl", "layers", "-j") or "{}")
+            monitors = json.loads(run("hyprctl", "monitors", "-j") or "[]")
         except json.JSONDecodeError:
-            margin = BUTTON_MARGIN
+            layers, monitors = {}, []
+        # The bar's only signal toggles it, so look first: it restarts when touch mode changes, and then starts out shown
+        if layers and monitors and bar_is_shown(built_in_screen(monitors) or monitors[0], layers) == keyboard_up:
+            subprocess.run(["pkill", "-USR1", "-x", "waybar"], capture_output=True)
+        margin = button_margin(layers) if layers else BUTTON_MARGIN
         if margin != self.margin:
             self.margin = margin
             GtkLayerShell.set_margin(self, GtkLayerShell.Edge.BOTTOM, margin)
+        return False
+
+
+class Ripple(Gtk.Window):
+    """A soft flash where a finger lands on the bar, whose icons show nothing of their own when pressed. Hyprland fades it."""
+    SIZE = 72
+    SHOWN_MS = 320
+
+    def __init__(self):
+        super().__init__()
+        self.timer = None
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "touch-ripple")
+        GtkLayerShell.set_exclusive_zone(self, -1)  # or Hyprland keeps it out of the bar's space, the one place it is for
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        # Before it first appears, not after: a touch on it would never reach the icon
+        self.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
+        self.set_size_request(self.SIZE, self.SIZE)
+        css = Gtk.CssProvider()
+        css.load_from_data(b"window { background: transparent; }")
+        self.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.set_app_paintable(True)
+        self.set_visual(self.get_screen().get_rgba_visual())
+        self.connect("draw", self.draw_circle)
+
+    def draw_circle(self, _widget, cr) -> bool:
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_rgba(0, 0, 0, 0)
+        cr.paint()
+        cr.set_source_rgba(0.44, 0.81, 0.70, 0.8)  # the theme's teal
+        cr.arc(self.SIZE / 2, self.SIZE / 2, self.SIZE / 2, 0, 6.2832)
+        cr.fill()
+        return True
+
+    def tap(self, x: float, y: float) -> None:
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.LEFT, round(x - self.SIZE / 2))
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, round(y - self.SIZE / 2))
+        self.show()
+        if self.timer:
+            GLib.source_remove(self.timer)
+        self.timer = GLib.timeout_add(self.SHOWN_MS, self.finish)
+
+    def finish(self) -> bool:
+        self.timer = None
+        self.hide()
+        return False
+
+
+class Banner(Gtk.Window):
+    """A moment's word when touch mode comes or goes. The bar's badge says so for as long as it lasts."""
+    SECONDS = 3
+
+    def __init__(self):
+        super().__init__()
+        self.timer = None
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_namespace(self, "touch-mode-banner")
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 76)
+        self.connect("map", lambda w: w.input_shape_combine_region(cairo.Region()))
+        self.label = Gtk.Label()
+        self.add(self.label)
+        css = Gtk.CssProvider()
+        css.load_from_data(b"""
+            window { background: transparent; }
+            label { padding: 10px 26px; border-radius: 22px; background-color: #70CFB3; color: black; font-size: 18px; font-weight: bold; }
+        """)
+        for widget in (self, self.label):
+            widget.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.label.show()
+
+    def say(self, on: bool) -> None:
+        self.label.set_text("Touch mode on" if on else "Touch mode off")
+        self.show()
+        if self.timer:
+            GLib.source_remove(self.timer)
+        self.timer = GLib.timeout_add_seconds(self.SECONDS, self.finish)
+
+    def finish(self) -> bool:
+        self.timer = None
+        self.hide()
         return False
 
 
@@ -267,6 +326,8 @@ class TabletMode:
         self.orientation = "normal"
         self.turn_to = rotate
         self.button = None
+        self.banner = None
+        self.announced = False  # the first answer after starting is not a change, unless it is touch mode
 
     def on_screen_keyboard(self, wanted: bool) -> None:
         run("gsettings", "set", "org.gnome.desktop.a11y.applications", "screen-keyboard-enabled", "true" if wanted else "false")
@@ -282,7 +343,11 @@ class TabletMode:
             return
         self.tablet = tablet
         self.on_screen_keyboard(tablet)
-        bar_for_touch(tablet)
+        was_known = self.announced
+        touch_mode.apply(tablet)
+        self.announced = True
+        if self.banner and (was_known or tablet):
+            self.banner.say(tablet)
         if self.button:
             self.button.present_for(tablet)
         self.follow_sensor()
@@ -296,7 +361,7 @@ class TabletMode:
 
     def stop(self) -> None:
         self.on_screen_keyboard(False)
-        bar_for_touch(False)
+        touch_mode.apply(False)
         rotate(0)
 
 
@@ -306,6 +371,7 @@ def main() -> int:
     mode = TabletMode()
     mode.turn_to = ScreenFade().rotate
     mode.button = KeyboardButton()
+    mode.banner = Banner()
     watch = InputWatch()
     touch = [None]
     timing = [False]
@@ -329,11 +395,15 @@ def main() -> int:
             touch[0] = touch_gestures.open_touchscreen()
             if touch[0]:
                 lift = touch_lift.Lift()
+                touch[0][1].gestures.on_bar_tap = Ripple().tap
                 touch[0][1].gestures.act = lambda name, *where: getattr(lift, name)(*where) if hasattr(lift, name) else touch_gestures.perform(name)
                 GLib.io_add_watch(touch[0][0], GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, touched)
         screen = touch_gestures.built_in(touch_gestures.hypr_json("monitors")) if touch[0] else None
         if screen:
             touch[0][1].set_screen(screen)
+            span = touch_gestures.bar_span(touch_gestures.hypr_json("layers"))
+            if span:
+                touch[0][1].gestures.bar_span = span
         if watch.should_ask(INPUT_DEVICES.read_text()):
             mode.set_tablet(not has_keyboard(devices()))
         if mode.tablet:

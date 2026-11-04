@@ -6,8 +6,11 @@
 #   arrangement. If that cannot be built, run the tracked config.
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 [[ -f "$dir/theme.css" ]] || cp "$dir/theme.default.css" "$dir/theme.css"
-touch "$dir/tablet.css"
+touch "$dir/tablet.css" "$dir/../rofi/touch.rasi"
 "$HOME/.config/hypr/scripts/first-colours.sh" >/dev/null 2>&1  # the wallust colours it imports, likewise
+if [[ -e "${XDG_STATE_HOME:-$HOME/.local/state}/hyprdots/touch-mode" ]]; then
+    exec waybar -c "$dir/config-touch" "$@"  # no keyboard attached: hypr/tray/touch_mode.py
+fi
 if [[ -f "$dir/layout.json" ]] && PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.barlayout generate >/dev/null 2>&1; then
     exec waybar -c "$dir/config.generated.json" "$@"
 fi

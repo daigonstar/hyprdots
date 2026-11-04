@@ -20,6 +20,7 @@ __pycache__/
 /.config/hypr/hyprlock.local.conf
 /.config/waybar/theme.css
 /.config/waybar/tablet.css
+/.config/rofi/touch.rasi
 /.config/waybar/layout.json
 /.config/waybar/config.generated.json
 /.config/swaync/theme.css

@@ -38,8 +38,9 @@ number of "carry" and a "drop", each with where the fingers are."""
 
     def __init__(self, act):
         self.act = act
+        self.on_bar_tap = lambda x, y: None  # a finger lifted from the bar: replaced by tablet_mode.py, to show it was felt
         self.height = 0.0
-        self.bar = BAR_DEFAULT
+        self.bar_span = (0.0, float(BAR_DEFAULT))  # from and to, down the screen: it may be at the top or the bottom
         self.fingers: dict[int, tuple[float, float]] = {}
         self.begun: dict[int, tuple[float, float]] = {}
         self.reset()
@@ -70,6 +71,9 @@ number of "carry" and a "drop", each with where the fingers are."""
 
     def up(self, slot: int) -> None:
         self.fingers.pop(slot, None)
+        # On lifting: something new appearing under a finger still pressing can stop the press being a click
+        if self.most == 1 and not self.done and slot in self.begun and self.bar_span[0] <= self.begun[slot][1] <= self.bar_span[1]:
+            self.on_bar_tap(*self.begun[slot])
         if self.fingers:
             return
         if self.carrying:
@@ -125,6 +129,16 @@ def client_at(clients: list[dict], workspace: int, x: float, y: float) -> dict |
              and c["at"][0] <= x < c["at"][0] + c["size"][0] and c["at"][1] <= y < c["at"][1] + c["size"][1]]
     under.sort(key=lambda c: (not c.get("floating"), c.get("focusHistoryID", 0)))
     return under[0] if under else None
+
+
+def bar_span(layers) -> tuple[float, float] | None:
+    """Where the bar is, down the screen, from hyprctl layers -j."""
+    for monitor in (layers or {}).values():
+        for level in monitor.get("levels", {}).values():
+            for surface in level:
+                if surface.get("namespace") == "waybar":
+                    return surface["y"], surface["y"] + surface["h"]
+    return None
 
 
 def hypr_json(what: str):
@@ -186,7 +200,6 @@ class TouchReader:
         width, height = screen["width"] / screen["scale"], screen["height"] / screen["scale"]
         self.width, self.height = (height, width) if self.transform % 2 else (width, height)
         self.gestures.height = self.height
-        self.gestures.bar = (screen.get("reserved") or [0, BAR_DEFAULT])[1] or BAR_DEFAULT
 
     def point(self, slot: int) -> tuple[float, float]:
         raw_x, raw_y = self.raw[slot]

@@ -17,9 +17,12 @@ fi
 
 if hyprctl clients | grep -q "class: $class\$"; then
     hyprctl dispatch 'hl.dsp.workspace.toggle_special("agent")'
-elif python3 "$assistant/hypr_assistant_app.py" --check 2>/dev/null; then
-    # The GTK app ([assistant] interface = "app"); its app id is the same class, so the scratchpad rule applies
-    exec python3 "$assistant/hypr_assistant_app.py"
 else
+    # Its window opens on this special workspace (window_rules.lua), which is hidden until shown: the first press would seem to do nothing
+    hyprctl dispatch 'hl.dsp.workspace.toggle_special("agent")' >/dev/null
+    if python3 "$assistant/hypr_assistant_app.py" --check 2>/dev/null; then
+        # The GTK app ([assistant] interface = "app"); its app id is the same class, so the scratchpad rule applies
+        exec python3 "$assistant/hypr_assistant_app.py"
+    fi
     exec ghostty --class="$class" --title="Hearthling" -e python3 "$assistant/hypr_agent.py"
 fi

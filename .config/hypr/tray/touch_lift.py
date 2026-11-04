@@ -14,6 +14,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf, GLib, Gtk, GtkLayerShell  # noqa: E402
 
 import touch_gestures  # noqa: E402
+import touch_mode  # noqa: E402
 
 COPY_WIDTH = 320      # the picture's size under the fingers
 PADDING = 48          # around the picture, for its shadow
@@ -31,9 +32,13 @@ CSS = b"""
 """
 
 
-def over_bin(x: float, y: float, size: tuple[int, int], screen_width: float) -> bool:
-    """Whether the picture, centred on the fingers, overlaps the bin."""
-    return abs(x - screen_width / 2) <= (BIN_WIDTH + size[0]) / 2 and y - size[1] / 2 <= BIN_TOP + BIN_HEIGHT
+def over_bin(x: float, y: float, size: tuple[int, int], screen: tuple[float, float], at_bottom: bool = False) -> bool:
+    """Whether the picture, centred on the fingers, overlaps the bin, which is over the bar's middle: at the top, or at the bottom."""
+    width, height = screen
+    across = abs(x - width / 2) <= (BIN_WIDTH + size[0]) / 2
+    if at_bottom:
+        return across and y + size[1] / 2 >= height - BIN_TOP - BIN_HEIGHT
+    return across and y - size[1] / 2 <= BIN_TOP + BIN_HEIGHT
 
 
 def copy_size(width: int, height: int) -> tuple[int, int]:
@@ -49,6 +54,7 @@ def layer(name: str, namespace: str) -> Gtk.Window:
     GtkLayerShell.set_namespace(window, namespace)
     GtkLayerShell.set_layer(window, GtkLayerShell.Layer.OVERLAY)
     GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.NONE)
+    GtkLayerShell.set_exclusive_zone(window, -1)  # both go over the bar, which Hyprland otherwise keeps them out of
     window.connect("map", lambda w: w.input_shape_combine_region(cairo.Region()))  # touches go straight through
     return window
 
@@ -64,7 +70,8 @@ class Lift:
     def __init__(self):
         self.address = None
         self.over = False
-        self.screen_width = 0.0
+        self.screen = (0.0, 0.0)
+        self.at_bottom = False
         self.size = (0, 0)
         self.copy_window = layer("lift-window", "touch-lift")
         GtkLayerShell.set_anchor(self.copy_window, GtkLayerShell.Edge.TOP, True)
@@ -98,19 +105,24 @@ class Lift:
     def pickup(self, x: float, y: float) -> None:
         screen = touch_gestures.built_in(touch_gestures.hypr_json("monitors"))
         client = touch_gestures.client_at(touch_gestures.hypr_json("clients") or [], screen["activeWorkspace"]["id"], x, y) if screen else None
+        print(f"Gesture: pick up {client['title'] if client else 'nothing: no window under the fingers'}", flush=True)
         if not client:
             return
         self.address = client["address"]
         turned = screen.get("transform", 0) % 2
-        self.screen_width = (screen["height"] if turned else screen["width"]) / screen["scale"]
+        self.screen = tuple(side / screen["scale"] for side in ((screen["height"], screen["width"]) if turned else (screen["width"], screen["height"])))
+        self.at_bottom = touch_mode.active()  # where the bar is
+        GtkLayerShell.set_anchor(self.bin_window, GtkLayerShell.Edge.TOP, not self.at_bottom)
+        GtkLayerShell.set_anchor(self.bin_window, GtkLayerShell.Edge.BOTTOM, self.at_bottom)
+        GtkLayerShell.set_margin(self.bin_window, GtkLayerShell.Edge.BOTTOM, BIN_TOP)
         self.size = copy_size(*client["size"])
         # The app under two resting fingers may have opened a right-click menu by now, which nothing can stop it doing
         subprocess.Popen(["wtype", "-k", "Escape"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.copy.clear()
         self.copy.set_size_request(*self.size)
         self.carry(x, y)
-        self.bin_window.show()
         self.copy_window.show()
+        self.bin_window.show()  # after, so that it is on top: the picture passes under it, and it can still be read
         # Not here: taking the picture takes a quarter of a second, and while nothing reads the touchscreen its events are lost
         threading.Thread(target=self.fetch_picture, args=(client, self.size, self.address), daemon=True).start()
 
@@ -130,7 +142,7 @@ class Lift:
         # Under the fingers, even past the top of the screen, so that it can reach the bin. Moving it costs far less than redrawing
         GtkLayerShell.set_margin(self.copy_window, GtkLayerShell.Edge.LEFT, round(x - self.size[0] / 2 - PADDING))
         GtkLayerShell.set_margin(self.copy_window, GtkLayerShell.Edge.TOP, round(y - self.size[1] / 2 - PADDING))
-        over = over_bin(x, y, self.size, self.screen_width)
+        over = over_bin(x, y, self.size, self.screen, self.at_bottom)
         if over != self.over:
             self.over = over
             self.bin.set_text("Release to close" if over else "Drop here to close")
@@ -142,10 +154,11 @@ class Lift:
         if not self.address:
             return
         address, self.address = self.address, None
+        print(f"Gesture: let go at {x:.0f},{y:.0f}, {'on' if over_bin(x, y, self.size, self.screen, self.at_bottom) else 'not on'} the bin", flush=True)
         self.copy_window.hide()
         self.bin_window.hide()
         self.carry_ended()
-        if over_bin(x, y, self.size, self.screen_width):
+        if over_bin(x, y, self.size, self.screen, self.at_bottom):
             print(f"Gesture: close {address}", flush=True)
             touch_gestures.dispatch(f'hl.dsp.window.close({{ window = "address:{address}" }})')
 

@@ -34,6 +34,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import notifications  # noqa: E402
 from overview import Overview  # noqa: E402
+import touch_mode  # noqa: E402
 from popups import Meter, Osd, Switcher, label  # noqa: E402
 import sysinfo  # noqa: E402
 
@@ -622,6 +623,7 @@ class Tray(Gtk.Window):
         return False
 
     def open(self):
+        self.touch_css.load_from_data(touch_mode.TRAY_CSS.encode() if touch_mode.active() else b"")
         self.show()
         self._fit_to_screen()
         self.poll()
@@ -1181,6 +1183,8 @@ class Tray(Gtk.Window):
         self.theme = Gtk.CssProvider()
         self._load_theme()
         Gtk.StyleContext.add_provider_for_screen(screen, self.theme, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
+        self.touch_css = Gtk.CssProvider()  # filled when the panel opens, in touch mode
+        Gtk.StyleContext.add_provider_for_screen(screen, self.touch_css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 2)
         # Follows the wallpaper and the Theme page: both end up rewriting theme.css
         self.monitor = Gio.File.new_for_path(str(THEME)).monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, None)
         self.monitor.connect("changed", lambda *_a: self._load_theme())

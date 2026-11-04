@@ -14,7 +14,7 @@ class Recognising(unittest.TestCase):
     def setUp(self):
         self.done = []
         self.g = tg.Gestures(lambda *a: self.done.append(a))
-        self.g.height, self.g.bar = HEIGHT, BAR
+        self.g.height, self.g.bar_span = HEIGHT, (0, BAR)
 
     def drag(self, points, start=0.0, hold=0.0, slot=0):
         x, y = points[0]
@@ -196,6 +196,40 @@ class Launching(unittest.TestCase):
         self.assertEqual(dispatch.call_args.args[0], 'hl.dsp.exec_cmd("~/.config/hypr/launcher/launcher.sh")')
 
 
+class BarWhereItIs(unittest.TestCase):
+    def test_found_from_the_layers(self):
+        layers = {"eDP-1": {"levels": {"2": [{"namespace": "waybar", "y": 1088, "h": 64}]}}}
+        self.assertEqual(tg.bar_span(layers), (1088, 1152))
+        self.assertIsNone(tg.bar_span({}))
+
+    def test_a_tap_on_a_bar_at_the_bottom_is_shown(self):
+        g = tg.Gestures(lambda *a: None)
+        g.height, g.bar_span = 1152, (1088, 1152)
+        g.on_bar_tap = mock.Mock()
+        g.down(0, 900, 1120, 0.0)
+        g.up(0)
+        g.on_bar_tap.assert_called_once_with(900, 1120)
+
+
+class BarFeedback(unittest.TestCase):
+    def test_a_tap_on_the_bar_is_shown_only_once_the_finger_lifts(self):
+        g = tg.Gestures(lambda *a: None)
+        g.height, g.bar_span = 1152, (0, 64)
+        g.on_bar_tap = mock.Mock()
+        g.down(0, 900, 30, 1.0)
+        g.on_bar_tap.assert_not_called()  # something appearing under a pressing finger can spoil the click
+        g.up(0)
+        g.on_bar_tap.assert_called_once_with(900, 30)
+
+    def test_a_tap_elsewhere_is_not(self):
+        g = tg.Gestures(lambda *a: None)
+        g.height, g.bar_span = 1152, (0, 64)
+        g.on_bar_tap = mock.Mock()
+        g.down(0, 500, 600, 0.0)
+        g.up(0)
+        g.on_bar_tap.assert_not_called()
+
+
 class Windows(unittest.TestCase):
     def test_the_floating_one_on_top_on_this_workspace(self):
         def client(address, x, floating=False, workspace=1):
@@ -207,10 +241,15 @@ class Windows(unittest.TestCase):
 
 class Bin(unittest.TestCase):
     def test_the_picture_reaching_it_counts_not_the_fingers(self):
-        size = (320, 200)
-        self.assertTrue(touch_lift.over_bin(864, 130, size, 1728))   # fingers below the bin, the picture's top edge on it
-        self.assertFalse(touch_lift.over_bin(864, 300, size, 1728))
-        self.assertFalse(touch_lift.over_bin(100, 20, size, 1728))
+        size, screen = (320, 200), (1728, 1152)
+        self.assertTrue(touch_lift.over_bin(864, 130, size, screen))   # fingers below the bin, the picture's top edge on it
+        self.assertFalse(touch_lift.over_bin(864, 300, size, screen))
+        self.assertFalse(touch_lift.over_bin(100, 20, size, screen))
+
+    def test_at_the_bottom_in_touch_mode(self):
+        size, screen = (320, 200), (1728, 1152)
+        self.assertTrue(touch_lift.over_bin(864, 1030, size, screen, True))
+        self.assertFalse(touch_lift.over_bin(864, 700, size, screen, True))
 
     def test_a_tall_window_still_fits_under_the_fingers(self):
         self.assertEqual(touch_lift.copy_size(1000, 500), (320, 160))

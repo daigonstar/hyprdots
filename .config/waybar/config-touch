@@ -1,0 +1,21 @@
+{
+    // The bar in touch mode (hypr/tray/touch_mode.py), chosen by launch.sh: at the bottom, within reach of the thumbs, with fewer and
+    // bigger things on it. Everything not set here comes from the normal config.
+    "include": ["~/.config/waybar/config"],
+    "position": "bottom",
+    "spacing": 8,
+    "modules-left": ["custom/launcher", "custom/overview", "custom/touchmode"],
+    "modules-center": ["group/workspaces"],
+    "modules-right": ["pulseaudio", "battery", "custom/noti", "clock"],
+
+    "custom/launcher": {
+        "format": "",
+        "tooltip": false,
+        "on-click": "~/.config/hypr/launcher/launcher.sh"
+    },
+    "custom/overview": {
+        "format": "󰕰",
+        "tooltip": false,
+        "on-click": "pkill -HUP -f '[h]ypr/tray/quick_tray'"
+    }
+}

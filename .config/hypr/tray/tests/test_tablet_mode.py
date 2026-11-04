@@ -34,6 +34,18 @@ class Button(unittest.TestCase):
         layers = {"eDP-1": {"levels": {"0": [{"namespace": "awww-daemon", "h": 1152}], "2": [{"namespace": "osk", "h": 240}]}}}
         self.assertEqual(tablet_mode.button_margin(layers), 240 + tablet_mode.BUTTON_MARGIN)
 
+    def test_clears_a_bar_at_the_bottom_too(self):
+        layers = {"eDP-1": {"levels": {"2": [{"namespace": "osk", "h": 240}, {"namespace": "waybar", "y": 1088, "h": 64}]}}}
+        self.assertEqual(tablet_mode.button_margin(layers), 240 + 64 + tablet_mode.BUTTON_MARGIN)
+
+    def test_a_hidden_bar_reserves_nothing_beyond_the_keyboard(self):
+        with_keyboard = {"eDP-1": {"levels": {"2": [{"namespace": "osk", "h": 240}, {"namespace": "waybar", "h": 72}]}}}
+        without = {"eDP-1": {"levels": {"2": [{"namespace": "waybar", "h": 72}]}}}
+        self.assertTrue(tablet_mode.bar_is_shown({"reserved": [0, 0, 0, 312]}, with_keyboard))
+        self.assertFalse(tablet_mode.bar_is_shown({"reserved": [0, 0, 0, 240]}, with_keyboard))
+        self.assertTrue(tablet_mode.bar_is_shown({"reserved": [0, 72, 0, 0]}, without))
+        self.assertFalse(tablet_mode.bar_is_shown({"reserved": [0, 0, 0, 0]}, without))
+
     def test_in_the_corner_when_it_is_not(self):
         self.assertEqual(tablet_mode.button_margin({"eDP-1": {"levels": {"2": [{"namespace": "waybar", "h": 44}]}}}), tablet_mode.BUTTON_MARGIN)
 
@@ -79,7 +91,7 @@ class Modes(unittest.TestCase):
     def setUp(self):
         self.mode = tablet_mode.TabletMode()
         self.mode.on_screen_keyboard = mock.Mock()
-        patcher = mock.patch.object(tablet_mode, "bar_for_touch")
+        patcher = mock.patch.object(tablet_mode.touch_mode, "apply")
         self.bar = patcher.start()
         self.addCleanup(patcher.stop)
         self.rotate = self.mode.turn_to = mock.Mock()
@@ -105,7 +117,7 @@ class Modes(unittest.TestCase):
             self.mode.follow_sensor()
         self.rotate.assert_not_called()
 
-    def test_the_bar_grows_only_in_tablet_mode(self):
+    def test_touch_mode_follows_tablet_mode(self):
         self.mode.set_tablet(True)
         self.bar.assert_called_with(True)
         self.mode.set_tablet(False)

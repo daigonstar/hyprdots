@@ -7,8 +7,8 @@
         "spacing": 2,
         // What the quick tray has (network, Bluetooth, power, stay awake, the system monitor and the shortcuts) stays off
         // the bar by default. It can all be added back from settings > Bar layout.
-        "modules-left": ["clock","custom/assistant"],
-        "modules-center": ["hyprland/window", "hyprland/workspaces"],
+        "modules-left": ["clock","custom/assistant","custom/touchmode"],
+        "modules-center": ["hyprland/window", "group/workspaces"],
         "modules-right": ["group/expand","custom/updates","pulseaudio","battery","custom/recording","custom/noti"],
 
     // Groups
@@ -215,6 +215,33 @@
             "on-click": "ghostty -e bash -c 'paru -Syu && flatpak update; pkill -RTMIN+8 waybar; read -rp \"Done. Press Enter to close.\"'"
         },
 
+        "group/workspaces": {
+            "orientation": "horizontal",
+            "modules": ["custom/ws1", "custom/ws2", "custom/ws3"]
+        },
+        "custom/ws1": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 1",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 1 })'"
+        },
+        "custom/ws2": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 2",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 2 })'"
+        },
+        "custom/ws3": {
+            "exec": "~/.config/waybar/scripts/workspace_dot.py 3",
+            "return-type": "json",
+            "on-click": "hyprctl dispatch 'hl.dsp.focus({ workspace = 3 })'"
+        },
+        "custom/touchmode": {
+            // Empty, so hidden, unless in touch mode. hypr/tray/touch_mode.py signals it
+            "exec": "test -e ~/.local/state/hyprdots/touch-mode && printf '\\U000f030c Touch' || true",
+            "interval": "once",
+            "signal": 9,
+            "tooltip": false,
+            "on-click": "busctl --user call sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 SetVisible b true"
+        },
         "custom/recording": {
             "exec": "~/.config/hypr/scripts/record.sh status",
             "return-type": "json",

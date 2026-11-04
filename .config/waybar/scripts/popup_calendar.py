@@ -225,8 +225,9 @@ class CalendarPopup(Gtk.Window):
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.LEFT, True)
+        touch_mode = os.path.exists(os.path.expanduser("~/.local/state/hyprdots/touch-mode"))  # the bar and its clock are at the bottom right
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.BOTTOM if touch_mode else GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT if touch_mode else GtkLayerShell.Edge.LEFT, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, CFG["margin_top"])
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.LEFT, CFG["margin_left"])
         GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
@@ -270,7 +271,9 @@ class CalendarPopup(Gtk.Window):
         self.card.pack_start(self.events_box, False, False, 0)
 
         self.connect("key-press-event", self.on_key)
-        self.connect("focus-out-event", lambda *_: self.close_popup())
+        # Not in touch mode: with no pointer it loses the focus at once, and would close before it was seen. Tap the clock instead
+        if not os.path.exists(os.path.expanduser("~/.local/state/hyprdots/touch-mode")):
+            self.connect("focus-out-event", lambda *_: self.close_popup())
         self.connect("button-press-event", lambda *_: False)
 
         self.render()

@@ -322,3 +322,6 @@ error-message {
     background-color:            @background-color;
     text-color:                  @foreground-color;
 }
+
+/* Bigger rows and one tap to pick, in touch mode: hypr/tray/touch_mode.py writes it, empty otherwise */
+@import "~/.config/rofi/touch.rasi"

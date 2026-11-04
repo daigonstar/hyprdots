@@ -105,6 +105,8 @@ hl.layer_rule({ name = "quick-tray-overview", match = { namespace = "^quick-tray
 hl.layer_rule({ name = "quick-tray-switcher", match = { namespace = "^quick-tray-switcher$" }, animation = "popin 95%" })
 hl.layer_rule({ name = "tablet-rotate", match = { namespace = "^tablet-rotate$" }, animation = "fade" })
 hl.layer_rule({ name = "touch-lift", match = { namespace = "^touch-lift$" }, no_anim = true })  -- it follows a finger
+hl.layer_rule({ name = "touch-mode-banner", match = { namespace = "^touch-mode-banner$" }, animation = "slide top" })
+hl.layer_rule({ name = "touch-ripple", match = { namespace = "^touch-ripple$" }, animation = "fade" })
 hl.layer_rule({ name = "touch-bin", match = { namespace = "^touch-bin$" }, animation = "fade" })
 
 -- Rules from the settings Window rules page (see window_rules.lua). Yours replace a built-in one of the same name.
