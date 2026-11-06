@@ -14,7 +14,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 from ..schema import PAGE_INTRO, for_page  # noqa: E402
-from ..store import STARTUP_ID  # noqa: E402
+from ..store import CUSTOM_STARTUP_ID, STARTUP_ID  # noqa: E402
 from ..tui import App as TuiApp, assistant_disabled, localcal, refresh_calendars, state_dir  # noqa: E402
 from . import ui  # noqa: E402
 from .rows import setting_row  # noqa: E402
@@ -319,8 +319,6 @@ def add_event(win) -> None:
 def startup_group(win, column: Gtk.Box) -> None:
     store = win.store
     apps = store.startup_apps()
-    if not apps:
-        return
     group = Adw.PreferencesGroup(title="Start with the desktop", description="Takes effect at your next login.")
     off = set(store.disabled_startup())
     for app in apps:
@@ -334,7 +332,35 @@ def startup_group(win, column: Gtk.Box) -> None:
         row.add_suffix(sw)
         row.set_activatable_widget(sw)
         group.add(row)
-    if STARTUP_ID in store.staged:
+
+    for i, app in enumerate(store.custom_startup()):
+        row = Adw.ActionRow(title=app["label"], subtitle=app["cmd"], use_markup=False, subtitle_selectable=True)
+        row.add_suffix(ui.tag("yours"))
+
+        def remove(_b, i=i, label=app["label"]):
+            def yes():
+                store.remove_startup(i)
+                win.changed()
+                win.refresh()
+            ui.confirm(win, "Remove startup app?", f"Stop starting '{label}' when you log in? The app itself is not uninstalled.",
+                       "Remove", yes, destructive=True)
+        b = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Remove from startup", valign=Gtk.Align.CENTER, css_classes=["flat"])
+        b.connect("clicked", remove)
+        row.add_suffix(b)
+        group.add(row)
+
+    add = Adw.ButtonRow(title="Add a startup app…", start_icon_name="list-add-symbolic")
+
+    def adding(_r):
+        def done(label, cmd):
+            store.add_startup(label, cmd)  # a ValueError brings the dialog back with the message
+            win.changed()
+            win.refresh()
+        ui.ask(win, "Add a startup app", done, [("Name (for example Signal)", ""), ("Command (for example signal-desktop)", "")],
+               body="It starts in the background each time you log in, once the bar's tray is ready.", ok="Add")
+    add.connect("activated", adding)
+    group.add(add)
+    if STARTUP_ID in store.staged or CUSTOM_STARTUP_ID in store.staged:
         group.set_header_suffix(ui.tag("changed"))
     column.append(group)
 

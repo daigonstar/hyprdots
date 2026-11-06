@@ -15,6 +15,7 @@ from .schema import APP_CANDIDATES, BY_ID, GTK_NOW, INSTALLED_CHOICES, SETTINGS,
 
 RESET = object()  # staged marker: remove the key from the local file
 STARTUP_ID = "hyprdots.startup_disabled"
+CUSTOM_STARTUP_ID = "hyprdots.startup_custom"  # your own startup apps: "Label|command" strings
 KB_PREFIX = "keybinds."  # staged id for one keybind: keybinds.<id>
 
 
@@ -188,6 +189,47 @@ class Store:
         (current.discard if enabled else current.add)(app_id)
         self.staged[STARTUP_ID] = sorted(current) if current else RESET
 
+    # Your own startup apps, added here rather than in autostart.lua: removing one takes it off the list
+    def custom_startup(self) -> list[dict]:
+        """[{label, cmd}] in the order you added them."""
+        if CUSTOM_STARTUP_ID in self.staged:
+            value = self.staged[CUSTOM_STARTUP_ID]
+            raw = [] if value is RESET else list(value)
+        else:
+            raw = self.local.get("hyprdots", {}).get("startup_custom", [])
+        out = []
+        for item in raw if isinstance(raw, list) else []:
+            label, sep, cmd = str(item).partition("|")
+            if sep and label.strip() and cmd.strip():
+                out.append({"label": label.strip(), "cmd": cmd.strip()})
+        return out
+
+    def _set_custom_startup(self, apps: list[dict]) -> None:
+        self.staged[CUSTOM_STARTUP_ID] = [f"{a['label']}|{a['cmd']}" for a in apps] if apps else RESET
+
+    def add_startup(self, label: str, cmd: str) -> None:
+        """Raises ValueError, in words, for the add dialog to show."""
+        label, cmd = label.strip(), cmd.strip()
+        if not label:
+            raise ValueError("enter a name for it")
+        if not cmd:
+            raise ValueError("enter the command that starts it")
+        if "|" in label or any(c in label + cmd for c in "\n\r"):
+            raise ValueError("the name cannot contain |, and neither can be more than one line")
+        program = os.path.expanduser(cmd.split()[0])
+        if not (shutil.which(program) or (os.sep in program and os.access(program, os.X_OK))):
+            raise ValueError(f"cannot find the program '{cmd.split()[0]}'. Check it is installed, or give its full path")
+        apps = self.custom_startup()
+        if any(a["label"].lower() == label.lower() for a in apps) or \
+                any(a["label"].lower() == label.lower() for a in overrides.startup_apps(self.autostart_path)):
+            raise ValueError(f"there is already a startup app called '{label}'")
+        self._set_custom_startup([*apps, {"label": label, "cmd": cmd}])
+
+    def remove_startup(self, index: int) -> None:
+        apps = self.custom_startup()
+        if 0 <= index < len(apps):
+            self._set_custom_startup(apps[:index] + apps[index + 1:])
+
     # ---- calendar sources (private, only ever in the local file) --------------------------------------------
     def calendar_sources(self) -> list[str]:
         key = "calendar.sources"
@@ -242,9 +284,9 @@ class Store:
         """Writes staged changes. Returns what the user should do for them to take effect."""
         touched_lua = False
         for sid, value in list(self.staged.items()):
-            if sid in ("calendar.sources", STARTUP_ID):
+            if sid in ("calendar.sources", STARTUP_ID, CUSTOM_STARTUP_ID):
                 section, key = sid.split(".", 1)
-                touched_lua |= sid == STARTUP_ID
+                touched_lua |= sid in (STARTUP_ID, CUSTOM_STARTUP_ID)
             elif sid.startswith(KB_PREFIX):
                 section, key = "keybinds", sid[len(KB_PREFIX):]
                 touched_lua = True
@@ -321,7 +363,7 @@ class Store:
                     continue
                 if keyspec.canon(value) != keyspec.canon(row["keys"]):
                     keybinds[row["id"]] = value
-        overrides.write(self.overrides_path, overrides.render(config, apps, self.disabled_startup(), keybinds))
+        overrides.write(self.overrides_path, overrides.render(config, apps, self.disabled_startup(), keybinds, self.custom_startup()))
         self.sync_terminal(apps.get("terminal") or self.default(BY_ID["hyprdots.terminal"]))
 
     def sync_terminal(self, terminal: str) -> None:

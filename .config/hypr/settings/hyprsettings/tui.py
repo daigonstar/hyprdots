@@ -22,7 +22,7 @@ import datetime
 
 from . import cloud, displays, mimeapps, models, network, overrides
 from .schema import BY_ID, PAGE_INTRO, PAGES, Setting, for_page
-from .store import RESET, STARTUP_ID, Store
+from .store import CUSTOM_STARTUP_ID, RESET, STARTUP_ID, Store
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "assistant"))
 import localcal  # noqa: E402  (shared with the clock popup and the assistant)
@@ -175,14 +175,19 @@ class App:
                                 "Models and packages are left alone. Applies immediately."))
         if page == "Hyprdots":
             apps = self.store.startup_apps()
-            if apps:
-                out.append(Row("header", "Start with the desktop (Space to switch)"))
-                off = set(self.store.disabled_startup())
-                for app in apps:
-                    on = app["id"] not in off
-                    out.append(Row("startup", app["label"], "on" if on else "off",
-                                   "changed" if STARTUP_ID in self.store.staged else ("yours" if not on else "default"), ref=app["id"],
-                                   help=f"Starts {app['cmd']} when Hyprland starts. Takes effect at your next login."))
+            out.append(Row("header", "Start with the desktop (Space to switch)"))
+            off = set(self.store.disabled_startup())
+            for app in apps:
+                on = app["id"] not in off
+                out.append(Row("startup", app["label"], "on" if on else "off",
+                               "changed" if STARTUP_ID in self.store.staged else ("yours" if not on else "default"), ref=app["id"],
+                               help=f"Starts {app['cmd']} when Hyprland starts. Takes effect at your next login."))
+            for i, app in enumerate(self.store.custom_startup()):
+                out.append(Row("custom_startup", app["label"], app["cmd"],
+                               "changed" if CUSTOM_STARTUP_ID in self.store.staged else "yours", ref=i,
+                               help=f"Your own: starts {app['cmd']} when you log in. Enter to remove it from startup."))
+            out.append(Row("action", "+ Add a startup app...", ref="add_startup",
+                           help="Asks for a name and the command that starts it. It starts in the background each time you log in."))
             out.append(Row("header", "Files"))
             out.append(Row("action", "Open the raw settings files...", ref="edit_files",
                            help="Opens user_settings.toml (shared defaults) and user_settings.local.toml (yours) in your editor."))
@@ -677,6 +682,9 @@ class App:
             return
         if row.kind == "startup":
             return self.toggle(row)
+        if row.kind == "custom_startup":
+            return self.confirm("Remove startup app?", [f"Stop starting '{row.label}' when you log in? The app itself is not uninstalled."], "yn",
+                                lambda k: k == "y" and self.store.remove_startup(row.ref))
         if row.kind == "action":
             return self.action(row.ref)
         if row.kind == "source":
@@ -1014,6 +1022,11 @@ class App:
         if name == "edit_files":
             self.exit_action = "edit"
             return
+        if name == "add_startup":
+            def got_label(label):
+                label = label.strip()
+                self.ask("Command that starts it (for example signal-desktop)", "", lambda cmd: self.store.add_startup(label, cmd))
+            self.ask("Name for the startup app (for example Signal)", "", got_label)
         if name == "add_calendar":
             def got_name(n):
                 n = n.strip()

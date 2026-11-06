@@ -489,6 +489,31 @@ class OtherPages(TuiBase):
         self.app.handle_key("r")
         self.assertEqual(self.store.disabled_startup(), [])
 
+    def test_adding_and_removing_your_own_startup_app(self):
+        tui.shutil.which.side_effect = lambda name: "/usr/bin/signal-desktop" if name == "signal-desktop" else None
+        self.goto("Hyprdots")
+        self.select("+ Add a startup app...")
+        self.app.handle_key("enter")
+        type_text(self.app, "Signal"); self.app.handle_key("enter")
+        type_text(self.app, "nonsense-program"); self.app.handle_key("enter")
+        self.assertIn("cannot find the program", self.app.popup.error)   # it says why, and nothing is added
+        self.assertEqual(self.store.custom_startup(), [])
+        self.app.handle_key("escape")
+        self.select("+ Add a startup app...")
+        self.app.handle_key("enter")
+        type_text(self.app, "Signal"); self.app.handle_key("enter")
+        type_text(self.app, "signal-desktop --start-in-tray"); self.app.handle_key("enter")
+        self.assertEqual(self.store.custom_startup(), [{"label": "Signal", "cmd": "signal-desktop --start-in-tray"}])
+        self.app.handle_key("c-s")
+        self.assertIn("Signal|signal-desktop --start-in-tray", (self.dir / "user_settings.local.toml").read_text())
+        self.assertIn('label = "Signal"', (self.dir / "user_overrides.lua").read_text())
+        self.goto("Hyprdots")
+        self.select("Signal")
+        self.app.handle_key("enter")
+        self.assertEqual(self.app.popup.title, "Remove startup app?")
+        self.app.handle_key("y", "y")
+        self.assertEqual(self.store.custom_startup(), [])
+
     def test_default_app_choices_include_installed_programs_only(self):
         tui.shutil.which.side_effect = lambda name: "/usr/bin/" + name if name in ("kitty", "foot") else None
         self.goto("Hyprdots")

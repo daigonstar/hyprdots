@@ -3,6 +3,8 @@
 local ok, overrides = pcall(require, "user_overrides")
 local disabled = (ok and type(overrides) == "table" and overrides.startup_disabled) or {}
 local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == "table" and overrides.apps.terminal) or "ghostty"
+-- Startup apps you added in Settings (Hyprdots page), started after the ones listed below
+local extra = (ok and type(overrides) == "table" and type(overrides.startup_extra) == "table" and overrides.startup_extra) or {}
 
 -- STARTUP-APPS-BEGIN
 local optional_apps = {
@@ -54,6 +56,11 @@ hl.on("hyprland.start", function()
     -- After the bar's tray is up, or tray apps like Vesktop start without a tray icon
     for _, app in ipairs(optional_apps) do
         if not disabled[app.id] then
+            hl.exec_cmd("~/.config/hypr/scripts/after-tray.sh " .. app.cmd)
+        end
+    end
+    for _, app in ipairs(extra) do
+        if type(app) == "table" and type(app.cmd) == "string" and app.cmd ~= "" then
             hl.exec_cmd("~/.config/hypr/scripts/after-tray.sh " .. app.cmd)
         end
     end

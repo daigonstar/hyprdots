@@ -50,11 +50,15 @@ def _render_table(tree: dict, indent: int) -> str:
 
 
 def render(config: list[tuple[tuple, Any]], apps: dict[str, str], startup_disabled: list[str],
-           keybinds: dict[str, str] | None = None) -> str:
+           keybinds: dict[str, str] | None = None, startup_extra: list[dict] | None = None) -> str:
     out = [BANNER, "local M = {}\n"]
     out.append("M.apps = " + (_render_table({k: v for k, v in sorted(apps.items())}, 0) if apps else "{}") + "\n")
     out.append("M.startup_disabled = " + (
         "{\n" + "\n".join(f"    [{lua_value(name)}] = true," for name in sorted(startup_disabled)) + "\n}" if startup_disabled else "{}") + "\n")
+    # Your own startup apps (Settings, Hyprdots page): autostart.lua starts these after its own list
+    out.append("M.startup_extra = " + (
+        "{\n" + "\n".join(f"    {{ label = {lua_value(a['label'])}, cmd = {lua_value(a['cmd'])} }}," for a in startup_extra) + "\n}"
+        if startup_extra else "{}") + "\n")
     out.append("M.keybinds = " + (
         "{\n" + "\n".join(f"    [{lua_value(k)}] = {lua_value(v)}," for k, v in sorted(keybinds.items())) + "\n}" if keybinds else "{}") + "\n")
     if config:

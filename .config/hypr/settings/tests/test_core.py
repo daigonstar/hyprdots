@@ -202,6 +202,38 @@ class StoreTests(unittest.TestCase):
         again.save()
         self.assertEqual(Store(self.dir).disabled_startup(), [])
 
+    def test_your_own_startup_apps_can_be_added_and_removed(self):
+        with unittest.mock.patch("shutil.which", side_effect=lambda p: f"/usr/bin/{p}" if p in ("signal-desktop", "steam") else None):
+            self.store.add_startup("Signal", "signal-desktop --start-in-tray")
+            self.store.add_startup("Steam", "steam -silent")
+            for label, cmd, problem in (("", "steam", "name"), ("Steam", "steam", "already"), ("Vesktop", "steam", "already"),
+                                        ("A|B", "steam", "|"), ("Nope", "not-a-real-program", "cannot find"), ("Empty", "  ", "command")):
+                with self.assertRaises(ValueError) as e:
+                    self.store.add_startup(label, cmd)
+                self.assertIn(problem, str(e.exception))
+        self.store.save()
+        again = Store(self.dir)
+        self.assertEqual(again.custom_startup(), [{"label": "Signal", "cmd": "signal-desktop --start-in-tray"},
+                                                  {"label": "Steam", "cmd": "steam -silent"}])
+        self.assertIn('{ label = "Signal", cmd = "signal-desktop --start-in-tray" }', again.overrides_path.read_text())
+        again.remove_startup(0)
+        again.remove_startup(9)  # out of range: nothing happens
+        again.save()
+        self.assertEqual([a["label"] for a in Store(self.dir).custom_startup()], ["Steam"])
+        last = Store(self.dir)
+        last.remove_startup(0)
+        last.save()
+        self.assertEqual(Store(self.dir).custom_startup(), [])
+        self.assertNotIn("startup_custom", (self.dir / "user_settings.local.toml").read_text())
+        self.assertIn("M.startup_extra = {}", (self.dir / "user_overrides.lua").read_text())
+
+    def test_a_startup_app_by_path_is_accepted(self):
+        script = self.dir / "start-me.sh"
+        script.write_text("#!/bin/sh\n")
+        script.chmod(0o755)
+        self.store.add_startup("Mine", f"{script} --now")
+        self.assertEqual(self.store.custom_startup()[0]["cmd"], f"{script} --now")
+
     def test_overrides_file_only_contains_real_changes(self):
         self.store.stage(self.s("hyprland.gaps_in"), 9)
         self.store.stage(self.s("hyprland.blur"), False)
@@ -476,6 +508,21 @@ class Overrides(unittest.TestCase):
         self.assertNotIn("solaar", fewer.stdout)
         for kept in ("coolercontrol", "desktop-services.sh login"):
             self.assertIn(kept, fewer.stdout)
+
+    @unittest.skipUnless(LUA, "lua is not installed")
+    def test_autostart_starts_your_own_apps_too(self):
+        autostart = _paths.HYPR / "autostart.lua"
+        script = f'dofile("{autostart}"); print(table.concat(execs, "\\n"))'
+        mine = [{"label": "Signal", "cmd": "signal-desktop --start-in-tray"}, {"label": 'We"ird', "cmd": "echo 'a b'"}]
+        got = self.harness(overrides.render([], {}, ["vesktop"], None, mine), script)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertIn("after-tray.sh signal-desktop --start-in-tray", got.stdout)
+        self.assertIn("after-tray.sh echo 'a b'", got.stdout)
+        self.assertNotIn("vesktop", got.stdout)
+        self.assertIn("coolercontrol", got.stdout)
+        plain = self.harness(overrides.render([], {}, []), script)  # none of your own: just the usual list
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertNotIn("signal-desktop", plain.stdout)
 
     def test_desktop_parts_come_back_after_a_crash(self):
         units = _paths.HYPR / "systemd"
