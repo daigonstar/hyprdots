@@ -1,6 +1,5 @@
-# title: Sync, sharing and passwords
-# about: Nextcloud, LocalSend, FileZilla and Bitwarden
-flatpak:com.nextcloud.desktopclient.nextcloud
+# title: Sharing and passwords
+# about: LocalSend, FileZilla and Bitwarden (the sync client is its own question)
 flatpak:org.localsend.localsend_app
 flatpak:org.filezillaproject.Filezilla
 flatpak:com.bitwarden.desktop

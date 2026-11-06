@@ -67,14 +67,14 @@ chmod +x hyprinstall.sh
 The installer enables multilib (needed for Steam), auto-detects your GPU (AMD, NVIDIA or Intel) and installs the matching drivers from `install/gpu-<vendor>.txt`. Force the choice with `HYPR_GPU="amd nvidia" ./hyprinstall.sh`. `install/hide.sh` hides unwanted app launcher entries listed in `install/hide.txt`. It also enables the needed services. The PC assistant is optional (see below).
 #### What gets installed
 
-`install/required.txt` is the desktop itself. Everything else is your choice: the installer asks which web browser you want and offers these groups, none of them needed (`install/apps/`):
+`install/required.txt` is the desktop itself. Everything else is your choice: the installer asks which web browser you want, which desktop sync client you want (OpenCloud, Nextcloud, ownCloud for Infinite Scale servers, or none), and offers these groups, none of them needed (`install/apps/`):
 
 | Group | Apps |
 |---|---|
 | `store` (on by default) | Bazaar, Flatseal |
 | `media` | VLC, Spotify, cava |
 | `office` | Collabora Office, Obsidian |
-| `sharing` | Nextcloud, LocalSend, FileZilla, Bitwarden |
+| `sharing` | LocalSend, FileZilla, Bitwarden |
 | `chat` | Discord, Vesktop, Teams |
 | `gaming` | Steam, Lutris, Heroic, Ryujinx, PokeMMO |
 | `dev` | Zed, GitHub command line, sif |

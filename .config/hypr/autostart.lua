@@ -7,7 +7,9 @@ local terminal = (ok and type(overrides) == "table" and type(overrides.apps) == 
 -- STARTUP-APPS-BEGIN
 local optional_apps = {
     { id = "vesktop", label = "Vesktop", cmd = "vesktop" },
+    { id = "opencloud", label = "OpenCloud sync", cmd = "opencloud --background" },
     { id = "nextcloud", label = "Nextcloud sync", cmd = "com.nextcloud.desktopclient.nextcloud --background" },
+    { id = "owncloud", label = "ownCloud sync", cmd = "owncloud --background" },
     { id = "openrgb", label = "OpenRGB (lighting profile)", cmd = "~/.config/hypr/scripts/openrgb-start.sh" },
     { id = "coolercontrol", label = "CoolerControl (fans and cooling)", cmd = "coolercontrol" },
     { id = "solaar", label = "Solaar (Logitech devices)", cmd = "solaar --w hide" },

@@ -90,17 +90,45 @@ class Choosing(unittest.TestCase):
     def test_the_menu(self):
         groups = sorted(f.stem for f in (INSTALL / "apps").glob("*.txt"))
         chat, store = groups.index("chat") + 1, groups.index("store") + 1
-        got = self.run_apps("--print", text=f"2\n{chat} {store}\n99 x\n\n", HYPR_APPS_MENU="1")
+        got = self.run_apps("--print", text=f"2\n3\n{chat} {store}\n99 x\n\n", HYPR_APPS_MENU="1")
         self.assertEqual(got.returncode, 0, got.stderr)
         self.assertEqual(self.lines(got, "group"), ["chat"])
         self.assertIn("zen-browser-bin", self.lines(got, "pacman"))
+        self.assertEqual(self.lines(got, "sync"), ["nextcloud"])
+        self.assertIn("com.nextcloud.desktopclient.nextcloud", self.lines(got, "flatpak"))
         self.assertIn("Skipping 99", got.stderr)
 
     def test_the_menu_remembers_your_last_choice(self):
         self.run_apps("--print", HYPR_APPS="office")
         self.assertIn("group=office", self.state.read_text())
-        got = self.run_apps("--print", text="\n\n", HYPR_APPS_MENU="1")
+        got = self.run_apps("--print", text="\n\n\n", HYPR_APPS_MENU="1")
         self.assertEqual(self.lines(got, "group"), ["office"])
+
+    def test_no_sync_client_unless_you_pick_one(self):
+        got = self.run_apps("--print", HYPR_APPS="sharing")
+        self.assertEqual(self.lines(got, "sync"), [])
+        clients = {"opencloud-desktop", "owncloud-client", "com.nextcloud.desktopclient.nextcloud"}
+        self.assertEqual(clients & set(self.lines(got, "pacman") + self.lines(got, "flatpak")), set())
+
+    def test_the_sync_client_you_pick_and_only_that_one(self):
+        for sync, kind, pkg in (("opencloud", "pacman", "opencloud-desktop"), ("owncloud", "pacman", "owncloud-client"),
+                                ("nextcloud", "flatpak", "com.nextcloud.desktopclient.nextcloud")):
+            got = self.run_apps("--print", HYPR_APPS="none", HYPR_BROWSER="none", HYPR_SYNC=sync)
+            self.assertEqual(got.returncode, 0, got.stderr)
+            self.assertEqual(self.lines(got, "sync"), [sync])
+            self.assertEqual(self.lines(got, kind), [pkg])
+            self.assertEqual(self.lines(got, "flatpak" if kind == "pacman" else "pacman"), [])
+            self.assertIn(f"sync={sync}", self.state.read_text())
+
+    def test_an_unknown_sync_client_is_skipped(self):
+        got = self.run_apps("--print", HYPR_APPS="none", HYPR_BROWSER="none", HYPR_SYNC="dropbox")
+        self.assertEqual((got.returncode, got.stdout), (0, ""))
+        self.assertIn("dropbox", got.stderr)
+
+    def test_each_offered_sync_client_starts_with_the_desktop(self):
+        autostart = (INSTALL.parent / ".config/hypr/autostart.lua").read_text()
+        for cmd in ("opencloud --background", "com.nextcloud.desktopclient.nextcloud --background", "owncloud --background"):
+            self.assertIn(f'cmd = "{cmd}"', autostart)
 
     def test_set_browser_reaches_the_keybind(self):
         hypr = Path(self.home) / ".config/hypr"

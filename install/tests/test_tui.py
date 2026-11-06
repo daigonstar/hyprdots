@@ -22,6 +22,7 @@ import tui  # noqa: E402
 
 BROWSERS = [("firefox", "Firefox"), ("zen", "Zen"), ("none", "None")]
 GROUPS = [("chat", False, "Chat", "Discord"), ("gaming", False, "Gaming", "Steam"), ("store", True, "App store", "Bazaar")]
+SYNCS = [("none", "None"), ("opencloud", "OpenCloud"), ("nextcloud", "Nextcloud")]
 
 
 def wizard(monitors=("DP-1",), gpus=("amd",), **kw):
@@ -113,6 +114,22 @@ class Questions(unittest.TestCase):
         self.assertEqual(rows["Keyboard"], "English (UK)")
         self.assertEqual(rows["Hearthling"], "No assistant")
         self.assertEqual(rows["Extra apps"], "App store")
+
+    def test_one_sync_client_after_the_browser_none_unless_picked(self):
+        wiz = wizard(syncs=SYNCS)
+        keys = [p.key for p in wiz.pages]
+        self.assertEqual(keys.index("sync"), keys.index("browser") + 1)
+        self.assertEqual(wiz.env()["HYPR_SYNC"], "none")
+        self.assertEqual(dict(wiz.summary())["Sync client"], "None")
+        go_to(wiz, "sync")
+        wiz.press("down")
+        self.assertEqual(wiz.env()["HYPR_SYNC"], "opencloud")
+        self.assertEqual(dict(wiz.summary())["Sync client"], "OpenCloud")
+
+    def test_list_apps_reads_the_sync_clients(self):
+        browsers, syncs, groups = tui.list_apps()
+        self.assertEqual([i for i, _ in syncs], ["none", "opencloud", "nextcloud", "owncloud"])
+        self.assertTrue(browsers and groups)
 
 
 class Following(unittest.TestCase):
@@ -386,6 +403,8 @@ class RealRun(unittest.TestCase):
         term.keys(ENTER)
         term.wait_for("Web browser")
         term.keys(DOWN, ENTER)  # Zen
+        term.wait_for("Sync client")
+        term.keys(DOWN, ENTER)  # OpenCloud
         term.wait_for("Extra apps")
         groups = sorted(p.stem for p in (INSTALL / "apps").glob("*.txt"))
         term.keys(*[DOWN] * groups.index("gaming"), SPACE, ENTER)
@@ -397,6 +416,9 @@ class RealRun(unittest.TestCase):
         log = self.log()
         self.assertRegex(log, r"Optional apps:.*gaming")
         self.assertIn("browser: zen-browser", log)
+        self.assertIn("sync client: opencloud", log)
+        self.assertIn("opencloud-desktop", log)
+        self.assertNotIn("com.nextcloud.desktopclient.nextcloud", log)
         self.assertIn("steam", log)
         self.assertNotIn("discord", log)
         self.assertNotIn("winboat", log)

@@ -115,15 +115,18 @@ def is_laptop():
 
 
 def list_apps():
-    """(browsers, groups) from install/apps.sh, which owns them. browsers: [(id, name)], groups: [(id, default, title, about)]."""
-    browsers, groups = [], []
+    """(browsers, syncs, groups) from install/apps.sh, which owns them. browsers and syncs: [(id, name)],
+    groups: [(id, default, title, about)]."""
+    browsers, syncs, groups = [], [], []
     for line in _run("bash", os.path.join(HERE, "apps.sh"), "--list").splitlines():
         parts = line.split("|")
         if parts[0] == "browser" and len(parts) == 3:
             browsers.append((parts[1], parts[2]))
+        elif parts[0] == "sync" and len(parts) == 3:
+            syncs.append((parts[1], parts[2]))
         elif parts[0] == "group" and len(parts) == 5:
             groups.append((parts[1], parts[2] == "yes", parts[3], parts[4]))
-    return browsers, groups
+    return browsers, syncs, groups
 
 
 # ---- the questions ---------------------------------------------------------------------------------------------------
@@ -148,7 +151,7 @@ class Page:
 class Wizard:
     """Moves between pages. press() takes a key name and returns "install", "quit" or None."""
 
-    def __init__(self, gpus, monitors, layout, memory_gb, browsers, groups, laptop=False, dry_run=False, btrfs=False):
+    def __init__(self, gpus, monitors, layout, memory_gb, browsers, groups, laptop=False, dry_run=False, btrfs=False, syncs=()):
         self.dry_run, self.at, self.confirm_quit = dry_run, 0, False
         rec = recommended_tier(memory_gb)
         tiers = [(i, n + ("  (suits this PC)" if i == rec else ""), a) for i, n, a in TIERS]
@@ -168,6 +171,11 @@ class Wizard:
                  [(c, n, "") for c, n in GPUS], gpus),
             Page("browser", "Web browser", ["Super+B opens this one."], "radio", [(i, n, "") for i, n in browsers],
                  {browsers[0][0]} if browsers else ()),
+        ]
+        if syncs:
+            self.pages.append(Page("sync", "Sync client", ["Keeps a folder in step with your own cloud server. Pick the one that matches your server, or none."],
+                                   "radio", [(i, n, "") for i, n in syncs], {"none"}))
+        self.pages += [
             Page("apps", "Extra apps", ["The desktop works without any of these. You can add more later with install/apps.sh."], "check",
                  [(i, t, a) for i, _d, t, a in groups], [i for i, d, _t, _a in groups if d]),
             Page("assistant", "Hearthling", ["An optional AI helper that runs on this PC. Nothing is sent to the cloud."], "radio", tiers, {"none"}),
@@ -233,6 +241,8 @@ class Wizard:
         env = {"HYPR_KB_LAYOUT": self.answer("keyboard"), "HYPR_GPU": " ".join(self.answer("gpu")) or "none",
                "HYPR_BROWSER": self.answer("browser") or "none", "HYPR_APPS": " ".join(self.answer("apps")) or "none",
                "HYPR_ASSISTANT": self.answer("assistant"), "HYPR_HEALTH": self.answer("health")}
+        if self.answer("sync"):
+            env["HYPR_SYNC"] = self.answer("sync")
         if self.answer("login"):
             env["HYPR_LOGIN_MONITOR"] = self.answer("login")
         if self.answer("snapshots"):
@@ -244,9 +254,11 @@ class Wizard:
         apps = [names["apps"][a] for a in self.answer("apps")]
         rows = [("Keyboard", names["keyboard"][self.answer("keyboard")]),
                 ("Graphics", ", ".join(names["gpu"][g] for g in self.answer("gpu")) or "No drivers"),
-                ("Browser", names["browser"].get(self.answer("browser"), "None")),
-                ("Extra apps", ", ".join(apps) or "None"),
-                ("Hearthling", names["assistant"][self.answer("assistant")].split("  ")[0])]
+                ("Browser", names["browser"].get(self.answer("browser"), "None"))]
+        if self.answer("sync"):
+            rows.append(("Sync client", names["sync"][self.answer("sync")]))
+        rows += [("Extra apps", ", ".join(apps) or "None"),
+                 ("Hearthling", names["assistant"][self.answer("assistant")].split("  ")[0])]
         if self.answer("login"):
             rows.append(("Login screen", self.answer("login")))
         if self.answer("snapshots"):
@@ -777,8 +789,8 @@ def interface(stdscr, wiz, args):
 
 def main(argv):
     dry = "--dry-run" in argv
-    browsers, groups = list_apps()
-    wiz = Wizard(detect_gpus(), detect_monitors(), detect_layout(), video_memory_gb(), browsers, groups, is_laptop(), dry, root_is_btrfs())
+    browsers, syncs, groups = list_apps()
+    wiz = Wizard(detect_gpus(), detect_monitors(), detect_layout(), video_memory_gb(), browsers, groups, is_laptop(), dry, root_is_btrfs(), syncs)
     locale.setlocale(locale.LC_ALL, "")
     os.environ.setdefault("ESCDELAY", "25")
     code = curses.wrapper(interface, wiz, [a for a in argv if a in ("--dry-run", "--verbose")])

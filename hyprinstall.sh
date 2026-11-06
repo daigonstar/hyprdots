@@ -290,7 +290,7 @@ done
 read_packages_to_array "$REQUIRED_FILE" REQUIRED_PKGS
 
 # Which optional apps (install/apps/) and browser. Asked here, early, so the rest can run without you.
-APP_PKGS=() FLATPAK_PKGS=() APP_GROUPS=() BROWSER_CMD="" BROWSER_DESKTOP=""
+APP_PKGS=() FLATPAK_PKGS=() APP_GROUPS=() BROWSER_CMD="" BROWSER_DESKTOP="" SYNC_CLIENT=""
 apps_args=(--print)
 [[ "$DRY_RUN" == "true" ]] && apps_args+=(--dry-run)
 while read -r kind value extra; do
@@ -299,9 +299,10 @@ while read -r kind value extra; do
     pacman) APP_PKGS+=("$value") ;;
     flatpak) FLATPAK_PKGS+=("$value") ;;
     browser) BROWSER_CMD="$value" BROWSER_DESKTOP="$extra" ;;
+    sync) SYNC_CLIENT="$value" ;;
   esac
 done < <("$BASE_DIR/install/apps.sh" "${apps_args[@]}")
-log "INFO" "Optional apps: ${APP_GROUPS[*]:-none}; browser: ${BROWSER_CMD:-your own}"
+log "INFO" "Optional apps: ${APP_GROUPS[*]:-none}; browser: ${BROWSER_CMD:-your own}; sync client: ${SYNC_CLIENT:-none}"
 chose_group() { [[ " ${APP_GROUPS[*]:-} " == *" $1 "* ]]; }
 
 # Install paru (AUR helper)

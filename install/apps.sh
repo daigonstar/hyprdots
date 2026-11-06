@@ -7,10 +7,12 @@
 #                                         "group X", "browser COMMAND DESKTOPFILE"); the questions go to stderr
 #   apps.sh --set-browser COMMAND DESKTOPFILE   make it the browser Super+B opens, and the system default
 #   apps.sh --set-keyboard LAYOUT         the keyboard layout on the desktop
-#   apps.sh --list                        the choices, for install/tui.py ("browser|id|name", "group|id|yes/no|title|about")
+#   apps.sh --list                        the choices, for install/tui.py ("browser|id|name", "sync|id|name",
+#                                         "group|id|yes/no|title|about")
 #
-# Unattended: HYPR_APPS="gaming chat" (or all, or none) and HYPR_BROWSER=firefox|zen|chromium|brave|none. With no terminal
-# to ask in, and neither set, you get the groups marked "default: yes" and Firefox.
+# Unattended: HYPR_APPS="gaming chat" (or all, or none), HYPR_BROWSER=firefox|zen|chromium|brave|none and
+# HYPR_SYNC=opencloud|nextcloud|owncloud|none. With no terminal to ask in, and none of them set, you get the groups marked
+# "default: yes", Firefox and no sync client.
 set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hyprdots/apps"
@@ -22,6 +24,15 @@ BROWSERS=(
   "chromium|Chromium|chromium|chromium|chromium.desktop"
   "brave|Brave|brave-bin|brave|brave-browser.desktop"
   "none|None, I will sort out my own|||"
+)
+
+# One desktop sync client at most: each only talks to its own kind of server, and two would fight over the same folders.
+# id, name, package (flatpak: for a Flatpak). autostart.lua starts whichever is installed.
+SYNC_CLIENTS=(
+  "none|None|"
+  "opencloud|OpenCloud|opencloud-desktop"
+  "nextcloud|Nextcloud|flatpak:com.nextcloud.desktopclient.nextcloud"
+  "owncloud|ownCloud (Infinite Scale servers only)|owncloud-client"
 )
 
 set_setting() {
@@ -80,6 +91,10 @@ if [[ "$list" == true ]]; then
     IFS='|' read -r id name _ <<<"$entry"
     printf 'browser|%s|%s\n' "$id" "$name"
   done
+  for entry in "${SYNC_CLIENTS[@]}"; do
+    IFS='|' read -r id name _ <<<"$entry"
+    printf 'sync|%s|%s\n' "$id" "$name"
+  done
   for i in "${!ids[@]}"; do
     printf 'group|%s|%s|%s|%s\n' "${ids[i]}" "${picked[i]}" "${titles[i]}" "${abouts[i]}"
   done
@@ -93,6 +108,7 @@ if [[ -z "${HYPR_APPS:-}" && "$dry" == false ]] && { [[ -t 0 ]] || [[ "${HYPR_AP
 fi
 
 browser="${HYPR_BROWSER:-firefox}"
+sync="${HYPR_SYNC:-none}"
 if [[ "$ask" == true ]]; then
   {
     echo
@@ -107,6 +123,21 @@ if [[ "$ask" == true ]]; then
   read -rp "Number (Enter for 1): " answer
   if [[ "$answer" =~ ^[0-9]+$ ]] && (( answer >= 1 && answer <= ${#BROWSERS[@]} )); then
     IFS='|' read -r browser _ <<<"${BROWSERS[answer - 1]}"
+  fi
+
+  {
+    echo
+    echo "Which desktop sync client would you like? Pick the one that matches your server."
+    i=1
+    for entry in "${SYNC_CLIENTS[@]}"; do
+      IFS='|' read -r _ name _ <<<"$entry"
+      echo "  $i) $name"
+      i=$((i + 1))
+    done
+  } >&2
+  read -rp "Number (Enter for 1): " answer
+  if [[ "$answer" =~ ^[0-9]+$ ]] && (( answer >= 1 && answer <= ${#SYNC_CLIENTS[@]} )); then
+    IFS='|' read -r sync _ <<<"${SYNC_CLIENTS[answer - 1]}"
   fi
 
   while true; do
@@ -158,6 +189,21 @@ for entry in "${BROWSERS[@]}"; do
     browser_cmd="$cmd" browser_file="$file"
   fi
 done
+sync_found=false
+for entry in "${SYNC_CLIENTS[@]}"; do
+  IFS='|' read -r id _ pkg <<<"$entry"
+  [[ "$id" == "$sync" ]] || continue
+  sync_found=true
+  case "$pkg" in
+    "") ;;
+    flatpak:*) flatpaks+=("${pkg#flatpak:}") ;;
+    *) pacman_pkgs+=("$pkg") ;;
+  esac
+done
+if [[ "$sync_found" == false ]]; then
+  echo "Skipping sync client $sync: not one of the choices." >&2
+  sync=none
+fi
 groups=()
 for i in "${!ids[@]}"; do
   [[ "${picked[i]}" == yes ]] || continue
@@ -172,7 +218,7 @@ done
 
 if [[ "$dry" == false ]]; then
   mkdir -p "$(dirname "$state")"
-  { printf 'browser=%s\n' "$browser"; printf 'group=%s\n' "${groups[@]+"${groups[@]}"}"; } > "$state"
+  { printf 'browser=%s\n' "$browser"; printf 'sync=%s\n' "$sync"; printf 'group=%s\n' "${groups[@]+"${groups[@]}"}"; } > "$state"
 fi
 
 if [[ "$print" == true ]]; then
@@ -180,6 +226,7 @@ if [[ "$print" == true ]]; then
   for x in "${pacman_pkgs[@]+"${pacman_pkgs[@]}"}"; do printf 'pacman %s\n' "$x"; done
   for x in "${flatpaks[@]+"${flatpaks[@]}"}"; do printf 'flatpak %s\n' "$x"; done
   [[ -n "$browser_cmd" ]] && printf 'browser %s %s\n' "$browser_cmd" "$browser_file"
+  [[ "$sync" != none ]] && printf 'sync %s\n' "$sync"
   exit 0
 fi
 
