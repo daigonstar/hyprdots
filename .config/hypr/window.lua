@@ -99,6 +99,7 @@ for _, animation in ipairs(animations) do
 end
 
 -- Panels come from where they live
+hl.layer_rule({ name = "notes-drop", match = { namespace = "^hyprdots-notes$" }, animation = "slide top" })
 hl.layer_rule({ name = "quick-tray-slide", match = { namespace = "^quick-tray$" }, animation = "slide right" })
 hl.layer_rule({ name = "quick-tray-level", match = { namespace = "^quick-tray-osd$" }, animation = "slide bottom" })
 hl.layer_rule({ name = "quick-tray-overview", match = { namespace = "^quick-tray-overview$" }, animation = "fade" })

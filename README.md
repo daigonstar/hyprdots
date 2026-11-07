@@ -50,6 +50,15 @@ Anything your PC lacks is left out, so battery, brightness, touchpad and airplan
 
 USB drives mount when you plug them in, with a notification to open them, and drives inside the PC are left alone (`.config/hypr/udiskie.yml`). When a screen comes back, its workspaces return to it.
 
+### Notes
+**Super + I** drops a scratchpad down from the top of the screen you are on, like a drop-down terminal. Each tab is a note, saved as you type, so open tabs are still there after a restart. **Closing a tab deletes its note** (to the bin): notes last as long as their tab. **Ctrl + Shift + S** saves a copy to keep, as Markdown or plain text, anywhere.
+
+- Markdown shows as you type: headings, bold, italic, code, links, quotes and task boxes. Lists carry on when you press Enter.
+- **Ctrl + T** new tab, **Ctrl + W** close one, **Ctrl + Tab** or **Alt + 1-9** to move between them, and a middle click closes one.
+- **Ctrl + Enter** ticks a box, and **Ctrl + B**, **I**, **1**, **2**, **3** format.
+- Escape, the key again or a click outside hides it, and the tabs stay. Pin it to keep it open while you work in other windows.
+- `~/.config/hypr/notes/notes.sh --append "text"` adds a line to an Inbox tab from any script, with the window closed.
+
 ### Powermenu
 Full screen, with a PC (a laptop when a battery is found) in the middle and the options in a ring around it. Arrow keys, the first letter of an option, or the mouse.
 ![image](screens/power.png)

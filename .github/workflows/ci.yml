@@ -67,6 +67,9 @@ jobs:
       - name: Unit tests
         working-directory: .config/hypr/tray
         run: /usr/bin/python3 -m unittest discover -s tests -v
+      - name: Notes tests
+        working-directory: .config/hypr/notes
+        run: /usr/bin/python3 -m unittest discover -s tests -v
 
   installer:
     name: Installer dry run

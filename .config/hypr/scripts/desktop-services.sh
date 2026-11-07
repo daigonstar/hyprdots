@@ -5,7 +5,7 @@
 #   desktop-services.sh start               after an update, from any terminal: the same, keeping the environment
 #   desktop-services.sh restart [all|waybar|swaync]
 #   desktop-services.sh failed <unit>       a part crashed too often and systemd gave up on it: tell the user
-PARTS=(waybar swaync hypridle hyprdots-tray hyprdots-usb hyprdots-tablet)
+PARTS=(waybar swaync hypridle hyprdots-tray hyprdots-usb hyprdots-tablet hyprdots-notes)
 UNITS="$HOME/.config/hypr/systemd"
 USER_DIR="$HOME/.config/systemd/user"
 
