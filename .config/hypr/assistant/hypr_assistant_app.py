@@ -299,6 +299,27 @@ button.sent-attachment:hover {{ transform: translateY(-2px); }}
                   background: {rgba('#000000', 0.45 if DARK else 0.85)}; }}
 .terminal-head {{ padding: 4px 6px 4px 12px; }}
 .terminal-head label {{ font-size: 12px; font-weight: 700; color: {rgba(C['base_text'], 0.7)}; }}
+.user-run .why {{ color: {rgba(C['base_text'], 0.72)}; font-size: 13px; }}
+.user-run .running {{ color: {rgba(C['base_text'], 0.8)}; font-weight: 600; }}
+.user-run .code {{ margin: 0; }}
+button.later {{ border-radius: 999px; padding: 6px 16px; font-weight: 700; background: {rgba(C['base_text'], 0.08)}; }}
+.web-panel {{ background: {rgba(PANEL, 0.6)}; border-left: 1px solid {rgba(C['base_text'], 0.08)}; }}
+.web-head {{ padding: 10px 8px 10px 16px; }}
+.web-head .title {{ font-weight: 800; }}
+@keyframes web-pulse {{ 50% {{ opacity: 0.35; }} }}
+.web-live {{ color: {C['accent']}; font-size: 12px; font-weight: 800; animation: web-pulse 1.4s ease-in-out infinite; }}
+.web-empty {{ color: {rgba(C['base_text'], 0.55)}; padding: 24px; }}
+.web-list {{ padding: 0 10px 12px 10px; }}
+.web-entry {{ border-radius: 12px; background: {rgba(C['base_text'], 0.04)}; border: 1px solid {rgba(C['base_text'], 0.07)}; }}
+.web-entry.failed {{ border-color: {rgba(RED, 0.4)}; }}
+.web-entry button.web-title {{ padding: 8px 10px; border-radius: 12px; }}
+.web-entry .target {{ font-weight: 600; font-size: 13px; }}
+.web-entry .kind {{ color: {rgba(C['base_text'], 0.6)}; font-size: 11px; font-weight: 700; }}
+.web-entry .took {{ color: {rgba(C['base_text'], 0.55)}; font-size: 11px; }}
+.web-entry .seen {{ padding: 2px 12px 12px 12px; font-size: 12px; color: {rgba(C['base_text'], 0.78)}; }}
+.web-entry .seen-head {{ padding: 0 8px 2px 12px; }}
+.web-entry .seen-head label {{ color: {rgba(C['base_text'], 0.55)}; font-size: 11px; font-weight: 700; }}
+button.web-toggle.live {{ color: {C['accent']}; animation: web-pulse 1.4s ease-in-out infinite; }}
 """
 
 
@@ -680,7 +701,10 @@ class CodeBlock(Gtk.Box):
         copy.connect("clicked", lambda b: (app.copy(self.code), flash_done(b)))
         head.append(copy)
         if lang in SHELL_LANGS and not command:
-            run = mini_button("utilities-terminal-symbolic", "Paste into the terminal (you press Enter)", None, "Run")
+            paste = mini_button("edit-paste-symbolic", "Put it in the terminal without running it", None, "Paste")
+            paste.connect("clicked", lambda b: (app.paste_in_terminal(self.code), flash_done(b)))
+            head.append(paste)
+            run = mini_button("utilities-terminal-symbolic", "Run it now in the terminal", None, "Run")
             run.connect("clicked", lambda b: (app.run_in_terminal(self.code), flash_done(b)))
             head.append(run)
         self.head = head
@@ -1134,6 +1158,77 @@ class Turn(Gtk.Box):
             self._add(card)
         GLib.idle_add(lambda: (allow.grab_focus(), False)[1])
 
+    def user_command(self, command, reason, answer):
+        """A command only the user can run. answer() is called once, with ("finished" or "said", output) or None."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, css_classes=["approval", "user-run", "fade-up"])
+        words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        words.append(text_label("Your turn: this needs you to run it", ["question"]))
+        if reason:
+            words.append(text_label(html.escape(reason, quote=False), ["why"]))
+        top = Gtk.Box(spacing=12)
+        top.append(Gtk.Image(icon_name="utilities-terminal-symbolic", valign=Gtk.Align.START))
+        top.append(words)
+        card.append(top)
+        card.append(CodeBlock(self.app, "bash", command, command=True))
+        stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=250, halign=Gtk.Align.END,
+                          hhomogeneous=False, interpolate_size=True)
+        buttons = Gtk.Box(spacing=8)
+        skip = Gtk.Button(label="Skip", css_classes=["deny"])
+        said = Gtk.Button(label="I did it myself", css_classes=["later"])
+        run = Gtk.Button(label="Run in terminal", css_classes=["allow"])
+        for button in (skip, said, run):
+            buttons.append(button)
+        stack.add_named(buttons, "ask")
+        running = Gtk.Box(spacing=10)
+        spinner = Gtk.Spinner()
+        running.append(spinner)
+        running.append(Gtk.Label(label="Running in the terminal", css_classes=["running"]))
+        finished_early = Gtk.Button(label="It's finished", css_classes=["later"])
+        running.append(finished_early)
+        stack.add_named(running, "running")
+        verdict = Gtk.Label(css_classes=["verdict"])
+        stack.add_named(verdict, "done")
+        card.append(stack)
+        since = [None]
+
+        def choose(outcome):
+            if card.has_css_class("answered"):
+                return
+            card.add_css_class("answered")
+            spinner.stop()
+            verdict.set_label("✓  Done" if outcome else "✕  Not run")
+            verdict.add_css_class("yes" if outcome else "no")
+            stack.set_visible_child_name("done")
+            self.app.pending_answer = None
+            self.status("Working")
+            answer(outcome or None)
+
+        def output(how):
+            lines = agent.TERMINAL_MAX_LINES
+            choose((how, self.app._terminal_text(lines if since[0] is not None else agent.TERMINAL_LINES, since[0])))
+
+        def started(row):
+            if card.has_css_class("answered"):
+                return
+            if row is None:  # the terminal was busy: back to the buttons
+                stack.set_visible_child_name("ask")
+                spinner.stop()
+                return
+            since[0] = row
+            self.app.when_finished(lambda: card.has_css_class("answered"), lambda: output("finished"))
+
+        def press_run(_b):
+            stack.set_visible_child_name("running")
+            spinner.start()
+            self.app.run_in_terminal(command, started)
+        skip.connect("clicked", lambda *_: choose(None))
+        said.connect("clicked", lambda *_: output("said"))
+        finished_early.connect("clicked", lambda *_: output("said"))
+        run.connect("clicked", press_run)
+        self.app.pending_answer = lambda _ok: choose(None)
+        self.status("Waiting for you to run a command")
+        self._add(card)
+
     def finish(self, reply, took=None, steps=0, failed=False):
         self.think_done()
         self.typing.alive = False
@@ -1223,14 +1318,173 @@ def gui_confirm(question, sensitive=False, auto_ok=True):
     return result[0]
 
 
+def gui_run_for_user(command, reason):
+    """Worker thread: puts the command in front of the user and waits. None if they did not run it."""
+    if APP.cancelled.is_set() or not APP.turn:
+        return None
+    done, result = threading.Event(), [None]
+
+    def answer(outcome):
+        result[0] = outcome
+        done.set()
+    APP.waiting = (done, result)
+    ui(APP.turn.user_command, command, reason, answer)
+    ui(APP.attention, "Hearthling needs you to run a command", command)
+    done.wait()
+    APP.waiting = None
+    return result[0] or None
+
+
+WEB_TOOLS = {"web_search": ("system-search-symbolic", "SEARCHING"), "news_search": ("system-search-symbolic", "NEWS SEARCH"),
+             "web_fetch": ("web-browser-symbolic", "READING PAGE")}
+WEB_ENTRIES_KEPT = 60
+WEB_TEXT_SHOWN = 8000
+
+
+def watch_web(name):
+    """Wraps a web tool so each call also shows in the web panel, with exactly what came back."""
+    original = agent.tools[name]
+
+    def watched(arg=""):
+        token = object()
+        ui(APP.web.start, token, name, arg)
+        try:
+            result = original(arg) if arg != "" else original()
+        except BaseException:
+            ui(APP.web.finish, token, "Stopped.")
+            raise
+        ui(APP.web.finish, token, result)
+        return result
+    agent.tools[name] = watched
+
+
+class WebPanel(Gtk.Box):
+    """What the agent does on the web, as it happens. It has no browser of its own: each row is a real search or page
+    request, and opening one shows the text the agent got back."""
+
+    def __init__(self, app):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["web-panel"])
+        self.app = app
+        self.open_rows, self.last = {}, None
+        head = Gtk.Box(spacing=8, css_classes=["web-head"])
+        head.append(Gtk.Label(label="Web activity", xalign=0, css_classes=["title"]))
+        self.live = Gtk.Label(label="● LIVE", css_classes=["web-live"], visible=False, hexpand=True, xalign=0)
+        self.spacer = Gtk.Box(hexpand=True)
+        head.append(self.live)
+        head.append(self.spacer)
+        head.append(mini_button("edit-clear-symbolic", "Clear this list", lambda *_: self.clear()))
+        self.append(head)
+        self.empty = Gtk.Label(label="Nothing yet. Searches and pages appear here as Hearthling opens them.", wrap=True,
+                               justify=Gtk.Justification.CENTER, css_classes=["web-empty"], vexpand=True)
+        self.append(self.empty)
+        self.list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["web-list"])
+        self.scroller = Gtk.ScrolledWindow(vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, visible=False)
+        self.scroller.set_child(self.list)
+        self.append(self.scroller)
+
+    def _busy(self):
+        busy = bool(self.open_rows)
+        self.live.set_visible(busy)
+        self.spacer.set_visible(not busy)
+        (self.app.web_button.add_css_class if busy else self.app.web_button.remove_css_class)("live")
+
+    def _to_bottom(self):
+        adj = self.scroller.get_vadjustment()
+        GLib.timeout_add(120, lambda: (adj.set_value(adj.get_upper()), False)[1])
+
+    def start(self, token, name, arg):
+        icon, kind = WEB_TOOLS[name]
+        target = agent._parse_fetch_args(arg)[0] if name == "web_fetch" else str(arg)
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["web-entry", "fade-up"])
+        words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+        words.append(Gtk.Label(label=kind, xalign=0, css_classes=["kind"]))
+        words.append(Gtk.Label(label=target, xalign=0, css_classes=["target"], ellipsize=Pango.EllipsizeMode.MIDDLE,
+                               tooltip_text=target))
+        spinner = Gtk.Spinner(spinning=True, valign=Gtk.Align.CENTER)
+        took = Gtk.Label(css_classes=["took"], valign=Gtk.Align.CENTER, visible=False)
+        title = Gtk.Box(spacing=10)
+        title.append(Gtk.Image(icon_name=icon, valign=Gtk.Align.CENTER))
+        title.append(words)
+        title.append(spinner)
+        title.append(took)
+        button = Gtk.Button(child=title, css_classes=["flat", "web-title"])
+        row.append(button)
+        reveal = Gtk.Revealer(transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN, transition_duration=220)
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        seen_head = Gtk.Box(spacing=4, css_classes=["seen-head"])
+        seen_head.append(Gtk.Label(label="WHAT THE AGENT GOT BACK", xalign=0, hexpand=True))
+        if name == "web_fetch" and re.match(r"https?://", target, re.I):
+            seen_head.append(mini_button("web-browser-symbolic", "Open this page in your browser",
+                                         lambda *_: open_with_default(target), "Open"))
+        inner.append(seen_head)
+        seen = Gtk.Label(wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR, xalign=0, selectable=True, css_classes=["seen"])
+        inner.append(seen)
+        reveal.set_child(inner)
+        row.append(reveal)
+        button.connect("clicked", lambda *_: reveal.set_reveal_child(not reveal.get_reveal_child()))
+        self.list.append(row)
+        self.open_rows[token] = (row, spinner, took, reveal, seen, time.monotonic())
+        self.empty.set_visible(False)
+        self.scroller.set_visible(True)
+        while len(list(self._rows())) > WEB_ENTRIES_KEPT:
+            self.list.remove(self.list.get_first_child())
+        self._busy()
+        self._to_bottom()
+
+    def _rows(self):
+        child = self.list.get_first_child()
+        while child:
+            yield child
+            child = child.get_next_sibling()
+
+    def finish(self, token, result):
+        found = self.open_rows.pop(token, None)
+        if not found:
+            return
+        row, spinner, took, reveal, seen, began = found
+        spinner.set_spinning(False)
+        spinner.set_visible(False)
+        took.set_label(f"{time.monotonic() - began:.1f}s")
+        took.set_visible(True)
+        text = str(result)
+        if not text.startswith(agent.WEB_NOTICE):
+            row.add_css_class("failed")
+        text = text.removeprefix(agent.WEB_NOTICE)
+        if len(text) > WEB_TEXT_SHOWN:
+            text = text[:WEB_TEXT_SHOWN] + f"\n… ({len(text) - WEB_TEXT_SHOWN} more characters)"
+        seen.set_text(text)
+        # Follow the newest result, the way a browser shows the page it is on
+        if self.last is not None and self.last.get_parent() is not None:
+            self.last.set_reveal_child(False)
+        reveal.set_reveal_child(True)
+        self.last = reveal
+        self._busy()
+        self._to_bottom()
+
+    def clear(self):
+        for child in list(self._rows()):
+            self.list.remove(child)
+        self.open_rows.clear()
+        self.last = None
+        self.empty.set_visible(True)
+        self.scroller.set_visible(False)
+        self._busy()
+
+
 def install_hooks():
     agent.GUI[0] = True
     agent.Spinner = GuiSpinner
     agent.ReasoningView = GuiReasoning
     agent._confirm = gui_confirm
-    agent.ui_tool = lambda name, args: ui(APP.turn.tool, name, args) if APP.turn else None
+    # ask_user_to_run shows its own card
+    agent.ui_tool = lambda name, args: ui(APP.turn.tool, name, args) if APP.turn and name != "ask_user_to_run" else None
     agent.ui_command = lambda command: ui(APP.turn.command, command) if APP.turn else None
     agent.ui_write = lambda action, target: ui(APP.turn.write, action, target) if APP.turn else None
+    if Vte:
+        agent.TERMINAL_READER[0] = APP.read_terminal
+        agent.TERMINAL_RUNNER[0] = gui_run_for_user
+    for name in WEB_TOOLS:
+        watch_web(name)
 
 
 def plain(text):
@@ -1288,14 +1542,21 @@ class Assistant(Adw.Application):
         self.stick = True
         adj.connect("value-changed", self._on_scroll)
         adj.connect("changed", lambda a: self.stick and a.set_value(a.get_upper() - a.get_page_size()))
-        root.append(self.scroller)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        page.append(self.scroller)
+        self.web = WebPanel(self)
+        split = Adw.OverlaySplitView(sidebar_position=Gtk.PackType.END, show_sidebar=False, collapsed=False, vexpand=True,
+                                     min_sidebar_width=380, max_sidebar_width=560, sidebar_width_fraction=0.3,
+                                     content=page, sidebar=self.web)
+        self.web_button.connect("toggled", lambda b: split.set_show_sidebar(b.get_active()))
+        root.append(split)
 
         self.welcome = self._welcome()
         self.chat.append(self.welcome)
         bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["bottom"])
         for part in (self._terminal_pane(), self._slash_menu(), self._attach_tray(), self._composer(), self._statusbar()):
             bottom.append(part)
-        root.append(column(bottom))
+        page.append(column(bottom))
         self._actions()
         self.window.present()
         self.input.grab_focus()
@@ -1339,6 +1600,9 @@ class Assistant(Adw.Application):
         self.term_button = Gtk.ToggleButton(icon_name="utilities-terminal-symbolic", tooltip_text="Terminal (Ctrl+`)")
         self.term_button.connect("toggled", lambda b: self.show_terminal(b.get_active()))
         header.pack_end(self.term_button)
+        self.web_button = Gtk.ToggleButton(icon_name="web-browser-symbolic", css_classes=["web-toggle"],
+                                           tooltip_text="Watch what Hearthling is doing on the web")
+        header.pack_end(self.web_button)
         return header
 
     def _welcome(self):
@@ -1640,9 +1904,10 @@ class Assistant(Adw.Application):
         if Vte:
             self.terminal = Vte.Terminal(vexpand=True, hexpand=True, margin_start=8, margin_end=8, margin_bottom=8)
             self.terminal.set_font(Pango.FontDescription.from_string("CaskaydiaCove Nerd Font Mono 11"))
+            self.terminal.set_scrollback_lines(5000)
             self._terminal_colours()
-            self.terminal.connect("child-exited", lambda *_: setattr(self, "term_alive", False))
-            self.term_alive = False
+            self.terminal.connect("child-exited", lambda *_: (setattr(self, "term_alive", False), setattr(self, "term_pid", None)))
+            self.term_alive, self.term_pid = False, None
             pane.append(self.terminal)
         else:
             pane.append(Gtk.Label(label="The built-in terminal needs the vte4 package:  sudo pacman -S vte4\n"
@@ -1667,12 +1932,14 @@ class Assistant(Adw.Application):
 
     def _spawn_shell(self):
         shell = os.environ.get("SHELL") or "/bin/bash"
+        def spawned(_terminal, pid, *_rest):
+            self.term_pid = pid if pid and pid > 0 else None
         args = (Vte.PtyFlags.DEFAULT, os.path.expanduser("~"), [shell], None, GLib.SpawnFlags.DEFAULT,
-                None, None, -1, None, None, None)
+                None, None, -1, None, spawned, None)
         try:
             self.terminal.spawn_async(*args)
         except TypeError:  # older bindings take child_setup and its data as one argument
-            self.terminal.spawn_async(*args[:5], None, -1, None, None, None)
+            self.terminal.spawn_async(*args[:5], None, -1, None, spawned, None)
         self.term_alive = True
 
     def show_terminal(self, show):
@@ -1701,8 +1968,65 @@ class Assistant(Adw.Application):
         except OSError as e:
             self.toast(f"Could not open {terminal}: {e}")
 
-    def run_in_terminal(self, code):
-        """Pastes the code into the terminal without running it: you read it and press Enter."""
+    def _shell_idle(self):
+        """True when the shell itself is at the front of the terminal: nothing is running in it."""
+        try:
+            return self.term_pid is not None and os.tcgetpgrp(self.terminal.get_pty().get_fd()) == self.term_pid
+        except (OSError, AttributeError):
+            return False
+
+    def run_in_terminal(self, code, started=None):
+        """Runs the code in the terminal as if typed, after anything half-typed is cleared. started(row) is called with
+        the cursor's row, or None if it could not run. It refuses while a program is running there: the text would go
+        to that program, not the shell."""
+        started = started or (lambda _row: None)
+        if not Vte:
+            self.paste_in_terminal(code)
+            started(None)
+            return
+        fresh = not self.term_alive
+        self.show_terminal(True)
+        tries = [0]
+
+        def go():
+            tries[0] += 1
+            if self.term_pid is None and tries[0] < 40:  # the shell is still starting
+                return GLib.SOURCE_CONTINUE
+            if not self._shell_idle():
+                self.toast("The terminal is busy. Finish what is running there first")
+                started(None)
+                return GLib.SOURCE_REMOVE
+            row = self.terminal.get_cursor_position()[1]
+            self.terminal.feed_child(b"\x05\x15" + code.strip("\n").encode() + b"\n")  # End, then erase the line
+            self.terminal.grab_focus()
+            started(row)
+            return GLib.SOURCE_REMOVE
+        GLib.timeout_add(1000 if fresh else 50, go)  # a new shell needs a moment to reach its prompt
+
+    def when_finished(self, cancelled, finished):
+        """Calls finished() once the command just started has ended and the shell is back at its prompt."""
+        began, idle_since, seen_busy = time.monotonic(), [None], [False]
+
+        def check():
+            if cancelled():
+                return GLib.SOURCE_REMOVE
+            if not self.term_alive:
+                finished()
+                return GLib.SOURCE_REMOVE
+            now = time.monotonic()
+            if not self._shell_idle():
+                seen_busy[0], idle_since[0] = True, None
+                return GLib.SOURCE_CONTINUE
+            idle_since[0] = idle_since[0] or now
+            # Shell prompts run helpers of their own, and shell builtins never leave the shell at all
+            if now - idle_since[0] >= (0.4 if seen_busy[0] else 1.2) and now - began >= 0.4:
+                finished()
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+        GLib.timeout_add(120, check)
+
+    def paste_in_terminal(self, code):
+        """Puts the code in the terminal without running it: you read it and press Enter."""
         if not Vte:
             self.copy(code)
             self._external_terminal()
@@ -1711,6 +2035,31 @@ class Assistant(Adw.Application):
         self.show_terminal(True)
         GLib.timeout_add(150 if self.term_alive else 600, lambda: (self.terminal.paste_text(code.strip("\n")),
                                                                    self.terminal.grab_focus(), False)[2])
+
+    def read_terminal(self, lines):
+        """For the agent's worker thread: the terminal's newest lines as plain text, None if GTK did not answer in time."""
+        result, done = [], threading.Event()
+
+        def grab():
+            try:
+                result.append(self._terminal_text(lines))
+            finally:
+                done.set()
+            return False
+        GLib.idle_add(grab)
+        return result[0] if done.wait(5) and result else None
+
+    def _terminal_text(self, lines, since=None):
+        # Counted back from the cursor: the scroll position is not known until the pane has been shown
+        term = self.terminal
+        _column, row = term.get_cursor_position()
+        start = max(0, row - lines) if since is None else max(since, row - lines)
+        text = term.get_text_range_format(Vte.Format.TEXT, start, 0, row + term.get_row_count(),
+                                          term.get_column_count())[0] or ""
+        rows = [line.rstrip() for line in text.split("\n")]
+        while rows and not rows[-1]:
+            rows.pop()
+        return "\n".join(rows[-lines:])
 
     def copy(self, text):
         self.window.get_clipboard().set(text)
@@ -1979,6 +2328,7 @@ class Assistant(Adw.Application):
             self.chat.remove(child)
         self.welcome.set_vexpand(True)
         self.welcome.set_reveal_child(True)
+        self.web.clear()
         self.toast("New chat. Earlier messages are forgotten.")
 
 

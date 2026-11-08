@@ -111,6 +111,33 @@ class AuditItem7(unittest.TestCase):
         self.assertEqual(a._visible("ls\r\x1b[2Krm -rf ~"), "ls\\r\\x1b[2Krm -rf ~")
 
 
+class MislabelledPages(unittest.TestCase):
+    PAGE = "<!doctype html>\n<html><head><title>Update</title></head><body><main><p>The real article text is here.</p></main></body></html>"
+
+    def load(self, url, text, ctype="text/plain"):
+        got = {"ctype": ctype, "raw": text.encode(), "text": text, "final_url": url, "truncated": False}
+        with mock.patch.object(a, "_http_get_ex", lambda *_a, **_k: got), mock.patch.dict(a._FETCH_CACHE, clear=True):
+            return a._load_page(url)
+
+    def test_html_sent_as_plain_text_is_read_as_a_page(self):
+        page = self.load("https://example.org/news", self.PAGE)
+        self.assertEqual((page["ctype"], page["title"]), ("text/html", "Update"))
+        self.assertIn("The real article text", page["text"])
+        self.assertNotIn("<!doctype", page["text"])
+
+    def test_leading_comment_and_bom_are_allowed(self):
+        self.assertEqual(self.load("https://example.org/a", "\ufeff <!-- built -->\n" + self.PAGE)["ctype"], "text/html")
+
+    def test_real_plain_text_is_left_alone(self):
+        for text in ("Notes about <html> tags\nmore", "plain words"):
+            page = self.load("https://example.org/a.txt", text)
+            self.assertEqual((page["ctype"], page["text"]), ("text/plain", text))
+
+    def test_raw_source_files_stay_as_source(self):
+        page = self.load("https://raw.githubusercontent.com/o/r/main/index.html", self.PAGE)
+        self.assertEqual(page["text"], self.PAGE)
+
+
 class SystemChanges(unittest.TestCase):
     """Changes to system config are checked against the docs first and verified after (the SDDM override loop)."""
     def setUp(self):

@@ -64,14 +64,14 @@ MODES = {
     },
     "external": {
         "colour": "32",
-        "tools": {"web_search", "web_fetch", "news_search", "date_info", "remember", "forget"},
+        "tools": {"web_search", "web_fetch", "news_search", "date_info", "remember", "forget", "read_terminal"},
         "caps": {"web_search": 6, "web_fetch": 6, "news_search": 2},
         "prompt": EXTERNAL_PROMPT, "profile": False, "pc_state": False,
         "blurb": "A supporting technician for when you are stuck on IT work away from this PC. Advice only.",
     },
     "gaming": {
         "colour": "33",
-        "tools": {"web_search", "web_fetch", "news_search", "date_info", "system_info", "performance_snapshot", "remember", "forget"},
+        "tools": {"web_search", "web_fetch", "news_search", "date_info", "system_info", "performance_snapshot", "remember", "forget", "read_terminal"},
         "caps": {"web_search": 6, "web_fetch": 6, "news_search": 2},
         "prompt": GAMING_PROMPT, "profile": True, "pc_state": False,
         "blurb": "Advice for the game you name, tuned to this PC and Linux. Read-only.",
