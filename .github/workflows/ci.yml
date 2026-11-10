@@ -70,6 +70,9 @@ jobs:
       - name: Notes tests
         working-directory: .config/hypr/notes
         run: /usr/bin/python3 -m unittest discover -s tests -v
+      - name: Sound app tests
+        working-directory: .config/hypr/audio
+        run: /usr/bin/python3 -m unittest discover -s tests -v
       - name: Launcher tests
         working-directory: .config/hypr/launcher
         run: /usr/bin/python3 -m unittest discover -s tests -v

@@ -193,7 +193,8 @@
             "car": "",
             "default": ["", "", ""]
         },
-        "on-click": "pavucontrol"
+        "on-click": "~/.config/hypr/audio/audio.sh",
+        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
         },
 
     // Custom Modules

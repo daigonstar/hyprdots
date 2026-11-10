@@ -1,0 +1,37 @@
+{
+  "name": "HeadsetControl",
+  "version": "4.2.0",
+  "api_version": "1.6",
+  "hidapi_version": "0.15.0",
+  "device_count": 1,
+  "devices": [
+    {
+      "status": "success",
+      "device": "SteelSeries Arctis (7/Pro)",
+      "vendor": "SteelSeries ",
+      "product": "SteelSeries Arctis 7",
+      "id_vendor": "0x1038",
+      "id_product": "0x12ad",
+      "capabilities": [
+        "CAP_SIDETONE",
+        "CAP_BATTERY_STATUS",
+        "CAP_LIGHTS",
+        "CAP_INACTIVE_TIME",
+        "CAP_CHATMIX_STATUS"
+      ],
+      "capabilities_str": [
+        "sidetone",
+        "battery",
+        "lights",
+        "inactive time",
+        "chatmix"
+      ],
+      "battery": {
+        "status": "BATTERY_AVAILABLE",
+        "level": 98,
+        "time_to_empty_min": 705
+      },
+      "chatmix": 56
+    }
+  ]
+}

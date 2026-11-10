@@ -29,6 +29,7 @@ local binds = {
     { id = "clipboard", label = "Clipboard history", keys = "SUPER + CTRL + C", action = hl.dsp.exec_cmd("clipvault list | rofi -dmenu -display-columns 2 | clipvault get | wl-copy") },
     { id = "cheatsheet", label = "Keybind cheatsheet", keys = "SUPER + K", action = hl.dsp.exec_cmd("~/.config/hypr/cheatsheet/cheatsheet.sh") },
     { id = "notes", label = "Notes (drops down from the top)", keys = "SUPER + I", action = hl.dsp.exec_cmd("~/.config/hypr/notes/notes.sh") },
+    { id = "sound", label = "Sound: outputs, apps, equaliser", keys = "SUPER + SHIFT + A", action = hl.dsp.exec_cmd("~/.config/hypr/audio/audio.sh") },
     { id = "emoji", label = "Emoji picker", keys = "SUPER + period", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/emoji.sh") },
     { id = "colour_picker", label = "Pick a colour on screen", keys = "SUPER + SHIFT + C", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/colour-picker.sh") },
     { id = "record_screen", label = "Record this screen (again to stop)", keys = "SUPER + ALT + R", action = hl.dsp.exec_cmd("~/.config/hypr/scripts/record.sh screen") },

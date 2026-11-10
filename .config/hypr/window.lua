@@ -142,6 +142,13 @@ hl.window_rule({
     size = { 560, 680 },
 })
 hl.window_rule({
+    name = "sound",
+    match = { class = "^com\\.hyprdots\\.audio$" },
+    float = true,
+    center = true,
+    size = { 600, 880 },
+})
+hl.window_rule({
     name = "assistant-scratchpad",
     match = { class = "^com\\.hyprdots\\.assistant$" },
     workspace = "special:agent",

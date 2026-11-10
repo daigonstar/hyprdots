@@ -39,6 +39,8 @@ from overview import Overview  # noqa: E402
 import touch_mode  # noqa: E402
 from popups import Meter, Osd, Switcher, label  # noqa: E402
 import sysinfo  # noqa: E402
+sys.path.insert(0, str(HERE.parent / "audio"))
+import headset  # noqa: E402
 
 THEME = HERE / "theme.css"
 SOUND_OFF = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quick-tray/sounds-off"
@@ -53,6 +55,8 @@ SAMPLE_SECONDS = 2
 HISTORY = 60  # samples on each graph: two minutes
 ATTENTION_DISK = 90
 ATTENTION_BATTERY = 15
+HEADSET_SECONDS = 60  # how often the headset is asked: headsetcontrol talks to it over the radio
+SOUND_APP = "~/.config/hypr/audio/audio.sh"
 
 ICON = {
     "wifi": "\U000f05a9", "wifi_off": "\U000f05aa", "ethernet": "\U000f0200", "bluetooth": "\U000f00af",
@@ -63,7 +67,7 @@ ICON = {
     "power": "\U000f0425", "screenshot": "\U000f0100", "clipboard": "\U000f0147", "wallpaper": "\U000f02e9",
     "keybinds": "\U000f030c", "monitor": "\U000f0128", "chevron": "\U000f0140", "check": "\U000f012c",
     "battery": "\U000f0079", "charging": "\U000f0084", "mouse": "\U000f037d", "keyboard": "\U000f030c",
-    "device": "\U000f0079",
+    "device": "\U000f0079", "headset": "\U000f02cb",
     "close": "\U000f0156", "clear": "\U000f00e2", "previous": "\U000f04ae", "play_pause": "\U000f040e", "next": "\U000f04ad",
     "music": "\U000f075a", "record": "\U000f044a", "colour": "\U000f03d8", "emoji": "\U000f01f5",
     "overview": "\U000f0570", "notes": "\U000f082e", "disks": "\U000f02ca", "sounds": "\U000f009e", "eject": "\U000f01ea",
@@ -535,6 +539,7 @@ class Tray(Gtk.Window):
                 (ICON["wallpaper"], "Wallpaper picker", "~/.config/rofi/wallpaper/wallpaper.sh", 0),
                 (ICON["keybinds"], "Keybind cheatsheet", "~/.config/hypr/cheatsheet/cheatsheet.sh", 0),
                 (ICON["notes"], "Notes (Super+I)", "~/.config/hypr/notes/notes.sh", 0.2),
+                (ICON["volume"], "Sound: outputs, apps, equaliser (Super+Shift+A)", SOUND_APP, 0),
                 (ICON["overview"], "All workspaces", "pkill -HUP -f '[h]ypr/tray/quick_tray'", 0.25),
                 (ICON["colour"], "Pick a colour", f"{SCRIPTS}/colour-picker.sh", 0.3),
                 (ICON["emoji"], "Pick an emoji", f"{SCRIPTS}/emoji.sh", 0.2),
@@ -1039,10 +1044,18 @@ class Tray(Gtk.Window):
     def _read_sample(self, visible):
         s = {"cpu": sysinfo.cpu_times(), "memory": sysinfo.memory(), "net": sysinfo.net_bytes(), "at": time.monotonic(),
              "visible": visible}
-        s.update(peripherals=sysinfo.peripherals(), battery=sysinfo.system_battery())
+        s.update(peripherals=sysinfo.peripherals() + self._headset(), battery=sysinfo.system_battery())
         if visible:
             s.update(cpu_temp=sysinfo.cpu_temp(), gpu=sysinfo.gpu(), disks=sysinfo.disks(), uptime=sysinfo.uptime())
         return s
+
+    def _headset(self):
+        """A wireless headset's battery, through headsetcontrol, asked once a minute (it answers over the radio)."""
+        now = time.monotonic()
+        if headset.available() and now - getattr(self, "headset_at", -HEADSET_SECONDS) >= HEADSET_SECONDS:
+            self.headset_at = now
+            self.headset_seen = headset.peripheral()
+        return [self.headset_seen] if getattr(self, "headset_seen", None) else []
 
     def _show_sample(self, s):
         self.sampling = False
@@ -1144,13 +1157,25 @@ class Tray(Gtk.Window):
         for device in peripherals:
             model = device["model"].lower()
             icon = ICON["mouse"] if "mouse" in model else ICON["keyboard"] if "keyboard" in model else ICON["device"]
+            charging = device.get("charging") == "charging"
             chip = Gtk.Box(spacing=5)
-            chip.set_tooltip_text(f"{device['model']}: {device['capacity']}%")
+            tip = f"{device['model']}: {device['capacity']}%"
+            if device.get("headset"):
+                icon = ICON["headset"]
+                tip += f", {headset.CHARGING_TEXT[device['charging']].lower()}. Click for its settings"
+            chip.set_tooltip_text(tip)
             chip.pack_start(label(icon), False, False, 0)
-            text = label(f"{device['capacity']}%")
-            if device["capacity"] <= ATTENTION_BATTERY:
+            text = label(f"{device['capacity']}%" + (f" {ICON['charging']}" if charging else ""))
+            if device["capacity"] <= ATTENTION_BATTERY and not charging:
                 text.get_style_context().add_class("attention")
             chip.pack_start(text, False, False, 0)
+            if device.get("headset"):
+                button = Gtk.Button(relief=Gtk.ReliefStyle.NONE)
+                button.get_style_context().add_class("device")
+                button.add(chip)
+                button.connect("clicked", lambda _b: self.launch(SOUND_APP + " --page headset"))
+                hand_cursor(button)
+                chip = button
             self.peripherals_box.pack_start(chip, False, False, 0)
         self.peripherals_box.show_all()
         self.peripherals_box.set_visible(bool(peripherals))

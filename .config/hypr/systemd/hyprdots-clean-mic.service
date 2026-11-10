@@ -1,0 +1,13 @@
+[Unit]
+Description=Sound app: Clean microphone, noise suppression in front of your microphone (a PipeWire filter)
+After=pipewire.service wireplumber.service
+BindsTo=pipewire.service
+ConditionPathExists=%h/.local/state/hyprdots/clean-mic.conf
+
+[Service]
+ExecStart=/usr/bin/pipewire -c %h/.local/state/hyprdots/clean-mic.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=pipewire.service

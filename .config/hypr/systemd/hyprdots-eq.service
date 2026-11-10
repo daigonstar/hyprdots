@@ -1,0 +1,13 @@
+[Unit]
+Description=Sound app: the equaliser in front of your output (a PipeWire filter)
+After=pipewire.service wireplumber.service
+BindsTo=pipewire.service
+ConditionPathExists=%h/.local/state/hyprdots/eq.conf
+
+[Service]
+ExecStart=/usr/bin/pipewire -c %h/.local/state/hyprdots/eq.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=pipewire.service

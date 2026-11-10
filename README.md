@@ -59,6 +59,17 @@ USB drives mount when you plug them in, with a notification to open them, and dr
 - Escape, the key again or a click outside hides it, and the tabs stay. Pin it to keep it open while you work in other windows.
 - `~/.config/hypr/notes/notes.sh --append "text"` adds a line to an Inbox tab from any script, with the window closed.
 
+### Sound
+**Super + Shift + A**, a click on the bar's volume, or the speaker button in the quick tray opens Sound, the desktop's audio app (a right click on the bar's volume mutes). It follows the Theme page's colours and updates the moment anything changes.
+
+- **Output**: every output with its volume, mute and port; pick the one you use. The **Equaliser** sits in front of it: ten bands and presets (Bass boost, Footsteps, Voice, Music...), for headsets with no EQ of their own too. It is a PipeWire filter, so it needs nothing extra; sliders change the sound at once, and it stays on after a login (`hyprdots-eq` service). Pick another output and the equaliser moves with you.
+- **Input**: every microphone with its volume, mute and port, a live level, and **Hear yourself** to check how you sound. **Clean microphone** takes out keyboards, fans and background noise (RNNoise, `noise-suppression-for-voice`), as a new input apps can use (`hyprdots-clean-mic` service).
+- **Apps**: each app that is playing or recording, its own volume, and which output or microphone it uses.
+- **Devices**: each sound card's profile, for example HDMI sound off on a screen you never listen to.
+- **Headset**: a wireless gaming headset's battery, whether it is charging, the ChatMix dial and the settings it takes (sidetone, auto power-off, lights...), through [headsetcontrol](https://github.com/Sapd/HeadsetControl). Its battery also shows next to your mouse and keyboard in the quick tray. Headsets like the Arctis 7 never say whether they are charging, so it is worked out from the battery level rising, and **Not charging?** lists what to check.
+
+`~/.config/hypr/audio/audio.sh --page input` opens it on a page (output, input, apps, devices, headset); **Ctrl + 1-5** switch pages.
+
 ### Powermenu
 Full screen, with a PC (a laptop when a battery is found) in the middle and the options in a ring around it. Arrow keys, the first letter of an option, or the mouse.
 ![image](screens/power.png)

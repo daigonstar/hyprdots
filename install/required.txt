@@ -47,7 +47,9 @@ pipewire-pulse
 rtkit  # lets audio run at high priority, so it does not crackle under load
 libpulse
 wireplumber
-pavucontrol
+pavucontrol  # kept as a fallback; the Sound app (hypr/audio) is the desktop's own
+headsetcontrol  # the Sound app: a wireless headset's battery and settings (its udev rule lets you read it)
+noise-suppression-for-voice  # the Sound app's Clean microphone (RNNoise)
 playerctl
 networkmanager
 bluez
