@@ -374,7 +374,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
         "compact": dict(halign=Gtk.Align.START, valign=Gtk.Align.START, width=380, margin_top=56, margin_start=12, view="list", icon=20, rows=9, row=12,
                         dense=True),
         "grid": dict(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL, width=-1, view="grid", icon=72, tile=170),
-        "categories": dict(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, width=1100, height=0.72, view="grid", icon=52, tile=128),
+        "categories": dict(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, width=0.74, min_width=1100, height=0.72, view="grid", icon=52, tile=128),
         "dock": dict(halign=Gtk.Align.CENTER, valign=Gtk.Align.END, width=-1, max_width=0.86, margin_bottom=18, view="row", icon=56, tile=84,
                      detached=True, icons_only=True),
         "orbit": dict(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL, width=-1, view="stage", icon=58, tile=-1, icons_only=True,
@@ -400,7 +400,8 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     backdrop.append(panel)
     sidebar = None
     if style == "categories":
-        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["sidebar"], width_request=round(210 * scale))
+        sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["sidebar"], width_request=round(210 * scale),
+                          hexpand=False)  # set, so the names stretching inside it do not widen the rail itself
         panel.append(sidebar)
     main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12 if style in ("categories", "grid") + STAGED else 6,
                    css_classes=["main"] + (["surface"] if detached else []), hexpand=True, vexpand=True)
@@ -504,7 +505,9 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
             return
         g = mon.get_geometry()
         w = layout.get("width", -1)
-        panel.set_size_request(int(g.width * w) if isinstance(w, float) else w, int(g.height * layout["height"]) if "height" in layout else -1)
+        if isinstance(w, float):  # a share of the screen, but never narrower than min_width or wider than the screen
+            w = min(max(int(g.width * w), round(layout.get("min_width", 0) * scale)), int(g.width * 0.96))
+        panel.set_size_request(w, int(g.height * layout["height"]) if "height" in layout else -1)
         top = layout.get("margin_top", 0)
         panel.set_margin_top(int(g.height * top) if isinstance(top, float) else top)
         panel.set_margin_start(layout.get("margin_start", 0))
