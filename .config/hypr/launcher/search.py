@@ -236,6 +236,50 @@ def search(query: str, apps: list[Result], usage: dict, engine: str = "duckduckg
     return sorted(special + found, key=lambda r: -r.score)
 
 
+# ---- what the window says and how its arrows move -----------------------------------------------------------------
+def mode_label(query: str) -> str:
+    """The chip beside the search box: what the launcher takes the text to be."""
+    q = query.strip()
+    if not q:
+        return "APPS"
+    if q.startswith(">"):
+        return "RUN"
+    if q.startswith("?"):
+        return "WEB"
+    return "SUM" if calculate(q) is not None else "SEARCH"
+
+
+def action_text(result: Result) -> str:
+    """The footer's description of what Enter does."""
+    return {"app": f"Open {result.title}", "calc": f"Copy {result.title}"}.get(result.kind, result.title)
+
+
+def initial(title: str) -> str:
+    """The letter an app files under in the A to Z. Anything that is not A to Z goes under #."""
+    ch = title.strip()[:1].upper()
+    return ch if "A" <= ch <= "Z" else "#"
+
+
+def first_with_initial(results: list[Result], letter: str) -> int | None:
+    return next((i for i, r in enumerate(results) if initial(r.title) == letter), None)
+
+
+def step(index: int, count: int, columns: int, direction: str) -> int:
+    """Where an arrow lands among count results laid out columns wide. Left and right run on through the rows. Up and
+    down keep to the column, but stop at the top and bottom instead of jumping sideways to the first or last result;
+    the one exception is down into a shorter last row, which lands on its end."""
+    if count < 1:
+        return 0
+    columns = max(columns, 1)
+    if direction in ("left", "right"):
+        return max(0, min(index + (1 if direction == "right" else -1), count - 1))
+    target = index + (columns if direction == "down" else -columns)
+    if 0 <= target < count:
+        return target
+    below = direction == "down" and (count - 1) // columns > index // columns
+    return count - 1 if below else index
+
+
 if __name__ == "__main__":
     query = " ".join(sys.argv[1:])
     apps = installed_apps()

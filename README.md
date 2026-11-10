@@ -38,7 +38,7 @@ PRINT = Screenshot this screen. CTRL + SHIFT + S a region, CTRL + ALT + S a wind
 ![image](screens/wall.png)
 
 ### App launcher
-Super+Space. Type to find an app; it also works out sums (`12*7`, Enter copies the answer), runs commands in your terminal (`> htop`), searches the web (`? arch wiki bluetooth`) and offers lock, sleep, log out, reboot and shut down (the last four ask for a second Enter). Apps you open often come first. Five styles, picked on the settings Launcher page: Categories, Spotlight, Grid, Compact and Dock. Colours and font follow the Theme page.
+Super+Space. Type to find an app; it also works out sums (`12*7`, Enter copies the answer), runs commands in your terminal (`> htop`), searches the web (`? arch wiki bluetooth`) and offers lock, sleep, log out, reboot and shut down (the last four ask for a second Enter). Apps you open often come first. Nine styles, picked on the settings Launcher page: Categories (a rail of groups beside your apps), Spotlight (just a search pill until you type, or press Down for recent apps), Grid (a full screen library, Alt+letter jumps through the A to Z), Compact (a slim numbered list under the bar, Alt+1 to 9 opens one) Dock (a strip of icons, type to bring up search), and four for fun: Orbit (apps circle the search box and spin round), Carousel (cards flipping past in 3D), Terminal (a glowing green screen) and Bubbles (apps float, the ones you use most biggest and in the middle). Colours and font follow the Theme page.
 ![image](screens/launcher.png)
 
 ### Quick tray

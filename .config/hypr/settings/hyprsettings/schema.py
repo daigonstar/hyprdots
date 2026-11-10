@@ -113,9 +113,13 @@ CACHE_MODES = _c(("full", "Keep a local copy"), ("writes", "Stream from the serv
 CLOUD_EFFECT = "when the cloud drives restart"
 LAUNCHER_EFFECT = "the next time the launcher opens"
 LAUNCHER_STYLES = _c(("categories", "Categories: groups on the left, apps on the right"),
-                     ("spotlight", "Spotlight: a search bar in the middle of the screen"),
-                     ("grid", "Grid: every app across the whole screen"), ("compact", "Compact: a small list under the bar"),
-                     ("dock", "Dock: a strip of big icons along the bottom"))
+                     ("spotlight", "Spotlight: a search pill; results appear as you type"),
+                     ("grid", "Grid: a full screen library with an A to Z"), ("compact", "Compact: a slim numbered list under the bar"),
+                     ("dock", "Dock: a strip of icons along the bottom; type to search"),
+                     ("orbit", "Orbit: a ring of apps circling the search box"),
+                     ("carousel", "Carousel: cards that flip past in 3D"),
+                     ("terminal", "Terminal: a glowing green screen"),
+                     ("bubbles", "Bubbles: apps float, the ones you use most biggest"))
 LAUNCHER_SIZES = _c((85, "Small"), (100, "Standard"), (115, "Large"), (130, "Extra large"))
 LAUNCHER_ICONS = _c((80, "Smaller"), (100, "Standard"), (125, "Bigger"), (150, "Biggest"))
 SEARCH_ENGINES = _c(("duckduckgo", "DuckDuckGo"), ("google", "Google"), ("brave", "Brave Search"), ("startpage", "Startpage"))
