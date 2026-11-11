@@ -16,6 +16,7 @@ import sys
 
 STATE = {"name": "local", "arg": ""}
 FEEDS = {}  # extra news feeds supplied by extra modes, merged into the assistant's list at start-up
+EXCLUSIVE = set()  # tools only their own mode may use, even in local mode, which otherwise has every tool
 
 # Short on purpose: a local model follows a few firm rules better than a long list.
 COMMON = """Rules for this mode:
@@ -146,6 +147,37 @@ def model(default, chosen=None):
     return _mode().get("model") or default
 
 
+def fiction():
+    """True for a storytelling mode: the checks that catch made-up facts about the real world do not apply."""
+    return bool(_mode().get("fiction"))
+
+
+def review(text, counts):
+    """What this mode's own checks find wrong with a draft, given how often each tool was called."""
+    check = _mode().get("review")
+    return check(text, counts) if check else []
+
+
+def revise_note(default):
+    return _mode().get("revise_note", default)
+
+
+def after_turn(user_text, reply):
+    """Runs this mode's record keeping after an answer that succeeded."""
+    hook = _mode().get("after_turn")
+    if hook:
+        hook(user_text, reply)
+
+
+def add_builtin(key, mode):
+    MODES[key] = mode
+
+
+def _listed(mode):
+    """A hidden mode stays out of every list until it has been found once."""
+    return not mode.get("hidden") or bool(mode.get("unlocked") and mode["unlocked"]())
+
+
 def uses_profile():
     return _mode()["profile"]
 
@@ -156,7 +188,7 @@ def uses_pc_state():
 
 def allowed(tool_name):
     tools = _mode()["tools"]
-    return tools is None or tool_name in tools
+    return tool_name not in EXCLUSIVE if tools is None else tool_name in tools
 
 
 def schemas(all_schemas):
@@ -171,6 +203,8 @@ def completions():
     """What Tab offers after /mode: each mode, and each mode with each of its options."""
     out = []
     for key, mode in MODES.items():
+        if not _listed(mode):
+            continue
         out.append(key)
         out += [f"{key} {a}" for a in (mode.get("args") or [])]
     return out
@@ -182,6 +216,8 @@ def system_prompt(base):
     if prompt is None:
         return base
     text = prompt(STATE["arg"]) if callable(prompt) else prompt
+    if mode.get("fiction"):
+        return text  # its own rules; the ones below are for answering about the real world
     tools = ", ".join(sorted(mode["tools"])) or "none"
     return f"{text}\n\nTools in this mode: {tools}.\n\n{COMMON}"
 
@@ -189,6 +225,8 @@ def system_prompt(base):
 def listing():
     lines = [f"**Current mode: {describe()}.** It stays until you change it."]
     for key, mode in MODES.items():
+        if not _listed(mode):
+            continue
         options = f" [{' | '.join(mode['args'])}]" if mode.get("args") else ""
         mark = "  (current)" if key == STATE["name"] else ""
         lines.append(f"- `/mode {key}`{options}  {mode['blurb']}{mark}")
@@ -204,7 +242,7 @@ def switch(text, history):
         return listing(), False, False
     mode = MODES.get(key)
     if mode is None:
-        close = [m for m in MODES if m.startswith(key[:2])]
+        close = [m for m, v in MODES.items() if m.startswith(key[:2]) and _listed(v)]
         hint = f" Did you mean `{close[0]}`?" if close else ""
         return f"Unknown mode `{key}`.{hint}\n\n" + listing(), False, False
     options = mode.get("args")
@@ -217,6 +255,8 @@ def switch(text, history):
     STATE["name"], STATE["arg"] = key, arg
     if changed:
         del history[:]
+    if mode.get("fiction"):
+        return mode["blurb"], changed, True
     lines = [f"**Mode: {describe()}.** {mode['blurb']}"]
     if options:
         lines.append(f"Options: {', '.join(options)}. Change with `/mode {key} <option>`.")

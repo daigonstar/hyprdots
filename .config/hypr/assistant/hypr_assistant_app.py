@@ -51,6 +51,10 @@ if "--check" in sys.argv:
 
 import hypr_agent as agent  # noqa: E402
 import agent_modes  # noqa: E402
+import dnd_mode  # noqa: E402
+import dnd_ui  # noqa: E402
+from hyprsettings import livetheme  # noqa: E402
+import dnd_library  # noqa: E402
 
 
 # --- Colours: the Theme page roles, so the window matches the bar and launcher ---
@@ -97,6 +101,9 @@ PANEL = mix(C["base"], C["surface"], 0.14 if DARK else 0.10)
 PANEL_HI = mix(C["base"], C["surface"], 0.24 if DARK else 0.18)
 ON_ACCENT = "#0b0f12" if luminance(C["accent"]) > 0.5 else "#ffffff"
 GREEN, RED = "#5fd38d", "#ef6f6c"
+# The tavern look of Dungeon Master mode, the one place that does not follow the Theme page
+DM_LEATHER, DM_PANEL, DM_TEXT, DM_GOLD, DM_EMBER = "#17100a", "#241a11", "#f0e4cf", "#dcaa4a", "#e2622b"
+DM_SERIF = '"Liberation Serif", "Noto Serif", Georgia, serif'
 # ANSI colour of a /command -> the colour its chip gets here
 ANSI = {"36": C["accent"], "35": "#c77dda", "33": C["attention"], "32": GREEN, "34": C["secondary"], "31": RED}
 
@@ -176,6 +183,7 @@ headerbar.assistant-header {{ background: transparent; box-shadow: none; border-
 .reasoning-head label {{ font-size: 12px; font-weight: 600; color: {rgba(C['base_text'], 0.6)}; }}
 .reasoning-head:hover {{ background: {rgba(C['accent'], 0.08)}; }}
 .reasoning-text {{ font-size: 12.5px; color: {rgba(C['base_text'], 0.45)}; font-style: italic; }}
+.reasoning-text, .reasoning-text text {{ background: transparent; }}
 
 /* Typing indicator */
 .typing {{ padding: 4px 2px; }}
@@ -320,6 +328,113 @@ button.later {{ border-radius: 999px; padding: 6px 16px; font-weight: 700; backg
 .web-entry .seen-head {{ padding: 0 8px 2px 12px; }}
 .web-entry .seen-head label {{ color: {rgba(C['base_text'], 0.55)}; font-size: 11px; font-weight: 700; }}
 button.web-toggle.live {{ color: {C['accent']}; animation: web-pulse 1.4s ease-in-out infinite; }}
+
+/* The table: Dungeon Master mode */
+window.assistant.dnd, window.assistant.dnd.background {{ background: {DM_LEATHER}; color: {DM_TEXT}; }}
+window.dnd .assistant-header {{ background: {DM_PANEL}; border-bottom: 1px solid {rgba(DM_GOLD, 0.25)}; }}
+window.dnd .title-main {{ color: {DM_GOLD}; font-family: {DM_SERIF}; font-size: 17px; }}
+window.dnd .bubble.user {{ background: linear-gradient(135deg, {DM_GOLD}, {DM_EMBER}); box-shadow: 0 4px 14px {rgba(DM_EMBER, 0.25)}; }}
+window.dnd .bubble.user label {{ color: #1c1208; font-weight: 600; }}
+window.dnd .bubble.bot {{ background: {DM_PANEL}; border: 1px solid {rgba(DM_GOLD, 0.18)}; }}
+window.dnd .answer label {{ font-family: {DM_SERIF}; font-size: 16.5px; color: {DM_TEXT}; }}
+window.dnd .answer .heading, window.dnd .answer .marker {{ color: {DM_GOLD}; }}
+window.dnd .composer {{ background: {DM_PANEL}; border-color: {rgba(DM_GOLD, 0.3)}; }}
+window.dnd .composer:focus-within {{ border-color: {DM_GOLD}; box-shadow: 0 0 0 3px {rgba(DM_GOLD, 0.18)}; }}
+window.dnd .composer textview, window.dnd .composer textview text {{ color: {DM_TEXT}; font-size: 15px; }}
+window.dnd .reasoning {{ border-left-color: {rgba(DM_GOLD, 0.3)}; }}
+window.dnd button.send {{ background: {DM_GOLD}; color: #1c1208; }}
+@keyframes dnd-land {{ 0% {{ transform: scale(1.5) rotate(-14deg); }} 60% {{ transform: scale(0.92) rotate(3deg); }} 100% {{ transform: none; }} }}
+@keyframes dnd-hurt {{ 0%, 100% {{ transform: none; }} 20% {{ transform: translateX(-5px); background: {rgba(RED, 0.3)}; }} 60% {{ transform: translateX(4px); }} }}
+@keyframes dnd-glint {{ 40% {{ transform: scale(1.14); color: #fff2c4; }} }}
+.dnd-roll {{ border-radius: 14px; padding: 8px 14px 8px 8px; background: {rgba(DM_GOLD, 0.08)}; border: 1px solid {rgba(DM_GOLD, 0.3)}; }}
+.dnd-roll.against {{ background: {rgba(RED, 0.07)}; border-color: {rgba(RED, 0.3)}; }}
+.dnd-die {{ min-width: 46px; min-height: 46px; border-radius: 12px; background: {DM_LEATHER}; border: 2px solid {DM_GOLD}; color: {DM_GOLD}; font-size: 20px; font-weight: 800; }}
+.dnd-die.landed {{ animation: dnd-land 300ms ease-out; }}
+.dnd-die.crit {{ background: {DM_GOLD}; color: #1c1208; box-shadow: 0 0 18px {rgba(DM_GOLD, 0.7)}; }}
+.dnd-die.fumble {{ border-color: {RED}; color: {RED}; }}
+.dnd-roll .what {{ font-weight: 700; }}
+.dnd-roll .sum {{ font-size: 12.5px; color: {rgba(DM_TEXT, 0.7)}; }}
+.dnd-verdict {{ font-weight: 800; padding: 3px 12px; border-radius: 999px; animation: pop 320ms ease; }}
+.dnd-verdict.good {{ background: {rgba(GREEN, 0.15)}; color: {GREEN}; }}
+.dnd-verdict.bad {{ background: {rgba(RED, 0.15)}; color: {RED}; }}
+.dnd-verdict.crit {{ background: {DM_GOLD}; color: #1c1208; }}
+.dnd-note {{ color: {rgba(DM_GOLD, 0.8)}; font-size: 12px; font-style: italic; }}
+.sheet {{ background: {DM_PANEL}; border-right: 1px solid {rgba(DM_GOLD, 0.22)}; color: {DM_TEXT}; }}
+.sheet-page {{ padding: 12px 14px 20px 14px; }}
+.sheet-crest {{ min-width: 54px; min-height: 54px; border-radius: 999px; background: linear-gradient(135deg, {DM_GOLD}, {DM_EMBER}); color: #1c1208; font-family: {DM_SERIF}; font-size: 28px; font-weight: 800; }}
+.sheet-name {{ font-family: {DM_SERIF}; font-size: 22px; font-weight: 800; color: {DM_GOLD}; }}
+.sheet-class {{ font-size: 12.5px; color: {rgba(DM_TEXT, 0.72)}; }}
+.sheet-label {{ font-size: 11px; font-weight: 800; letter-spacing: 1px; color: {rgba(DM_GOLD, 0.75)}; }}
+.sheet-section {{ margin-top: 14px; }}
+.sheet-hp {{ border-radius: 12px; padding: 8px 10px; background: {rgba(DM_LEATHER, 0.7)}; }}
+.sheet-hp.hurt {{ animation: dnd-hurt 420ms ease; }}
+.sheet-hp .value {{ font-size: 20px; font-weight: 800; }}
+progressbar.hp trough {{ min-height: 9px; border-radius: 6px; background: {rgba(DM_TEXT, 0.12)}; }}
+progressbar.hp progress {{ min-height: 9px; border-radius: 6px; background: {GREEN}; }}
+progressbar.hp.bloodied progress {{ background: {DM_GOLD}; }}
+progressbar.hp.dying progress {{ background: {RED}; }}
+progressbar.xp trough {{ min-height: 4px; border-radius: 3px; background: {rgba(DM_TEXT, 0.1)}; }}
+progressbar.xp progress {{ min-height: 4px; border-radius: 3px; background: {DM_GOLD}; }}
+.sheet-tile {{ border-radius: 10px; padding: 6px 4px; background: {rgba(DM_LEATHER, 0.7)}; }}
+.sheet-tile .value {{ font-size: 18px; font-weight: 800; }}
+.sheet-tile .name {{ font-size: 10px; font-weight: 700; color: {rgba(DM_TEXT, 0.6)}; }}
+.sheet-tile.glint .value {{ animation: dnd-glint 600ms ease; }}
+button.sheet-ability {{ border-radius: 10px; padding: 6px 2px; background: {rgba(DM_LEATHER, 0.7)}; color: {DM_TEXT}; transition: all 150ms ease; }}
+button.sheet-ability:hover {{ background: {rgba(DM_GOLD, 0.2)}; }}
+button.sheet-ability .value {{ font-size: 18px; font-weight: 800; color: {DM_GOLD}; }}
+button.sheet-ability .name {{ font-size: 10px; font-weight: 800; }}
+button.sheet-ability .score {{ font-size: 10px; color: {rgba(DM_TEXT, 0.55)}; }}
+button.sheet-action {{ border-radius: 10px; padding: 6px 10px; background: {rgba(DM_EMBER, 0.14)}; color: {DM_TEXT}; font-weight: 700; transition: all 150ms ease; }}
+button.sheet-action:hover {{ background: {rgba(DM_EMBER, 0.32)}; }}
+button.sheet-action .detail {{ font-weight: 500; font-size: 12px; color: {rgba(DM_TEXT, 0.65)}; }}
+button.sheet-ability-use {{ border-radius: 10px; padding: 6px 10px; background: {rgba(GREEN, 0.14)}; color: {DM_TEXT}; font-weight: 700; transition: all 150ms ease; }}
+button.sheet-ability-use:hover {{ background: {rgba(GREEN, 0.3)}; }}
+button.sheet-ability-use:disabled {{ opacity: 0.4; }}
+button.sheet-ability-use .detail {{ font-weight: 500; font-size: 12px; color: {rgba(DM_TEXT, 0.65)}; }}
+button.sheet-chip {{ border-radius: 999px; padding: 2px 10px; min-height: 0; font-size: 12px; background: {rgba(DM_TEXT, 0.08)}; color: {DM_TEXT}; }}
+button.sheet-chip:hover {{ background: {rgba(DM_GOLD, 0.25)}; }}
+.sheet-condition {{ border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; background: {rgba(RED, 0.18)}; color: {RED}; }}
+.sheet-star {{ color: {DM_GOLD}; font-weight: 800; font-size: 12.5px; }}
+.sheet-pip {{ min-width: 13px; min-height: 13px; border-radius: 999px; border: 2px solid {DM_GOLD}; background: {DM_GOLD}; }}
+.sheet-pip.spent {{ background: transparent; opacity: 0.45; }}
+.sheet-row {{ padding: 6px 2px; border-bottom: 1px solid {rgba(DM_TEXT, 0.07)}; }}
+.sheet-row .equipped {{ color: {DM_GOLD}; }}
+.sheet-row .note, .sheet-note {{ font-size: 12px; color: {rgba(DM_TEXT, 0.62)}; }}
+.sheet-entry-name {{ font-weight: 700; color: {DM_GOLD}; }}
+.sheet-combat {{ border-radius: 12px; padding: 8px 10px; background: {rgba(RED, 0.08)}; border: 1px solid {rgba(RED, 0.3)}; }}
+.sheet-foe {{ padding: 3px 6px; border-radius: 8px; }}
+.sheet-foe.now {{ background: {rgba(DM_GOLD, 0.22)}; font-weight: 800; }}
+.sheet-foe.fallen {{ opacity: 0.4; }}
+.sheet-eco {{ border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; background: {rgba(GREEN, 0.15)}; color: {GREEN}; }}
+.sheet-eco.used {{ background: {rgba(DM_TEXT, 0.06)}; color: {rgba(DM_TEXT, 0.35)}; }}
+.sheet-empty {{ font-family: {DM_SERIF}; font-size: 16px; color: {rgba(DM_TEXT, 0.65)}; padding: 40px 18px; }}
+.dice-scrim {{ background: rgba(8, 5, 2, 0.72); }}
+.dice-card {{ padding: 22px 30px; border-radius: 22px; background: {DM_PANEL}; border: 1px solid {rgba(DM_GOLD, 0.4)}; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6); min-width: 480px; animation: bubble-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2); }}
+.dice-title {{ font-family: {DM_SERIF}; font-size: 25px; font-weight: 800; color: {DM_GOLD}; }}
+.dice-detail {{ font-size: 13px; color: {rgba(DM_TEXT, 0.68)}; }}
+.dice-result {{ font-size: 24px; font-weight: 800; color: {DM_TEXT}; animation: pop 320ms ease; }}
+.dice-result.crit {{ color: {DM_GOLD}; }}
+.dice-result.fumble {{ color: {RED}; }}
+button.dice-roll {{ border-radius: 999px; padding: 10px 44px; font-size: 18px; font-weight: 800; background: linear-gradient(135deg, {DM_GOLD}, {DM_EMBER}); color: #1c1208; transition: all 150ms ease; }}
+button.dice-roll:hover {{ transform: translateY(-1px) scale(1.05); box-shadow: 0 6px 22px {rgba(DM_EMBER, 0.5)}; }}
+.build {{ background: {DM_PANEL}; color: {DM_TEXT}; }}
+.build-page {{ padding: 18px 26px 22px 26px; }}
+.build-title {{ font-family: {DM_SERIF}; font-size: 26px; font-weight: 800; color: {DM_GOLD}; }}
+.build-hero {{ font-family: {DM_SERIF}; font-size: 30px; font-weight: 800; }}
+.build-note {{ color: {rgba(DM_TEXT, 0.72)}; font-size: 13.5px; }}
+.build-over {{ color: {RED}; font-weight: 700; }}
+.build-section {{ font-size: 12px; font-weight: 800; letter-spacing: 1px; color: {rgba(DM_GOLD, 0.85)}; margin-top: 6px; }}
+.build-final {{ font-weight: 800; }}
+.build-where {{ color: {rgba(DM_TEXT, 0.55)}; font-size: 12px; }}
+.build-bar {{ padding: 10px 18px; border-top: 1px solid {rgba(DM_GOLD, 0.2)}; }}
+.build-error {{ color: {RED}; padding: 6px 18px 0 18px; }}
+button.build-card {{ border-radius: 12px; padding: 10px 12px; background: {rgba(DM_LEATHER, 0.75)}; color: {DM_TEXT}; border: 1px solid {rgba(DM_GOLD, 0.15)}; transition: all 150ms ease; }}
+button.build-card:hover {{ border-color: {rgba(DM_GOLD, 0.55)}; }}
+button.build-card:checked {{ background: {rgba(DM_GOLD, 0.2)}; border-color: {DM_GOLD}; }}
+button.build-card .name {{ font-weight: 800; font-size: 15px; }}
+button.build-card .detail {{ font-size: 12px; color: {rgba(DM_TEXT, 0.68)}; }}
+button.build-pick {{ border-radius: 10px; padding: 6px 8px; background: {rgba(DM_LEATHER, 0.75)}; color: {DM_TEXT}; }}
+button.build-pick:checked {{ background: {DM_GOLD}; color: #1c1208; font-weight: 800; }}
 """
 
 
@@ -380,6 +495,8 @@ class Logo(Gtk.DrawingArea):
     """A hearth whose fire lights up on start, flickers gently when idle, and roars, throwing embers, while the
     assistant works."""
 
+    stone = None  # replaces the Theme page's stone colours (Dungeon Master mode)
+
     def __init__(self, size, intro=True, particles=True):
         super().__init__(content_width=size, content_height=round(size * 1.15))
         self.size = size
@@ -398,6 +515,11 @@ class Logo(Gtk.DrawingArea):
             self.last = time.monotonic()
             self.tick = self.add_tick_callback(self._tick)
         self.busy = busy
+
+    def stoke(self):
+        """A poke at the fire: it flares up for a moment."""
+        self.set_busy(True)
+        GLib.timeout_add(700, lambda: (self.set_busy(False), False)[1])
 
     def freeze(self):
         """Stops animating (old answers keep a still logo); the fire dies down to a calm flame first."""
@@ -443,7 +565,7 @@ class Logo(Gtk.DrawingArea):
         cr.scale(s, s)
         t, lit, busy = self.clock, self.lit, self.busy_level
         small = self.size < 60
-        a1, a2 = rgb(C["accent"]), rgb(C["secondary"])
+        a1, a2 = Logo.stone or (rgb(C["accent"]), rgb(C["secondary"]))
         flicker = 0.85 + 0.15 * _noise(t * 2, 7)
         warmth = lit * (0.55 + 0.45 * busy) * flicker
 
@@ -799,6 +921,49 @@ class Answer(Gtk.Box):
         return self.index < len(self.queue)
 
 
+class Draft(Gtk.Box):
+    """The answer while it is still being written. Finished paragraphs are rendered once, like the final answer, and
+    only the paragraph being written is rebuilt, so each update costs the same however long the answer gets.
+    Text that looks like a tool call written out as text is never shown."""
+
+    DECIDE_AT = 40  # characters: enough to tell prose from a tool call written as text
+    TOOL_CALL_START = re.compile(r"\s*(?:`{3}\s*json\s*)?[{\[]|\s*`*\s*TOOL_USE")
+
+    def __init__(self, app):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["answer"], visible=False)
+        self.app, self.text, self.done, self.decided = app, "", 0, False
+        self.tail = None
+
+    def add(self, piece):
+        self.text += piece
+        if not self.decided:
+            head = self.text.strip()
+            if len(head) < self.DECIDE_AT and "\n" not in head:
+                return
+            self.decided = True
+            if self.TOOL_CALL_START.match(self.text) or agent.parse_text_tool_call(head):
+                self.text = ""
+                return
+            self.set_visible(True)
+        elif not self.get_visible():
+            return
+        cut = self.text.rfind("\n\n", self.done)
+        while cut > self.done:  # the last empty line outside a code block
+            segment = self.text[self.done:cut]
+            if sum(1 for line in segment.splitlines() if FENCE_RE.match(line)) % 2 == 0:
+                if segment.strip():
+                    finished = Answer(self.app, segment, animate=False)
+                    self.insert_child_after(finished, self.tail.get_prev_sibling() if self.tail else self.get_last_child())
+                self.done = cut + 2
+                break
+            cut = self.text.rfind("\n\n", self.done, cut)
+        tail = Answer(self.app, self.text[self.done:], animate=False)
+        if self.tail:
+            self.remove(self.tail)
+        self.append(tail)
+        self.tail = tail
+
+
 # --- Attachments ---
 UPLOAD_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), f"hypr_agent_uploads_{os.getpid()}")
 IMAGE_MAX_SIDE = 1600        # bigger pictures are scaled down: the vision model gains little and gets much slower
@@ -973,19 +1138,24 @@ class Typing(Gtk.Box):
 
 
 class Reasoning(Gtk.Box):
-    """The model's thinking: streamed in dim italics, folded away with a summary once it moves on."""
+    """The model's thinking: streamed in dim italics, folded away with a summary once it moves on.
+    The text goes into an append-only TextView: a Label would lay out all of it again on every frame, so a long
+    stretch of reasoning made each frame slower and the window fell further and further behind the stream."""
 
     def __init__(self, app):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["reasoning", "fade-up"])
         self.app = app
-        self.started, self.words, self.text = time.monotonic(), 0, ""
+        self.started, self.parts = time.monotonic(), []
+        self.space = ""  # whitespace held back until more text follows it
         self.head = Gtk.Button(css_classes=["flat", "reasoning-head"], halign=Gtk.Align.START)
         self.head_label = Gtk.Label(label="◔  Reasoning…")
         self.head.set_child(self.head_label)
         self.head.connect("clicked", lambda *_: self.revealer.set_reveal_child(not self.revealer.get_reveal_child()))
         self.append(self.head)
-        self.body = Gtk.Label(wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR, xalign=0, selectable=True,
-                              css_classes=["reasoning-text"])
+        self.body = Gtk.TextView(editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                                 css_classes=["reasoning-text"])
+        self.buffer = self.body.get_buffer()
+        self.end = self.buffer.create_mark(None, self.buffer.get_end_iter(), False)
         self.scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_height=True,
                                            max_content_height=200)
         self.scroller.set_child(self.body)
@@ -994,11 +1164,28 @@ class Reasoning(Gtk.Box):
         self.revealer.set_child(self.scroller)
         self.append(self.revealer)
 
+    @property
+    def text(self):
+        return "".join(self.parts)
+
     def add(self, text):
-        self.text += text
-        self.body.set_label(re.sub(r"\n{3,}", "\n\n", self.text.strip()))
-        adj = self.scroller.get_vadjustment()
-        GLib.idle_add(lambda: (adj.set_value(adj.get_upper()), False)[1])
+        self.parts.append(text)
+        self.buffer.insert(self.buffer.get_end_iter(), self._tidy(text))
+        self.body.scroll_to_mark(self.end, 0, False, 0, 1)
+
+    def _tidy(self, text):
+        """The new piece as it should be shown: no blank space at either end and never more than one empty line in a
+        row. Whitespace is held back until text follows it, so each update costs the same however long the text is."""
+        out = []
+        for part in re.split(r"(\s+)", text):
+            if part.isspace():
+                self.space += part
+            elif part:
+                if self.buffer.get_char_count() or out:
+                    out.append(re.sub(r"\n{3,}", "\n\n", self.space))
+                self.space = ""
+                out.append(part)
+        return "".join(out)
 
     def finish(self):
         took = time.monotonic() - self.started
@@ -1038,7 +1225,7 @@ class Turn(Gtk.Box):
         self.typing = Typing()
         self.bubble.append(self.typing)
         self.append(self.bot_row)
-        self.reasoning = None
+        self.reasoning = self.draft = None
         self.last_command = None
         self.avatar.set_busy(True)
 
@@ -1158,6 +1345,54 @@ class Turn(Gtk.Box):
             self._add(card)
         GLib.idle_add(lambda: (allow.grab_focus(), False)[1])
 
+    def dice(self, e):
+        """A roll from the record: the die tumbles, then lands on what was actually rolled."""
+        d20 = bool(e.get("d20"))
+        card = Gtk.Box(spacing=12, css_classes=["dnd-roll"] + (["against"] if e.get("against") else []), halign=Gtk.Align.START)
+        face = Gtk.Label(css_classes=["dnd-die"], valign=Gtk.Align.CENTER, justify=Gtk.Justification.CENTER)
+        card.append(face)
+        words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+        words.append(Gtk.Label(label=e["label"], xalign=0, css_classes=["what"]))
+        detail = Gtk.Label(xalign=0, css_classes=["sum"], label="…")
+        words.append(detail)
+        card.append(words)
+        landed = e["kept"] if e["kept"] is not None else e["total"]
+        if d20:
+            rolled = " / ".join(str(r) for r in e["dice"])
+            target = f" vs {'AC' if 'crit' in e else 'DC'} {e['dc']}" if e.get("dc") is not None else ""
+            sum_text = f"{rolled} {e['mod']:+d} = {e['total']}{target}"
+        else:
+            sum_text = (" + ".join(str(r) for r in e["dice"]) or "") + (f" {e['mod']:+d}" if e["mod"] else "") + f" = {e['total']}"
+        if e.get("damage") is not None:
+            sum_text += f" · {e['damage']} damage"
+        # What the player threw on the big dice has already been seen landing; only the enemy's still tumble here
+        ticks = [10 if d20 and dnd_mode.ROLLER[0] and not e.get("against") else 0]
+
+        def tumble():
+            ticks[0] += 1
+            if ticks[0] < 12:
+                face.set_label(str(random.randint(1, 20)))
+                return GLib.SOURCE_CONTINUE
+            face.set_label(str(landed))
+            face.add_css_class("landed")
+            detail.set_label(sum_text)
+            if d20 and e["kept"] == 20:
+                face.add_css_class("crit")
+            elif d20 and e["kept"] == 1:
+                face.add_css_class("fumble")
+            if e.get("ok") is not None:
+                attack = "crit" in e
+                word = "Critical!" if e.get("crit") else ("Hit" if e["ok"] else "Miss") if attack else ("Success" if e["ok"] else "Failure")
+                good = e["ok"] != bool(e.get("against"))
+                card.append(Gtk.Label(label=word, valign=Gtk.Align.CENTER, css_classes=["dnd-verdict", "crit" if e.get("crit") else "good" if good else "bad"]))
+            return GLib.SOURCE_REMOVE
+        face.set_label("?")
+        GLib.timeout_add(55, tumble)
+        self._add(card)
+
+    def dnd_note(self, text):
+        self._add(Gtk.Label(label=f"✦ {text}", xalign=0, css_classes=["dnd-note"], halign=Gtk.Align.START))
+
     def user_command(self, command, reason, answer):
         """A command only the user can run. answer() is called once, with ("finished" or "said", output) or None."""
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, css_classes=["approval", "user-run", "fade-up"])
@@ -1229,13 +1464,28 @@ class Turn(Gtk.Box):
         self.status("Waiting for you to run a command")
         self._add(card)
 
+    def draft_add(self, text):
+        if self.draft is None:
+            self.draft = Draft(self.app)
+            self._add(self.draft)
+        self.draft.add(text)
+        self.app.follow()
+
+    def draft_clear(self):
+        """A new model call starts: what the last one wrote was not the answer (or is about to be rewritten)."""
+        if self.draft is not None:
+            self.bubble.remove(self.draft)
+            self.draft = None
+
     def finish(self, reply, took=None, steps=0, failed=False):
         self.think_done()
         self.typing.alive = False
         self.bubble.remove(self.typing)
         if failed:
             self.bubble.add_css_class("failed")
-        self.bubble.append(Answer(self.app, reply))
+        watched = self.draft is not None and self.draft.get_visible()
+        self.draft_clear()
+        self.bubble.append(Answer(self.app, reply, animate=not watched))  # no second reveal of text already read
         if took is not None:
             self.bubble.append(Gtk.Label(label=f"{took:.1f}s · {steps} tool call{'s' if steps != 1 else ''}",
                                          xalign=0, css_classes=["footer", "fade-up"]))
@@ -1300,6 +1550,49 @@ class GuiReasoning:
             GLib.timeout_add(60, lambda: (self._flush(), APP.turn and APP.turn.think_done(), False)[2])
 
 
+class GuiAnswer:
+    """The answer text, streamed into the window. Called from the worker thread for every few characters; the pieces
+    are gathered and handed to the window at most every 50 ms, in order, whatever the stream's speed."""
+    pending, lock, scheduled = [], threading.Lock(), False
+    DELAY = 50
+
+    def start(self):
+        self._push(None)  # None clears the last call's draft
+
+    def feed(self, text):
+        self._push(text)
+
+    def finish(self):
+        pass
+
+    @classmethod
+    def _push(cls, item):
+        with cls.lock:
+            cls.pending.append(item)
+            if cls.scheduled:
+                return
+            cls.scheduled = True
+        GLib.timeout_add(cls.DELAY, cls._flush)
+
+    @classmethod
+    def _flush(cls):
+        with cls.lock:
+            items, cls.pending, cls.scheduled = cls.pending, [], False
+        turn = APP.turn
+        if turn is None:
+            return False
+        text = []
+        for item in items:
+            if item is None:  # a new call: text gathered before it is already out of date
+                text = []
+                turn.draft_clear()
+            else:
+                text.append(item)
+        if text:
+            turn.draft_add("".join(text))
+        return False
+
+
 def gui_confirm(question, sensitive=False, auto_ok=True):
     if agent.AUTO_APPROVE[0] and not sensitive and auto_ok:
         return True
@@ -1330,6 +1623,29 @@ def gui_run_for_user(command, reason):
     APP.waiting = (done, result)
     ui(APP.turn.user_command, command, reason, answer)
     ui(APP.attention, "Hearthling needs you to run a command", command)
+    done.wait()
+    APP.waiting = None
+    return result[0] or None
+
+
+def gui_player_roll(request, make):
+    """Worker thread: the dice go in front of the player, and the game waits for their throw. None if they stop."""
+    if APP.cancelled.is_set() or not APP.turn:
+        return None
+    done, result = threading.Event(), [None]
+
+    def answer(value):
+        APP.pending_answer = None
+        result[0] = value
+        done.set()
+
+    def show():
+        APP.pending_answer = APP.dice_tray.cancel
+        APP.turn.status("Your roll")
+        APP.dice_tray.ask(request, make, answer)
+    APP.waiting = (done, result)
+    ui(show)
+    ui(APP.attention, "Your roll", request["title"])
     done.wait()
     APP.waiting = None
     return result[0] or None
@@ -1471,13 +1787,276 @@ class WebPanel(Gtk.Box):
         self._busy()
 
 
+class CharacterPanel(Gtk.Box):
+    """The player's character, live from the campaign record: it can only show what is really on the sheet."""
+
+    def __init__(self, app):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, css_classes=["sheet"])
+        self.app, self.last = app, None
+        self.stack = Adw.ViewStack(vexpand=True)
+        self.pages = {}
+        for key, title, icon in (("sheet", "Hero", "avatar-default-symbolic"), ("gear", "Gear", "folder-symbolic"), ("journal", "Story", "accessories-text-editor-symbolic")):
+            scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+            self.pages[key] = scroller
+            self.stack.add_titled_with_icon(scroller, key, title, icon)
+        self.books = dnd_ui.BooksPage(lambda: app.window, app.toast)
+        self.stack.add_titled_with_icon(Gtk.ScrolledWindow(child=self.books, hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True), "books", "Books", "accessories-dictionary-symbolic")
+        self.append(Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE))
+        self.append(self.stack)
+
+    @staticmethod
+    def _page():
+        return Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["sheet-page"])
+
+    @staticmethod
+    def _section(box, title):
+        box.append(Gtk.Label(label=title, xalign=0, css_classes=["sheet-label", "sheet-section"]))
+
+    @staticmethod
+    def _wrap(text, css):
+        return Gtk.Label(label=text, xalign=0, wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR, css_classes=css, selectable=False)
+
+    @staticmethod
+    def _tile(name, value, glint=False, tip=None):
+        tile = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["sheet-tile"] + (["glint"] if glint else []), hexpand=True, tooltip_text=tip)
+        tile.append(Gtk.Label(label=str(value), css_classes=["value"]))
+        tile.append(Gtk.Label(label=name, css_classes=["name"]))
+        return tile
+
+    def _say_button(self, css, say, *children, tip=None):
+        button = Gtk.Button(css_classes=[css, "flat"], tooltip_text=tip)
+        if len(children) == 1:
+            button.set_child(children[0])
+        button.connect("clicked", lambda *_: self.app.say(say))
+        return button
+
+    def refresh(self):
+        data = dnd_mode.view()
+        c = data["character"]
+        self._sheet(data, c)
+        self._gear(c)
+        self._journal(data)
+        self.last = c
+
+    def _sheet(self, data, c):
+        box = self._page()
+        if not c:
+            box.append(Gtk.Label(label="No hero sits by the fire yet.", wrap=True, justify=Gtk.Justification.CENTER, css_classes=["sheet-empty"]))
+            create = Gtk.Button(label="Forge your hero", css_classes=["allow"], halign=Gtk.Align.CENTER)
+            create.connect("clicked", lambda *_: self.app.open_builder())
+            box.append(create)
+            self.pages["sheet"].set_child(box)
+            return
+        last = self.last
+        top = Gtk.Box(spacing=12)
+        top.append(Gtk.Label(label=c["name"][:1].upper(), css_classes=["sheet-crest"], valign=Gtk.Align.CENTER))
+        words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, hexpand=True)
+        words.append(self._wrap(c["name"], ["sheet-name"]))
+        words.append(self._wrap(f"{c['species']} {c['class'].capitalize()} {c['level']}" + (f" ({c['subclass']})" if c.get("subclass") else "") + f" · {c['background']}", ["sheet-class"]))
+        top.append(words)
+        box.append(top)
+        if c.get("needs_subclass"):
+            pick = Gtk.Button(label="Choose your subclass", css_classes=["allow"], halign=Gtk.Align.FILL, margin_top=6, tooltip_text="You reached level 3: choose the path your class takes.")
+            pick.connect("clicked", lambda *_: self.app.open_subclass())
+            box.append(pick)
+        if c["xp_next"]:
+            floor = dnd_mode.XP_FOR_LEVEL[c["level"] - 1]
+            xp = Gtk.ProgressBar(fraction=max(0.0, min(1.0, (c["xp"] - floor) / (c["xp_next"] - floor))), css_classes=["xp"], tooltip_text=f"{c['xp']} of {c['xp_next']} XP")
+            box.append(xp)
+        hp = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, css_classes=["sheet-hp", "sheet-section"])
+        if last and last["name"] == c["name"] and c["hp"] < last["hp"]:
+            hp.add_css_class("hurt")
+        row = Gtk.Box(spacing=8)
+        row.append(Gtk.Label(label="HIT POINTS", css_classes=["sheet-label"], hexpand=True, xalign=0))
+        row.append(Gtk.Label(label=f"{c['hp']} / {c['max_hp']}" + (f"  +{c['temp_hp']}" if c["temp_hp"] else ""), css_classes=["value"]))
+        hp.append(row)
+        fraction = c["hp"] / c["max_hp"] if c["max_hp"] else 0
+        hp.append(Gtk.ProgressBar(fraction=fraction, css_classes=["hp"] + (["dying"] if fraction <= 0.25 else ["bloodied"] if fraction <= 0.5 else [])))
+        box.append(hp)
+        if c["hp"] == 0 and not c.get("dead"):
+            box.append(self._wrap(f"Dying: {c['death']['s']} successes, {c['death']['f']} failures" if not c.get("stable") else "Stable", ["sheet-condition"]))
+        if c.get("dead"):
+            box.append(self._wrap("Fallen. /mode dnd new begins a new tale.", ["sheet-condition"]))
+        tiles = Gtk.Box(spacing=6, homogeneous=True)
+        tiles.append(self._tile("AC", c["ac"], tip="Armor Class: an attack must equal or beat this to hit you."))
+        tiles.append(self._tile("INIT", f"{c['initiative']:+d}", tip="Initiative: added to your roll to set the order of a fight."))
+        tiles.append(self._tile("SPEED", c["speed"], tip="How many feet you can move on your turn."))
+        tiles.append(self._tile("PROF", f"{c['proficiency']:+d}", tip="Proficiency bonus: added to attacks, saves and skills you are trained in. It grows with level."))
+        if c["save_dc"]:
+            tiles.append(self._tile("SPELL DC", c["save_dc"], tip="Spell save DC: what enemies must beat to resist your spells."))
+        box.append(tiles)
+        flags = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4, column_spacing=4, row_spacing=4)
+        if c["inspiration"]:
+            flags.append(Gtk.Label(label="★ Heroic Inspiration", css_classes=["sheet-star"], tooltip_text=dnd_mode.RULES["heroic inspiration"]))
+        if c.get("raging"):
+            flags.append(Gtk.Label(label="Raging", css_classes=["sheet-condition"], tooltip_text=dnd_mode.FEATURE_TIPS["Rage"]))
+        for name in c["conditions"]:
+            flags.append(Gtk.Label(label=name.capitalize(), css_classes=["sheet-condition"], tooltip_text=dnd_mode.RULES.get(name)))
+        if c["exhaustion"]:
+            flags.append(Gtk.Label(label=f"Exhaustion {c['exhaustion']}", css_classes=["sheet-condition"], tooltip_text=dnd_mode.RULES["exhaustion"]))
+        if flags.get_first_child():
+            box.append(flags)
+        if data["combat"]:
+            self._combat(box, data["combat"])
+        self._section(box, "ABILITIES")
+        grid = Gtk.Grid(column_spacing=6, row_spacing=6, column_homogeneous=True)
+        for i, ability in enumerate(dnd_mode.ABILITIES):
+            cell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            cell.append(Gtk.Label(label=ability.upper(), css_classes=["name"]))
+            cell.append(Gtk.Label(label=f"{c['modifiers'][ability]:+d}", css_classes=["value"]))
+            cell.append(Gtk.Label(label=f"{c['abilities'][ability]}" + (" · save" if ability in c["saves"] else ""), css_classes=["score"]))
+            full = dnd_mode.ABILITY_NAMES[ability].capitalize()
+            grid.attach(self._say_button("sheet-ability", f"I try a {full} check: ", cell, tip=f"{full}. {dnd_mode.ABILITY_TIPS[ability]}"), i % 3, i // 3, 1, 1)
+        box.append(grid)
+        self._section(box, "ACTIONS")
+        for attack in c["attacks"]:
+            row = Gtk.Box(spacing=8)
+            row.append(Gtk.Label(label=attack["name"], hexpand=True, xalign=0))
+            row.append(Gtk.Label(label=f"{attack['to_hit']:+d} · {attack['damage']}", css_classes=["detail"]))
+            box.append(self._say_button("sheet-action", f"I attack with my {attack['name']}: ", row, tip=attack["tip"]))
+        self._abilities(box, c)
+        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4, min_children_per_line=3, column_spacing=4, row_spacing=4, homogeneous=True)
+        for action in c["standard_actions"]:
+            flow.append(self._say_button("sheet-chip", f"I use the {action} action: ", Gtk.Label(label=action), tip=dnd_mode.RULES.get(action.lower())))
+        box.append(flow)
+        if c["slots"] or c["spells"]:
+            self._section(box, "MAGIC")
+            for level, slot in sorted(c["slots"].items()):
+                row = Gtk.Box(spacing=5)
+                row.append(Gtk.Label(label=f"Level {level}", css_classes=["sheet-note"], width_chars=8, xalign=0))
+                for i in range(slot["max"]):
+                    row.append(Gtk.Box(css_classes=["sheet-pip"] + (["spent"] if i >= slot["max"] - slot["used"] else []), valign=Gtk.Align.CENTER))
+                box.append(row)
+            spells = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=3, column_spacing=4, row_spacing=4)
+            for spell in c["spells"]:
+                spells.append(self._say_button("sheet-chip", f"I cast {spell['name']}: ", Gtk.Label(label=spell["name"], ellipsize=Pango.EllipsizeMode.END, max_width_chars=18),
+                                               tip=dnd_mode.SPELL_TIPS.get(spell["name"], spell["name"])))
+            box.append(spells)
+        skills = Gtk.Expander(label="Skills", css_classes=["sheet-section"])
+        rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for skill, bonus in sorted(c["skill_bonus"].items()):
+            row = Gtk.Box(spacing=8)
+            row.append(Gtk.Label(label=("● " if skill in c["skills"] else "○ ") + skill.capitalize(), hexpand=True, xalign=0))
+            row.append(Gtk.Label(label=f"{bonus:+d}"))
+            rows.append(self._say_button("sheet-action", f"I try {skill.capitalize()}: ", row, tip=dnd_mode.SKILL_TIPS[skill]))
+        skills.set_child(rows)
+        box.append(skills)
+        self.pages["sheet"].set_child(box)
+
+    def _abilities(self, box, c):
+        """Limited abilities: one click uses them, and the pips show what is left."""
+        usable = [r for r in c["ready"] if r["how"] != "auto"]
+        if not usable:
+            return
+        for ready in usable:
+            row = Gtk.Box(spacing=5)
+            row.append(Gtk.Label(label=ready["name"], hexpand=True, xalign=0))
+            if ready["max"] <= 6:
+                for i in range(ready["max"]):
+                    row.append(Gtk.Box(css_classes=["sheet-pip"] + (["spent"] if i >= ready["left"] else []), valign=Gtk.Align.CENTER))
+            else:
+                row.append(Gtk.Label(label=f"{ready['left']} / {ready['max']}", css_classes=["detail"]))
+            button = Gtk.Button(child=row, css_classes=["sheet-ability-use", "flat"], tooltip_text=ready["tip"], sensitive=ready["left"] > 0)
+            button.connect("clicked", lambda *_, n=ready["name"]: self.app.send(f"I use {n}."))
+            box.append(button)
+
+    def _combat(self, box, combat):
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, css_classes=["sheet-combat", "sheet-section"])
+        panel.append(Gtk.Label(label=f"COMBAT · ROUND {combat['round']}", xalign=0, css_classes=["sheet-label"]))
+        for i, who in enumerate(combat["order"]):
+            row = Gtk.Box(spacing=8, css_classes=["sheet-foe"] + (["now"] if i == combat["turn"] else []) + (["fallen"] if who.get("defeated") else []))
+            row.append(Gtk.Label(label=str(who["init"]), width_chars=3))
+            row.append(Gtk.Label(label=who["name"], hexpand=True, xalign=0))
+            if not who.get("player"):  # the player sees wounds, never numbers
+                state = "Defeated" if who.get("defeated") else "Bloodied" if who["hp"] * 2 <= who["max_hp"] else "Unhurt" if who["hp"] == who["max_hp"] else "Wounded"
+                row.append(Gtk.Label(label=state, css_classes=["sheet-note"]))
+            panel.append(row)
+        eco = Gtk.Box(spacing=4, margin_top=4)
+        for key, label in (("action", "Action"), ("bonus", "Bonus"), ("reaction", "Reaction")):
+            eco.append(Gtk.Label(label=label, css_classes=["sheet-eco"] + (["used"] if combat["economy"][key] else [])))
+        panel.append(eco)
+        box.append(panel)
+
+    def _gear(self, c):
+        box = self._page()
+        if not c:
+            self.pages["gear"].set_child(box)
+            return
+        last = self.last
+        purse = Gtk.Box(spacing=6, homogeneous=True)
+        for key, label in (("gp", "GOLD"), ("sp", "SILVER"), ("cp", "COPPER")):
+            purse.append(self._tile(label, c["gold"][key], glint=bool(last and last["gold"][key] != c["gold"][key])))
+        box.append(purse)
+        self._section(box, "INVENTORY")
+        for item in c["inventory"]:
+            row = Gtk.Box(spacing=8, css_classes=["sheet-row"])
+            row.append(Gtk.Label(label="◆" if item.get("equipped") else "◇", css_classes=["equipped"]))
+            words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+            words.append(self._wrap(item["name"] + (f" ×{item['qty']}" if item["qty"] > 1 else ""), []))
+            note = " · ".join(x for x in (item.get("damage"), item.get("mastery"), item.get("note")) if x)
+            if note:
+                words.append(self._wrap(note, ["note"]))
+            row.append(words)
+            tip = item.get("note") or None
+            if item.get("damage"):
+                tip = f"Damage {item['damage']}." + (f"\nMastery, {item['mastery']}: {dnd_mode.MASTERY_TIPS.get(item['mastery'], '')}" if item.get("mastery") else "")
+            box.append(self._say_button("sheet-chip", f"I use my {item['name']}: ", row, tip=tip))
+        if not c["inventory"]:
+            box.append(self._wrap("Empty pockets.", ["sheet-note"]))
+        if c["features"]:
+            self._section(box, "FEATURES")
+            for feature in c["features"]:
+                label = self._wrap(feature, ["sheet-row"])
+                label.set_tooltip_text(c["tips"].get(feature) or None)
+                box.append(label)
+        self.pages["gear"].set_child(box)
+
+    def _journal(self, data):
+        box = self._page()
+        scene = data["scene"]
+        if any(scene.values()):
+            self._section(box, "NOW")
+            box.append(self._wrap(" · ".join(x for x in (scene["location"], scene["time"]) if x), ["sheet-entry-name"]))
+            if scene["situation"]:
+                box.append(self._wrap(scene["situation"], ["sheet-note"]))
+
+        def book(title, entries):
+            if entries:
+                self._section(box, title)
+            for name, e in reversed(list(entries.items())):
+                box.append(self._wrap(name + (f" ({e['status']})" if e.get("status") else ""), ["sheet-entry-name"]))
+                if e["text"]:
+                    box.append(self._wrap(e["text"], ["sheet-note"]))
+        book("QUESTS", data["quests"])
+        book("PEOPLE", data["npcs"])
+        book("PLACES", data["locations"])
+        book("ALSO MENTIONED", data["mentions"])
+        if data["facts"]:
+            self._section(box, "CLUES AND SECRETS")
+            for e in reversed(data["facts"]):
+                box.append(self._wrap(f"{e['kind'].capitalize()}: {e['text']}", ["sheet-note"]))
+        if data["chronicle"] or data["beats"]:
+            self._section(box, "THE STORY SO FAR")
+            for e in reversed(data["beats"]):
+                box.append(self._wrap(e["text"], ["sheet-note"]))
+            for e in reversed(data["chronicle"]):
+                box.append(self._wrap(e["text"], ["sheet-note"]))
+        if not box.get_first_child():
+            box.append(self._wrap("The pages are blank. For now.", ["sheet-empty"]))
+        self.pages["journal"].set_child(box)
+
+
 def install_hooks():
     agent.GUI[0] = True
     agent.Spinner = GuiSpinner
     agent.ReasoningView = GuiReasoning
+    agent.AnswerView = GuiAnswer
     agent._confirm = gui_confirm
     # ask_user_to_run shows its own card
-    agent.ui_tool = lambda name, args: ui(APP.turn.tool, name, args) if APP.turn and name != "ask_user_to_run" else None
+    agent.ui_tool = lambda name, args: (ui(APP.turn.tool, name, args) if APP.turn and name != "ask_user_to_run" and
+                                        name not in dnd_mode.TOOL_NAMES else None)
+    dnd_mode.LISTENERS.append(lambda kind, data: ui(APP.on_table_event, kind, data))
+    dnd_mode.ROLLER[0] = gui_player_roll
     agent.ui_command = lambda command: ui(APP.turn.command, command) if APP.turn else None
     agent.ui_write = lambda action, target: ui(APP.turn.write, action, target) if APP.turn else None
     if Vte:
@@ -1506,6 +2085,7 @@ class Assistant(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.turn, self.worker, self.waiting, self.pending_answer = None, None, None, None
+        self.in_table, self.table_generation = False, 0
         self.cancelled = threading.Event()
         self.history, self.recall = [], None
         self.attachments = []
@@ -1517,6 +2097,7 @@ class Assistant(Adw.Application):
         if self.window:
             self.window.present()
             return
+        self.live_theme = livetheme.follow(self)  # follows a theme override switch while open
         Adw.StyleManager.get_default().set_color_scheme(
             Adw.ColorScheme.FORCE_DARK if DARK else Adw.ColorScheme.FORCE_LIGHT)
         provider = Gtk.CssProvider()
@@ -1530,6 +2111,8 @@ class Assistant(Adw.Application):
         layered = Gtk.Overlay()
         layered.set_child(root)
         layered.add_overlay(self._drop_zone())
+        self.dice_tray = dnd_ui.DiceTray()
+        layered.add_overlay(self.dice_tray)
         self.toasts.set_child(layered)
         self.window.set_content(self.toasts)
 
@@ -1549,7 +2132,11 @@ class Assistant(Adw.Application):
                                      min_sidebar_width=380, max_sidebar_width=560, sidebar_width_fraction=0.3,
                                      content=page, sidebar=self.web)
         self.web_button.connect("toggled", lambda b: split.set_show_sidebar(b.get_active()))
-        root.append(split)
+        self.character = CharacterPanel(self)
+        self.sheet_split = Adw.OverlaySplitView(sidebar_position=Gtk.PackType.START, show_sidebar=False, collapsed=False, vexpand=True,
+                                                min_sidebar_width=340, max_sidebar_width=420, sidebar_width_fraction=0.26,
+                                                content=split, sidebar=self.character)
+        root.append(self.sheet_split)
 
         self.welcome = self._welcome()
         self.chat.append(self.welcome)
@@ -1573,7 +2160,8 @@ class Assistant(Adw.Application):
         self.header_logo = Logo(30, intro=True, particles=False)
         title.append(self.header_logo)
         words = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
-        words.append(Gtk.Label(label="Hearthling", xalign=0, css_classes=["title-main"]))
+        self.title_label = Gtk.Label(label="Hearthling", xalign=0, css_classes=["title-main"])
+        words.append(self.title_label)
         self.subtitle = Gtk.Label(xalign=0, css_classes=["title-sub"])
         words.append(self.subtitle)
         title.append(words)
@@ -1603,7 +2191,25 @@ class Assistant(Adw.Application):
         self.web_button = Gtk.ToggleButton(icon_name="web-browser-symbolic", css_classes=["web-toggle"],
                                            tooltip_text="Watch what Hearthling is doing on the web")
         header.pack_end(self.web_button)
+        self.sheet_button = Gtk.ToggleButton(icon_name="avatar-default-symbolic", tooltip_text="Your character", active=True, visible=False)
+        self.sheet_button.connect("toggled", lambda b: self.sheet_split.set_show_sidebar(b.get_active() and self.in_table))
+        header.pack_start(self.sheet_button)
         return header
+
+    def _hide_the_door(self, logo):
+        """Five quick pokes at the fire open the hidden Dungeon Master mode."""
+        pokes = []
+
+        def poked(*_):
+            now = time.monotonic()
+            pokes[:] = [t for t in pokes if now - t < 3] + [now]
+            logo.stoke()
+            if len(pokes) >= 5 and not self.worker:
+                pokes.clear()
+                self.send("/mode dnd")
+        click = Gtk.GestureClick()
+        click.connect("pressed", poked)
+        logo.add_controller(click)
 
     def _welcome(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, css_classes=["welcome"],
@@ -1611,6 +2217,7 @@ class Assistant(Adw.Application):
         self.big_logo = Logo(150, intro=bool(agent.SETTINGS["animated_logo"]))
         self.big_logo.set_halign(Gtk.Align.CENTER)
         box.append(self.big_logo)
+        self._hide_the_door(self.big_logo)
         box.append(Gtk.Label(label=agent.greeting(), css_classes=["greeting"], justify=Gtk.Justification.CENTER, wrap=True))
         box.append(Gtk.Label(label="Your friendly AI helper for this PC and beyond. Ask in plain English.", css_classes=["tagline"],
                              justify=Gtk.Justification.CENTER, wrap=True))
@@ -2096,7 +2703,83 @@ class Assistant(Adw.Application):
         self.set_accels_for_action("app.stop", ["Escape"])
         self.set_accels_for_action("app.clear", ["<Control>l"])
 
+    def say(self, text):
+        """Starts a sentence for the player from the character sheet, for them to finish and send."""
+        self._set_text(text)
+        self.input.grab_focus()
+
+    def open_builder(self):
+        def done():
+            self.character.refresh()
+            self.send(dnd_mode.OPENING, quiet=True)
+        dnd_ui.CharacterBuilder(done).present(self.window)
+
+    def open_subclass(self):
+        c = dnd_mode.view()["character"]
+        if self.window.get_visible_dialog() or not c or not c.get("needs_subclass"):
+            return
+
+        def picked(name, from_book):
+            if from_book:
+                self.send(f"For my subclass I choose {name}, from my books. Please look it up and add what I gain at this level.")
+                return
+            result = dnd_mode.TOOLS["dnd_update"]({"subclass": name})
+            if result.startswith("Rejected"):
+                self.toast(result.split(": ", 1)[-1])
+            else:
+                self.toast(f"You follow the {name}.".replace("the Oath", "Oath"))
+        dnd_ui.SubclassDialog(c, dnd_library.books(), picked).present(self.window)
+
+    def on_table_event(self, kind, data):
+        if kind == "sheet":
+            if self.in_table:
+                self.character.refresh()
+                if not self.worker:
+                    self._offer_subclass()
+        elif self.turn and self.in_table:
+            (self.turn.dice if kind == "roll" else self.turn.dnd_note)(data)
+
+    def _offer_subclass(self):
+        if not self.window.get_visible_dialog() and (dnd_mode.game()["character"] or {}).get("needs_subclass"):
+            GLib.idle_add(lambda: (self.open_subclass(), False)[1])
+
+    def _clear_chat(self):
+        while (child := self.chat.get_last_child()) and child is not self.welcome:
+            self.chat.remove(child)
+
+    def _sit_at_the_table(self):
+        """Changes the window to match the mode. The first request of a sitting has the Dungeon Master open the scene."""
+        table = agent_modes.fiction()
+        new_tale = table and self.table_generation != dnd_mode.GENERATION[0]
+        if table == self.in_table and not new_tale:
+            return
+        self.in_table, self.table_generation = table, dnd_mode.GENERATION[0]
+        (self.window.add_css_class if table else self.window.remove_css_class)("dnd")
+        Logo.stone = (rgb("#9a8a72"), rgb("#5a4a38")) if table else None
+        self.title_label.set_label("The Hearth · Dungeon Master" if table else "Hearthling")
+        self.placeholder.set_label("What do you do?" if table else "Ask anything, or type / for commands")
+        self.sheet_button.set_visible(table)
+        self.pill_think.set_visible(not table)
+        self.pill_approvals.set_visible(not table)
+        self.web_button.set_visible(not table)
+        self.term_button.set_visible(not table)
+        if table:
+            self.web_button.set_active(False)
+            self.show_terminal(False)
+        self.sheet_split.set_show_sidebar(table and self.sheet_button.get_active())
+        self._clear_chat()
+        self.welcome.set_vexpand(not table)
+        self.welcome.set_reveal_child(not table)
+        if table:
+            self.character.last = None
+            self.character.refresh()
+            if dnd_mode.game()["character"]:
+                GLib.idle_add(lambda: (self.send(dnd_mode.OPENING, quiet=True), False)[1])
+            else:
+                GLib.idle_add(lambda: (self.open_builder(), False)[1])
+
     def refresh_status(self):
+        self._sit_at_the_table()
         mode = agent_modes.describe()
         self.pill_mode.set_label(f"◆ {mode}")
         if agent.AUTO_APPROVE[0]:
@@ -2199,16 +2882,18 @@ class Assistant(Adw.Application):
             return True
         return False
 
-    def send(self, text=None):
+    def send(self, text=None, quiet=False):
         text = (text if text is not None else self._text()).strip()
         if self.worker or not (text or self.attachments):
             return
+        if re.fullmatch(r"roll for initiative[.!]*", text, re.I) and not agent_modes.fiction():
+            text = "/mode dnd"
         attachments = [] if text.startswith("/") else self.attachments  # a /command leaves them in the tray
         if attachments:
             self._clear_tray()
         self._set_text("")
         self.recall = None
-        if text and (not self.history or self.history[-1] != text):
+        if text and not quiet and (not self.history or self.history[-1] != text):
             self.history.append(text)
         if text.lower() in ("exit", "quit"):
             self.quit()
@@ -2222,7 +2907,7 @@ class Assistant(Adw.Application):
         if text.startswith("/"):
             name = text[1:].partition(" ")[0].lower()
             slash = (name, agent.SLASH_COMMANDS.get(name, (0, 0, "31"))[2])
-        self.turn = Turn(self, None if slash else text, slash, attachments)
+        self.turn = Turn(self, None if slash or quiet else text, slash, attachments)
         self.chat.append(self.turn)
         self.follow()
         self._busy(True)
@@ -2284,6 +2969,8 @@ class Assistant(Adw.Application):
         self.worker = None
         self.turn = None
         self._busy(False)
+        if self.in_table:
+            self._offer_subclass()
         self._update_send()
         self.refresh_status()
         if not is_slash and not self.window.is_active():
@@ -2324,8 +3011,7 @@ class Assistant(Adw.Application):
                 open(agent.SESSION_FILE[0], "w").close()
             except OSError:
                 pass
-        while (child := self.chat.get_last_child()) and child is not self.welcome:
-            self.chat.remove(child)
+        self._clear_chat()
         self.welcome.set_vexpand(True)
         self.welcome.set_reveal_child(True)
         self.web.clear()

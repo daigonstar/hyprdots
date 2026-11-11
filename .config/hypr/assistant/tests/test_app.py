@@ -5,6 +5,7 @@ builds, and the approval hook. Skipped when GTK 4 and libadwaita are not install
 """
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -66,6 +67,94 @@ class Markup(unittest.TestCase):
             Pango.parse_markup(re.sub(r"</?a[^>]*>", "", app.inline_markup(text)), -1, "\0")
         for code, lang in (('echo "hi" # note', "bash"), ("x = 'a' -- c", "lua"), ("<b>&", "")):
             Pango.parse_markup(app.highlight(code, lang), -1, "\0")
+
+
+@unittest.skipIf(app is None, "GTK 4 / libadwaita not available")
+class StreamedReasoning(unittest.TestCase):
+    """Reasoning arrives in small pieces for minutes; each piece must cost the same however much came before it."""
+
+    PIECES = ["\n\n  Let", " me", " think.", "\n\n\n", "\n", "Step", " one:\n  -", " check", "  \n", "\n\n\n", "Done.", "\n\n "]
+
+    def setUp(self):
+        from gi.repository import Gtk
+        if not Gtk.init_check():
+            self.skipTest("no display")
+        self.view = app.Reasoning(None)
+        self.inserted = []
+        self.view.buffer.connect("insert-text", lambda _b, _i, text, _n: self.inserted.append(text))
+
+    def shown(self):
+        b = self.view.buffer
+        return b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+
+    def test_shown_text_is_trimmed_with_at_most_one_empty_line(self):
+        for piece in self.PIECES:
+            self.view.add(piece)
+        whole = "".join(self.PIECES)
+        self.assertEqual(self.shown(), re.sub(r"\n{3,}", "\n\n", whole.strip()))
+        self.assertEqual(self.view.text, whole)
+
+    def test_only_the_new_piece_is_added(self):
+        for piece in ["word "] * 2000:
+            self.view.add(piece)
+        self.assertEqual(len(self.inserted), 2000)
+        self.assertLessEqual(max(len(t) for t in self.inserted), len("word "))
+        self.assertEqual(len(self.shown().split()), 2000)
+
+
+@unittest.skipIf(app is None, "GTK 4 / libadwaita not available")
+class StreamedAnswer(unittest.TestCase):
+    """The answer is shown while it is written; finished paragraphs are built once, tool calls never appear."""
+
+    def setUp(self):
+        from gi.repository import Gtk
+        if not Gtk.init_check():
+            self.skipTest("no display")
+
+    @staticmethod
+    def children(widget):
+        child, out = widget.get_first_child(), []
+        while child:
+            out.append(child)
+            child = child.get_next_sibling()
+        return out
+
+    def test_finished_paragraphs_are_kept_and_only_the_last_is_rebuilt(self):
+        draft = app.Draft(None)
+        text = "First paragraph, long enough to be shown straight away.\n\nSecond one"
+        for i in range(0, len(text), 5):
+            draft.add(text[i:i + 5])
+        self.assertTrue(draft.get_visible())
+        first = self.children(draft)[0]
+        draft.add(" goes on.\n\nThird")
+        self.assertIs(self.children(draft)[0], first)
+        self.assertEqual(len(self.children(draft)), 3)
+
+    def test_code_block_is_not_cut_at_an_empty_line_inside_it(self):
+        draft = app.Draft(None)
+        draft.add("Run this to see what failed, then read the output:\n\n```bash\nls\n\npwd")
+        self.assertEqual(draft.done, len("Run this to see what failed, then read the output:\n\n"))
+
+    def test_tool_call_written_as_text_is_never_shown(self):
+        for text in ('{"name": "run_command", "arguments": {"command": "ls -la /etc"}}',
+                     "TOOL_USE: web_search(arch linux wiki systemd user units)"):
+            draft = app.Draft(None)
+            draft.add(text)
+            draft.add(" and more")
+            self.assertFalse(draft.get_visible(), text)
+
+    def test_pieces_are_gathered_and_a_new_call_clears_the_old_draft(self):
+        turn = mock.Mock()
+        view = app.GuiAnswer()
+        with mock.patch.object(app.APP, "turn", turn), mock.patch.object(app.GLib, "timeout_add") as later:
+            view.start()
+            view.feed("Old ")
+            view.start()
+            view.feed("New ")
+            view.feed("text")
+            self.assertEqual(later.call_count, 1)  # one flush scheduled for the lot
+            app.GuiAnswer._flush()
+        self.assertEqual(turn.mock_calls, [mock.call.draft_clear(), mock.call.draft_clear(), mock.call.draft_add("New text")])
 
 
 @unittest.skipIf(app is None, "GTK 4 / libadwaita not available")

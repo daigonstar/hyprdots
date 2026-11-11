@@ -158,7 +158,7 @@ class ContextFile(unittest.TestCase):
         self.addCleanup(shutil.rmtree, root, True)
         assistant = root / "assistant"
         assistant.mkdir()
-        for name in ("hypr_agent.py", "usersettings.py", "agent_modes.py", "localcal.py"):
+        for name in ("hypr_agent.py", "usersettings.py", "agent_modes.py", "localcal.py", "dnd_mode.py", "dnd_library.py"):
             shutil.copy(ASSISTANT / name, assistant / name)
         (assistant / "agent_context.example.md").write_text("TEMPLATE TEXT")
         if with_own:
@@ -185,7 +185,7 @@ class AgentWithoutVision(unittest.TestCase):
         self.addCleanup(shutil.rmtree, root, True)
         assistant = root / "assistant"
         assistant.mkdir()
-        for name in ("hypr_agent.py", "usersettings.py", "agent_modes.py", "localcal.py"):
+        for name in ("hypr_agent.py", "usersettings.py", "agent_modes.py", "localcal.py", "dnd_mode.py", "dnd_library.py"):
             shutil.copy(ASSISTANT / name, assistant / name)
         (root / "user_settings.toml").write_text(f'[assistant]\nvision_model = "{vision}"\n')
         code = ("import hypr_agent as a;"

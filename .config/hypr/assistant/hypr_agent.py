@@ -669,6 +669,15 @@ class ReasoningView:
         sys.stdout.flush()
         self.active = False
 
+class AnswerView:
+    """Receives the answer text of each streamed model call as it arrives. The terminal prints the finished reply
+    instead, so this does nothing there; the app replaces it to show the answer while it is being written.
+    start() begins a new call (its text replaces the last one's), feed() adds text, finish() ends the call."""
+
+    def start(self): pass
+    def feed(self, text): pass
+    def finish(self): pass
+
 def _rejects_think(error):
     """The server refused the think option itself (not, say, a broken tool call whose text happens to say "think")."""
     text = str(error).lower()
@@ -677,9 +686,12 @@ def _rejects_think(error):
 def _reasoning_chat(model, messages, tools, options, spinner):
     """Streams a reply, showing reasoning live; returns the same shape as a non-streaming ollama.chat."""
     candidates = [_think_choice[model]] if model in _think_choice else [THINK["effort"], True, None]
-    show = THINK["show"] and interactive()
+    show = THINK["show"] and interactive() and not agent_modes.fiction()
     for think in candidates:
         view, content, thinking, calls, last = ReasoningView(), [], [], [], None
+        live = AnswerView() if interactive() and not agent_modes.fiction() else None
+        if live:
+            live.start()
         try:
             for chunk in OLLAMA.chat(model=model, messages=messages, keep_alive=KEEP_ALIVE, tools=tools,
                                      options=options, stream=True, think=think):
@@ -691,6 +703,8 @@ def _reasoning_chat(model, messages, tools, options, spinner):
                         view.feed(_get(piece, 'thinking'))
                 if _get(piece, 'content'):
                     content.append(_get(piece, 'content'))
+                    if live:
+                        live.feed(_get(piece, 'content'))
                 if _get(piece, 'tool_calls'):
                     calls.extend(_get(piece, 'tool_calls'))
                 if view.active and (content or calls):
@@ -699,10 +713,14 @@ def _reasoning_chat(model, messages, tools, options, spinner):
                     spinner.start()
         except ollama.ResponseError as e:
             view.finish()
+            if live:
+                live.finish()
             if think is not None and _rejects_think(e):
                 continue  # this model rejects that think value; try a simpler one
             raise
         view.finish()
+        if live:
+            live.finish()
         _think_choice[model] = think
         message = {'role': 'assistant', 'content': "".join(content)}
         if thinking:
@@ -1867,6 +1885,10 @@ HEALTH_FILE = os.path.join(STATE_DIR, "health.txt")
 MONITOR_SCRIPT = os.path.join(AGENT_DIR, "agent_monitor.py")
 MEMORY_MAX_CHARS = SETTINGS["memory_max_chars"]
 agent_modes.load_private(os.path.join(AGENT_DIR, "private_modes"))
+import dnd_mode  # noqa: E402
+dnd_mode.attach(sys.modules[__name__])
+agent_modes.add_builtin("dnd", dnd_mode.MODE)
+agent_modes.EXCLUSIVE.update(dnd_mode.TOOL_NAMES)
 NEWS_FEEDS.update(agent_modes.extra_feeds())
 
 def _read_text(path, limit=None, keep="tail"):
@@ -3821,6 +3843,9 @@ if not VISION_ENABLED:
     SYSTEM_PROMPT = re.sub(r"\n12\. IMAGES:[^\n]*",
                            "\n12. IMAGES: no vision model is set up, so you cannot look at screenshots or images. Say so if asked.",
                            SYSTEM_PROMPT)
+tools.update(dnd_mode.TOOLS)
+TOOL_SCHEMAS += dnd_mode.SCHEMAS
+
 def offered_tools():
     """The tools the model may call right now: this mode's, without the terminal ones when there is no built-in terminal."""
     return [s for s in agent_modes.schemas(TOOL_SCHEMAS)
@@ -3846,7 +3871,7 @@ def _args_text(name, arguments):
     """Turns native tool-call arguments into the single string our tool functions take."""
     if not isinstance(arguments, dict):
         return "" if arguments is None else str(arguments)
-    if name == "write_file":
+    if name == "write_file" or name in dnd_mode.TOOL_NAMES:
         return json.dumps(arguments)
     if name in MULTI_ARG_TOOLS:  # a bare string when only the main argument is used, so repeated calls compare equal
         useful = {k: v for k, v in arguments.items() if v not in (None, "", False)}
@@ -4027,7 +4052,7 @@ def session_transcript():
 def process_prompt(user_input):
     now = datetime.datetime.now().astimezone()
     stamp = f"{now.strftime('%A %d %B %Y, %H:%M')} {now.tzname()}"
-    messages = [{'role': 'system', 'content': agent_modes.system_prompt(SYSTEM_PROMPT) + f"\n\nThe current local date and time is {stamp}. Your training data is older than this, so treat anything time-sensitive as possibly out of date. Use the date_info tool for date arithmetic.\n\n" + build_context()}]
+    messages = [{'role': 'system', 'content': agent_modes.system_prompt(SYSTEM_PROMPT) + ("" if agent_modes.fiction() else f"\n\nThe current local date and time is {stamp}. Your training data is older than this, so treat anything time-sensitive as possibly out of date. Use the date_info tool for date arithmetic.\n\n" + build_context())}]
     messages += HISTORY
     start = len(messages)
     messages.append({'role': 'user', 'content': user_input})
@@ -4046,6 +4071,7 @@ def process_prompt(user_input):
     reply = guard.check_answer(guard.drop_unsourced_env(reply))
     _remember_turn([m for m in messages[start:] if id(m) not in guard.internal], reply)
     log_turn(user_input, reply)
+    agent_modes.after_turn(user_input, reply)
     return reply + guard.footer(reply)  # the footer is shown but kept out of the history
 
 def _failure_hint(error, response):
@@ -4421,6 +4447,8 @@ class LoopGuard:
 
     def draft_problems(self, answer):
         """What the checks would flag in a draft, worded for the model to fix before the user sees it."""
+        if agent_modes.fiction():
+            return agent_modes.review(answer, self.counts)
         found = []
         for line in answer.splitlines():
             for pattern, why in SESSION_BREAKERS:
@@ -4511,6 +4539,8 @@ class LoopGuard:
         if self.calls > MAX_TOTAL_CALLS:
             self.reason = f"More than {MAX_TOTAL_CALLS} tool calls were used for one request."
             return "STOP: tool call budget used up. Answer the user now with what you have."
+        if agent_modes.fiction():  # rolling the same dice twice is a second roll, not a repeated lookup
+            return None
         previous = self.seen.get(self._key(name, args))
         if previous is not None:
             self.repeats += 1
@@ -4539,6 +4569,9 @@ class LoopGuard:
         return None
 
     def after(self, name, args, observation):
+        if agent_modes.fiction():
+            self.counts[name] = self.counts.get(name, 0) + 1
+            return observation
         _note_research(name, args, observation)
         self.note_private(name, args, observation)
         self.seen[self._key(name, args)] = observation
@@ -4599,6 +4632,8 @@ class LoopGuard:
 
     def footer(self, answer):
         """Facts about the request that the model cannot misreport, appended under its answer."""
+        if agent_modes.fiction():
+            return f"\n\n— The story paused early ({self.reason.strip()})" if self.reason else ""
         lines, unverified = [], []
         for url in dict.fromkeys(URL_RE.findall(answer)):
             norm = _norm_url(url)
@@ -4781,7 +4816,7 @@ def _evidence(messages):
 
 def fact_check(messages, user_input, draft):
     """(claim, verdict, reason) for each claim in draft that nothing in the conversation backs up; [] if it is fine or the check failed."""
-    if not FACT_CHECK or len(draft) < FACT_CHECK_MIN_CHARS:
+    if not FACT_CHECK or len(draft) < FACT_CHECK_MIN_CHARS or agent_modes.fiction():
         return []
     evidence = _evidence(messages)
     prompt = FACT_CHECK_PROMPT.format(request=user_input.strip(), evidence=evidence, draft=draft)
@@ -5000,7 +5035,7 @@ def _process(messages, user_input, guard=None):
                     # Facts the code checked against this PC and the sources contradict the draft: one round to fix them
                     guard.revise_round += 1
                     draft = {'role': 'assistant', 'content': content}
-                    nudge = {'role': 'system', 'content': REVISE_NOTE.format(problems="\n".join(f"- {p}" for p in problems_found))}
+                    nudge = {'role': 'system', 'content': agent_modes.revise_note(REVISE_NOTE).format(problems="\n".join(f"- {p}" for p in problems_found))}
                     messages += [draft, nudge]
                     guard.internal.update((id(draft), id(nudge)))
                     continue

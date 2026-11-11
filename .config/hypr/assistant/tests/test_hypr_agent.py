@@ -784,6 +784,25 @@ class VisionSettings(unittest.TestCase):
             a.chat("m", [])
         self.assertNotIn("think", call.call_args.kwargs)
 
+    def test_streamed_answer_text_reaches_the_answer_view_as_it_arrives(self):
+        events = []
+
+        class Recorder(a.AnswerView):
+            def start(self): events.append("start")
+            def feed(self, text): events.append(text)
+            def finish(self): events.append("finish")
+
+        def stream(**_kwargs):
+            yield {"message": {"thinking": "hmm"}}
+            for piece in ("The ", "answer."):
+                yield {"message": {"content": piece}}
+            yield {"message": {}, "done_reason": "stop"}
+        with mock.patch.object(a.OLLAMA, "chat", side_effect=stream), mock.patch.object(a, "AnswerView", Recorder), \
+                mock.patch.object(a, "interactive", return_value=True), mock.patch.dict(a._think_choice, {"m": None}), mock.patch.dict(a.THINK, {"show": False}):
+            result = a.chat("m", [], reason=True)
+        self.assertEqual(result["message"]["content"], "The answer.")
+        self.assertEqual(events, ["start", "The ", "answer.", "finish"])
+
 
 CLIENTS = [
     {"address": "0x1", "class": "com.hyprdots.assistant", "title": "Hyprland Assistant", "focusHistoryID": 0,
