@@ -12,6 +12,8 @@ reboot and shut down. Nine styles, picked on the settings Launcher page:
   terminal    a green screen: type at the prompt, results as lines of text
   bubbles     apps float as bubbles, the ones you open most bigger and nearer the middle (stage.py)
 
+While the XP style theme override is on (settings > Theme), it opens that look's start menu instead (startmenu.py).
+
 Colours and font come from the settings Theme page. Keys: type to search, arrows to move, Enter to open, Tab to switch
 category, Esc clears the search or closes. Left and Right walk the results; with Ctrl or Shift, or when there is only
 one result to choose, they edit the search text. Running it again while it is open closes it.
@@ -20,6 +22,7 @@ Run through launcher.sh (it preloads gtk4-layer-shell). --style NAME overrides t
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -29,7 +32,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "settings"))
 import search  # noqa: E402
-from hyprsettings import design  # noqa: E402
+import startmenu  # noqa: E402
+from hyprsettings import design, theme_override  # noqa: E402
 from hyprsettings.schema import BY_ID  # noqa: E402
 from hyprsettings.store import Store  # noqa: E402
 
@@ -66,6 +70,9 @@ def settings() -> dict:
     out = {"style": get("launcher.style", "categories"), "engine": get("launcher.search_engine", "duckduckgo"),
            "rank": get("launcher.rank_by_use", True), "terminal": get("hyprdots.terminal", "ghostty")}
     out.update({k: get(f"launcher.{k}", v) for k, v in LOOK.items()})
+    look = theme_override.launcher_style(design.theme_options(store))  # a theme override's own launcher style
+    if look in STYLES:
+        out["style"] = look
     for i, arg in enumerate(sys.argv[:-1]):
         value = sys.argv[i + 1]
         if arg == "--style" and value in STYLES:
@@ -139,7 +146,7 @@ entry.search image {{ color: {c['accent']}; -gtk-icon-size: {px(20)}; margin-rig
 .hint {{ opacity: 0.5; font-size: {px(11)}; }}
 .empty {{ opacity: 0.5; margin: 30px; }}
 flowbox, flowboxchild, list, row {{ background: none; padding: 0; }}
-""" + style_css(style, c, px, inner, rounding)
+""" + style_css(style, c, px, inner, rounding) + theme_override.extra(o, "launcher")
 
 
 def style_css(style: str, c: dict, px, inner, rounding: int) -> str:
@@ -801,7 +808,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
 
     provider = Gtk.CssProvider()
     provider.load_from_string(css(style, opts))
-    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)  # over ~/.config/gtk-4.0/gtk.css, like the quick tray
     if usage and style == "categories" and not entry.get_text():
         state["category"] = "All apps"
     refresh()
@@ -820,6 +827,14 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     return win
 
 
+def own_scope(cmd: list[str]) -> list[str]:
+    """Starts an app in a systemd scope of its own. Without one, an app opened from the bar's start button or logo
+    lives inside waybar.service, so every bar restart warns about it and the app is counted as part of the bar."""
+    if shutil.which("systemd-run"):
+        return ["systemd-run", "--user", "--scope", "--collect", "--quiet", "--", *cmd]
+    return cmd
+
+
 def run(r, opts) -> None:
     """Does what the chosen result is for, detached from the launcher."""
     # launcher.sh preloads gtk4-layer-shell for this window only; apps must not inherit it (Electron apps such as
@@ -832,7 +847,7 @@ def run(r, opts) -> None:
         env.pop("LD_PRELOAD", None)
 
     def spawn(cmd):
-        subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        subprocess.Popen(own_scope(cmd), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL, env=env)
     if r.kind == "app":
         search.record_use(r.app_id)
@@ -849,6 +864,9 @@ def run(r, opts) -> None:
 
 
 def main() -> int:
+    if "--logo-menu" in sys.argv:  # the menu under Mac style's menu bar logo (logomenu.py)
+        import logomenu
+        return logomenu.main(run)
     if "--list" in sys.argv:  # what the launcher would show, without a window
         for r in search.search(" ".join(a for a in sys.argv[1:] if a != "--list"), search.installed_apps(), search.load_usage()):
             print(r.kind, r.title)
@@ -861,9 +879,18 @@ def main() -> int:
 
     app = Gtk.Application(application_id="com.hyprdots.launcher")
 
+    o = design.theme_options(Store())
+    start_menu = None
+    if startmenu.wanted(o, sys.argv):  # the XP style theme override brings its own start menu
+        start_menu = lambda a: startmenu.build(a, Gtk, Gdk, GLib, Pango, Gtk4LayerShell, settings(), run, icon_for, o,  # noqa: E731
+                                               design.font_list(o))
+
     def activate(a):
         if a.get_windows():  # opened again while open: close
             a.quit()
+            return
+        if start_menu:
+            start_menu(a)
             return
         build(a, Gtk, Gdk, GLib, Pango, Gtk4LayerShell)
     app.connect("activate", activate)

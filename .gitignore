@@ -15,6 +15,7 @@ OrcaSlicer-Linux-flatpak_V2.3.1_x86_64.flatpak
 /.config/hypr/assistant/agent_context.md
 /.config/hypr/user_overrides.lua
 __pycache__/
+/.config/hypr/notes/rs/target/
 /.claude/
 .update-branch
 .config/hypr/assistant/private_modes/
@@ -26,12 +27,14 @@ __pycache__/
 /.config/rofi/touch.rasi
 /.config/waybar/layout.json
 /.config/waybar/config.generated.json
+/.config/waybar/config.dock.json
 /.config/swaync/theme.css
 /.config/hypr/tray/theme.css
 /.config/hypr/window_rules_local.lua
 /.config/hypr/theme.lua
 # Follow the current wallpaper (wallust and the wallpaper picker rewrite them); new installs start from the .default copies
 /.config/rofi/.current_wallpaper
+/.config/rofi/.current_video
 /.config/rofi/.wallpaper_current
 /.config/rofi/wallpaper/.wallpaper_current
 /.config/waybar/colors/colors.css

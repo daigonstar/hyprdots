@@ -20,4 +20,25 @@ if ok and type(overrides) == "table" and overrides.apply then
     pcall(overrides.apply)
 end
 
+-- A theme override (settings > Theme) sets some options over yours while it is on: theme.lua, written by hypr-settings
+local has_theme, theme = pcall(require, "theme")
+if has_theme and type(theme) == "table" and type(theme.config) == "table" then
+    pcall(hl.config, theme.config)
+end
+if has_theme and type(theme) == "table" and type(theme.curves) == "table" then
+    for name, points in pairs(theme.curves) do
+        pcall(hl.curve, name, { type = "bezier", points = points })
+    end
+end
+if has_theme and type(theme) == "table" and type(theme.animations) == "table" then
+    for _, animation in ipairs(theme.animations) do
+        pcall(hl.animation, animation)
+    end
+end
+if has_theme and type(theme) == "table" and type(theme.layer_rules) == "table" then
+    for _, rule in ipairs(theme.layer_rules) do
+        pcall(hl.layer_rule, rule)
+    end
+end
+
 safe.finish()

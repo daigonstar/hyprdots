@@ -13,7 +13,7 @@ from gi.repository import Adw, Gtk  # noqa: E402
 from .. import theme  # noqa: E402
 
 PAGE_GLYPHS = {
-    "User": "\U000f0004", "Assistant": "\U000f0674", "Assistant Monitor": "\U000f04c5", "Calendar": "\U000f00ed", "Network": "\U000f05a9", "Cloud drives": "\U000f015f",
+    "User": "\U000f0004", "Performance": "\U000f061a", "Assistant": "\U000f0674", "Assistant Monitor": "\U000f04c5", "Calendar": "\U000f00ed", "Network": "\U000f05a9", "Cloud drives": "\U000f015f",
     "Displays": "\U000f0379", "Workspaces": "\U000f0570", "Window rules": "\U000f05b5", "Power & lock": "\U000f0904", "Theme": "\U000f08b5", "Bar layout": "\U000f0e09", "Launcher": "\U000f0349", "Hyprland": "", "Keybinds": "\U000f030c",
     "File types": "\U000f0214", "Hyprdots": None,  # Hyprdots uses the Super key logo
 }
@@ -44,6 +44,7 @@ def css() -> str:
 .glyph {{ font-family: "{theme.ICON_FONT}"; font-size: 17px; color: {c['accent']}; min-width: 26px; }}
 .sidebar-title {{ font-family: "{theme.ICON_FONT}"; font-size: 15px; font-weight: 800; }}
 .sidebar-title .glyph {{ font-size: 22px; }}
+.sidebar-section {{ opacity: 0.55; font-size: 11px; font-weight: 700; letter-spacing: 1px; margin: 14px 12px 2px 12px; }}
 .intro {{ color: alpha({c['fg']}, 0.7); margin: 6px 4px 4px 4px; }}
 .tag {{ font-size: 11px; font-weight: 700; border-radius: 99px; padding: 1px 8px; }}
 .tag.changed {{ background: alpha(#e8b84a, 0.18); color: #e8b84a; }}

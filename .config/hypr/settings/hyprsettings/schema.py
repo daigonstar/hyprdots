@@ -14,6 +14,7 @@ PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives"
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
     "User": "Your name, your picture and your password.",
+    "Performance": "Keeps the CPU, graphics card and RAM inside safe limits, so a long game does not freeze the PC.",
     "Assistant": "Hearthling, the local AI helper you open with Super+C: which models it uses and how it behaves.",
     "Assistant Monitor": "This is NOT about your screens. It is the assistant's background health monitor: every few minutes it checks "
                          "your PC (failed services, full disks, heat, pending updates) and sends a desktop notification when something is "
@@ -95,6 +96,7 @@ KB_OPTIONS = _c(("", "None"), ("caps:escape", "Caps Lock is another Escape"), ("
 ACCEL = _c(("", "Device default"), ("adaptive", "Adaptive (speeds up with faster moves)"), ("flat", "Flat (same speed always, good for games)"))
 POWER_EFFECT = "as soon as you save"
 THEME_EFFECT = "as soon as you save"
+from .theme_override import CHOICES as _OVERRIDES  # noqa: E402  (theme overrides: theme_override.py)
 from .design import ROLES as _ROLES  # noqa: E402  (the colour roles, shared with the parts of the desktop that use them)
 _ROLE_GROUPS = {"base": "Large panels", "base_text": "Large panels", "surface": "Bar and cards", "surface_alt": "Bar and cards",
                 "text": "Bar and cards", "accent": "Highlights", "secondary": "Highlights", "muted": "Highlights",
@@ -382,6 +384,17 @@ SETTINGS: list[Setting] = [
             'A short fade when the lock screen appears and goes.',
             effect=LOCK_EFFECT, group="Lock screen"),
     # ---- Theme (colour roles and font, see design.py: the bar, notifications, rofi, borders, GTK windows) ----------
+    Setting(THEME, "theme", "override", "Theme override", "choice", "none",
+            "A ready-made look for the whole desktop. Your own settings below are kept and come back when you pick None.",
+            choices=_OVERRIDES, effect=THEME_EFFECT, group="Theme overrides",
+            tip="XP style: a blue taskbar along the bottom with a green start button, beige windows with blue title bars, "
+                "a Tahoma-like font and a green hill wallpaper. It sets its own wallpaper and puts yours back when you "
+                "switch to None. An original recreation: no Microsoft artwork, icons, sounds or fonts are used."),
+    *[Setting(THEME, "theme", f"override_wallpaper_{key}", f"{name} wallpaper", "text", "",
+              f"A picture of your own for {name} to show instead of its built-in one. Empty: the built-in one.",
+              effect=f"the next time you switch {name} on", group="Theme overrides",
+              tip="Kept in your own settings only, so a picture you add is never part of hyprdots itself.")
+      for key, name in _OVERRIDES if key != "none"],
     *[Setting(THEME, "theme", f"role_{key}", label, "palette", slot, help_, effect=THEME_EFFECT, group="Large panels")
       for key, label, help_, slot in _ROLES if _ROLE_GROUPS[key] == "Large panels"],
     Setting(THEME, "theme", "base_opacity", "Large panel opacity", "int", 90,
@@ -480,6 +493,7 @@ def _assistant_modes() -> list[tuple[str, str]]:
     """(name, blurb) of every assistant mode besides local: the built-in ones, then any in private_modes/.
     Private modes are only read as text (their name and blurb), never run."""
     import importlib.util
+    import os
     import re
     from pathlib import Path
     folder = Path(__file__).resolve().parents[2] / "assistant"
@@ -492,6 +506,9 @@ def _assistant_modes() -> list[tuple[str, str]]:
     except Exception:
         found += [("external", "A supporting technician for IT work away from this PC."),
                   ("gaming", "Advice for the game you name.")]
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
+    if (state / "hypr_agent" / "dnd" / "campaign.json").exists():  # a hidden mode gets a row once it has been found
+        found.append(("dnd", "The Dungeon Master."))
     for path in sorted((folder / "private_modes").glob("[!_]*.py")):
         try:
             text = path.read_text(errors="replace")

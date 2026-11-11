@@ -1,8 +1,9 @@
 """Bar layout page: which modules sit on the left, in the centre and on the right of the bar, in what order.
 
 The tracked waybar/config stays as it is. Your arrangement is saved to waybar/layout.json (git-ignored), and
-waybar/launch.sh builds the config the bar really runs, config.generated.json, from the two. Without a layout.json,
-or if anything goes wrong building it, the bar runs the tracked config.
+waybar/launch.sh builds the config the bar really runs, config.generated.json, from the two (and from a theme
+override's own bar while one is on, see theme_override.bar). If anything goes wrong building it, the bar runs the
+tracked config.
 
     python3 -m hyprsettings.barlayout generate     (what launch.sh runs)"""
 
@@ -192,10 +193,49 @@ def with_recording(layout: dict, config: dict) -> dict:
     return {**layout, "modules-right": right}
 
 
+def override_bar() -> dict | None:
+    """The theme override's own bar (theme_override.bar), when one is on."""
+    try:
+        from . import design, theme, theme_override
+        from .schema import BY_ID
+        from .store import Store
+        store = Store()
+        logo = store.get(BY_ID["look.super_logo"])[0]
+        return theme_override.bar(design.theme_options(store), "" if logo == "text" else theme.super_glyph(logo))
+    except (OSError, ValueError, KeyError, ImportError):
+        return None
+
+
+def dock_path() -> Path:
+    return waybar_dir() / "config.dock.json"
+
+
+def write_dock(dock: dict | None) -> None:
+    """A theme override's dock (Mac style) is a bar of its own, so it can hide by itself: waybar/launch.sh starts
+    waybar/scripts/dock.py when config.dock.json is there. Without a dock the file goes."""
+    path = dock_path()
+    if not dock:
+        path.unlink(missing_ok=True)
+        return
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(dock, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def generate() -> Path:
-    """Writes config.generated.json: the tracked config with your layout. Raises if either cannot be read."""
+    """Writes config.generated.json: the tracked config with your layout, and with a theme override's bar over both
+    while one is on (your layout.json is left as it is). Raises if either cannot be read."""
     config = read_config()
     merged = {**config, **with_recording(read_layout(config), config)}
+    bar = override_bar()
+    if bar:
+        bar = dict(bar)
+        dock = bar.pop("dock", None)
+        for key, value in bar.items():  # a module the look changes keeps the rest of its definition (clock popup)
+            merged[key] = {**merged[key], **value} if isinstance(value, dict) and isinstance(merged.get(key), dict) else value
+    else:
+        dock = None
+    write_dock(dock)
     out = waybar_dir() / "config.generated.json"
     tmp = out.with_name(out.name + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

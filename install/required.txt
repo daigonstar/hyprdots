@@ -25,7 +25,8 @@ waybar-cava
 swaync
 rofi
 awww
-mpvpaper  # video wallpapers (wallpaper picker)
+mpvpaper  # video wallpapers (wallpaper picker, hypr/scripts/video-wallpaper.sh)
+imagemagick  # the wallpaper picker's thumbnails (magick)
 ghostty
 starship
 fastfetch
@@ -38,6 +39,7 @@ sddm
 weston
 qt5-graphicaleffects
 qt5-quickcontrols2
+qt5-svg  # the login screen (SDDM sugar-dark) draws its power and user icons from .svgz files
 plymouth
 
 # --- Audio, network, bluetooth, brightness, clipboard ---
@@ -88,6 +90,10 @@ adw-gtk-theme
 ttf-cascadia-code-nerd
 ttf-cascadia-mono-nerd
 ttf-font-awesome-5
+ttf-dejavu  # DejaVu Sans Condensed: the Tahoma-like font of the XP style theme override
+inter-font  # Inter: the font of the Mac style theme override (Adwaita Sans, made from it, is the fallback)
+ttf-terminus-nerd  # Terminess: the retro font of the Game UI theme override (any pixel font you add wins over it)
+ttc-iosevka  # Iosevka: the technical font of the Sci-fi HUD theme override (a display font you add wins over it)
 
 # --- Popup calendar and the optional PC assistant (ollama and python-ollama are installed by
 #     .config/hypr/assistant/setup.sh only if you choose the assistant) ---

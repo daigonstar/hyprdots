@@ -37,6 +37,8 @@ def colors(o: dict | None = None) -> dict:
             if m:
                 out[key] = m[1]
     for key in ("accent", "soft"):
+        if luminance(out["bg"]) >= 0.4:  # a light background (a theme override): a dark accent already reads
+            break
         for _ in range(6):
             if luminance(out[key]) >= 0.28:
                 break

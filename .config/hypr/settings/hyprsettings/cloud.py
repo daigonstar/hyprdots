@@ -36,10 +36,11 @@ TEMPLATE = "rclone-mount@.service"
 
 # Flags for every mount. They make the first visit to a drive fast:
 #   --vfs-refresh      lists the folders in the background right after mounting, so Thunar hits the cache
-#   --dir-cache-time   keeps listings for an hour (--poll-interval still picks up remote changes)
+#   --dir-cache-time   keeps listings for 3 days (--poll-interval still picks up remote changes), so an hour away does
+#                      not leave Thunar waiting on the server the next time it opens
 #   --attr-timeout     lets the kernel cache file attributes, so repeated stat calls never reach rclone
 #   --contimeout       gives up on an unreachable server after 15s instead of a minute, so Thunar is not left waiting
-BASE_FLAGS = "--dir-cache-time 1h --poll-interval 1m --vfs-refresh --attr-timeout 30s --contimeout 15s"
+BASE_FLAGS = "--dir-cache-time 72h --poll-interval 1m --vfs-refresh --attr-timeout 30s --contimeout 15s"
 
 
 def mount_flags(mode: str = "full", size_gb: int = 10, days: int = 30) -> str:

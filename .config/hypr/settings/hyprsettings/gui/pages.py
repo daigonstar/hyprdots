@@ -23,6 +23,8 @@ from .rows import setting_row  # noqa: E402
 def schema_groups(win, page: str, column: Gtk.Box) -> None:
     group, last = None, object()
     for s in for_page(page):
+        if s.group == "Theme overrides":  # its own group, applied with one click (theme_override.group)
+            continue
         if group is None or s.group != last:
             group = Adw.PreferencesGroup(title=s.group)
             column.append(group)
@@ -38,6 +40,8 @@ def basic_page(win, page: str) -> Gtk.Widget:
         schema_groups(win, page, column)
     if page == "Assistant":
         assistant_group(win, column)
+    if page == "Assistant Monitor":
+        health_monitor_group(win, column)
     if page == "Hyprdots":
         startup_group(win, column)
         files_group(win, column)
@@ -45,6 +49,9 @@ def basic_page(win, page: str) -> Gtk.Widget:
         lock_preview_button(win, column)
     if page == "Launcher":
         launcher_buttons(win, column)
+    if page == "Theme":
+        from . import theme_override
+        theme_override.group(win, column)
     return scroller
 
 
@@ -151,6 +158,30 @@ def assistant_group(win, column: Gtk.Box) -> None:
     sw.connect("notify::active", toggled)
     group.add(row)
     column.append(group)
+
+
+def health_monitor_group(win, column: Gtk.Box) -> None:
+    """On and off, at the top of the page: the settings below only matter while it is on."""
+    from .. import healthmonitor
+    group = Adw.PreferencesGroup(title="Turn on or off")
+    row = Adw.ActionRow(title="Health monitor", use_markup=False,
+                        subtitle="Checks every few minutes for failed services, full disks, heat and waiting updates, and tells you. "
+                                 "Off stops it straight away and keeps these settings for when you turn it back on.")
+    sw = Gtk.Switch(active=healthmonitor.is_on(), valign=Gtk.Align.CENTER)
+    row.add_suffix(sw)
+    row.set_activatable_widget(sw)
+
+    def toggled(w, _p):
+        if w.get_active() == healthmonitor.is_on():
+            return
+        ok, message = healthmonitor.turn(w.get_active())
+        if not ok:
+            w.set_active(healthmonitor.is_on())
+            return ui.message(win, "Not changed", message)
+        win.toast(message)
+    sw.connect("notify::active", toggled)
+    group.add(row)
+    column.insert_child_after(group, column.get_first_child())  # under the page's intro, above its settings
 
 
 # ---- Calendar -----------------------------------------------------------------------------------------------------

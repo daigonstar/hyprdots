@@ -14,21 +14,72 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .. import overrides, theme  # noqa: E402
-from ..schema import BY_ID, CLOUD_EFFECT, PAGES as SHARED_PAGES  # noqa: E402
+from ..schema import BY_ID, CLOUD_EFFECT, PAGE_INTRO, PAGES as SHARED_PAGES, for_page  # noqa: E402
 from ..store import Store  # noqa: E402
 from . import pages, ui  # noqa: E402
 
 APP_ID = "com.hyprdots.settings"
 
 
-PAGES = ["User", *SHARED_PAGES]  # the terminal version has no User page: passwd does that job there
+PAGES = ["User", "Performance", *SHARED_PAGES]  # only in the window: the terminal version has neither
+
+# The sidebar, in groups of what belongs together. A page missing from here still shows, under Other.
+SECTIONS = (
+    ("You", ("User", "Calendar", "Cloud drives")),
+    ("System", ("Network", "Displays", "Performance", "Power & lock")),
+    ("Look", ("Theme", "Bar layout", "Launcher")),
+    ("Windows and keys", ("Workspaces", "Window rules", "Keybinds", "Hyprland")),
+    ("Apps", ("Hyprdots", "File types")),
+    ("Hearthling", ("Assistant", "Assistant Monitor")),
+)
+# Names that say what is on the page; the page keeps its own name for --page=
+LABELS = {"Hyprdots": "Default apps", "Assistant Monitor": "Health monitor"}
+
+
+def sidebar_order() -> list[tuple[str, str]]:
+    """(section, page) for every page, in sidebar order."""
+    placed = [(section, page) for section, pages in SECTIONS for page in pages if page in PAGES]
+    seen = {page for _, page in placed}
+    return placed + [("Other", page) for page in PAGES if page not in seen]
+
+
+# Words people search with that a page's own text may not use (pages built by hand list no settings to search)
+KEYWORDS = {
+    "User": "password picture photo avatar name account",
+    "Performance": "cpu gpu ram memory temperature heat hot boost power limit freeze crash overheating",
+    "Network": "wifi wireless ethernet internet vpn dns ip hotspot",
+    "Displays": "monitor screen resolution refresh rate hz scale rotate hidpi",
+    "Power & lock": "idle sleep suspend lock screen timeout hibernate",
+    "Theme": "colour color wallpaper font dark light",
+    "Bar layout": "waybar modules panel top bottom",
+    "Launcher": "app menu search rofi",
+    "Workspaces": "desktop virtual monitor",
+    "Window rules": "float fullscreen workspace app opens",
+    "Keybinds": "shortcut keys hotkey keyboard",
+    "File types": "open with default mime pdf image video browser",
+    "Cloud drives": "google drive onedrive dropbox nextcloud webdav rclone",
+    "Calendar": "events google ical",
+    "Hyprdots": "terminal file manager browser startup autostart super key logo",
+}
+
+
+def _plain(text: str) -> str:
+    """Lower case, and Wi-Fi the same as wifi."""
+    return text.lower().replace("-", "")
+
+
+def search_text(page: str) -> str:
+    """What the sidebar search looks in: the page's names, its intro, the names of its settings and its keywords."""
+    words = [page, LABELS.get(page, ""), PAGE_INTRO.get(page, ""), KEYWORDS.get(page, "")]
+    words += [s.label for s in for_page(page)]
+    return _plain(" ".join(words))
 
 
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import account, barlayout, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
+    from . import account, barlayout, power, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
-    out.update({"User": account.build, "Keybinds": keybinds.build, "File types": filetypes.build,
+    out.update({"User": account.build, "Performance": power.build, "Keybinds": keybinds.build, "File types": filetypes.build,
                 "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build,
                 "Network": network.build, "Window rules": windowrules.build})
     return out
@@ -45,23 +96,36 @@ class Window(Adw.ApplicationWindow):
         # (ok, message) and discard(); the save bar, Save, Discard and closing treat them like staged settings.
         self.pending: dict = {}
 
-        # Sidebar: one row per page
+        # Sidebar: one row per page, in sections, with a search that also finds a page by its settings' names
+        self.search = Gtk.SearchEntry(placeholder_text="Search settings", margin_start=10, margin_end=10, margin_top=6, margin_bottom=4)
+        self.search.connect("search-changed", lambda _e: self._searched())
+        self.search.connect("activate", lambda _e: self._open_first_match())
         self.sidebar_list = Gtk.ListBox(css_classes=["navigation-sidebar"], selection_mode=Gtk.SelectionMode.SINGLE)
         logo = self.store.get(BY_ID["look.super_logo"])[0]
-        for name in PAGES:
+        self.rows, self.section_of, self.find_in = {}, {}, {}
+        for section, name in sidebar_order():
             glyph = ui.PAGE_GLYPHS.get(name) or theme.super_glyph("arch" if logo == "text" else logo)
-            box = Gtk.Box(spacing=12, margin_top=6, margin_bottom=6, margin_start=4)
+            box = Gtk.Box(spacing=12, margin_top=4, margin_bottom=4, margin_start=4)
             box.append(Gtk.Label(label=glyph, css_classes=["glyph"]))
-            box.append(Gtk.Label(label=name, xalign=0))
-            self.sidebar_list.append(Gtk.ListBoxRow(child=box, name=name))
+            box.append(Gtk.Label(label=LABELS.get(name, name), xalign=0))
+            row = Gtk.ListBoxRow(child=box, name=name)
+            self.rows[name], self.section_of[name], self.find_in[name] = row, section, search_text(name)
+            self.sidebar_list.append(row)
+        self.sidebar_list.set_header_func(self._section_header)
+        self.sidebar_list.set_filter_func(self._matches)
         self.sidebar_list.connect("row-selected", self._on_page)
+        self.sidebar_list.connect("row-activated", lambda _l, row: self._pick(row))
+        self.picking = False
 
         side_header = Adw.HeaderBar(show_end_title_buttons=False)
         title = Gtk.Box(spacing=8)
         title.append(Gtk.Label(label=theme.super_glyph("arch" if logo == "text" else logo), css_classes=["glyph"]))
         title.append(Gtk.Label(label="Settings", css_classes=["sidebar-title"]))
         side_header.set_title_widget(title)
-        side_view = Adw.ToolbarView(content=Gtk.ScrolledWindow(child=self.sidebar_list, hscrollbar_policy=Gtk.PolicyType.NEVER))
+        side_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        side_box.append(self.search)
+        side_box.append(Gtk.ScrolledWindow(child=self.sidebar_list, hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True))
+        side_view = Adw.ToolbarView(content=side_box)
         side_view.add_top_bar(side_header)
         sidebar = Adw.NavigationPage(title="Settings", child=side_view)
 
@@ -70,7 +134,7 @@ class Window(Adw.ApplicationWindow):
         self.content_view.add_top_bar(Adw.HeaderBar())
         self.savebar = self._build_savebar()
         self.content_view.add_bottom_bar(self.savebar)
-        self.content = Adw.NavigationPage(title=self.page, child=self.content_view)
+        self.content = Adw.NavigationPage(title=LABELS.get(self.page, self.page), child=self.content_view)
 
         self.split = Adw.NavigationSplitView(sidebar=sidebar, content=self.content, min_sidebar_width=230, max_sidebar_width=280)
         self.toasts = Adw.ToastOverlay(child=self.split)
@@ -82,7 +146,8 @@ class Window(Adw.ApplicationWindow):
         self.add_breakpoint(bp)
 
         keys = Gtk.ShortcutController(scope=Gtk.ShortcutScope.GLOBAL)
-        for accel, fn in (("<Control>s", self.save), ("<Control>q", self.close), ("<Control>w", self.close)):
+        for accel, fn in (("<Control>s", self.save), ("<Control>q", self.close), ("<Control>w", self.close),
+                          ("<Control>f", self.search.grab_focus)):
             keys.add_shortcut(Gtk.Shortcut(trigger=Gtk.ShortcutTrigger.parse_string(accel),
                                            action=Gtk.CallbackAction.new(lambda *_a, fn=fn: fn() or True)))
         self.add_controller(keys)
@@ -94,14 +159,42 @@ class Window(Adw.ApplicationWindow):
 
     # ---- pages ------------------------------------------------------------------------------------------------
     def _row_for(self, name: str) -> Gtk.ListBoxRow:
-        return self.sidebar_list.get_row_at_index(PAGES.index(name))
+        return self.rows[name]
+
+    def _section_header(self, row: Gtk.ListBoxRow, before: Gtk.ListBoxRow | None) -> None:
+        section = self.section_of[row.get_name()]
+        if before is not None and self.section_of[before.get_name()] == section:
+            row.set_header(None)
+            return
+        row.set_header(Gtk.Label(label=section, xalign=0, css_classes=["sidebar-section"]))
+
+    def _matches(self, row: Gtk.ListBoxRow) -> bool:
+        words = _plain(self.search.get_text()).split()
+        return all(w in self.find_in[row.get_name()] for w in words)
+
+    def _searched(self) -> None:
+        self.sidebar_list.invalidate_filter()
+        self.sidebar_list.invalidate_headers()
+
+    def _pick(self, row: Gtk.ListBoxRow) -> None:
+        self.picking = True
+        self.sidebar_list.select_row(row)
+        self._on_page(self.sidebar_list, row)  # a row already selected does not say so again
+        self.picking = False
+
+    def _open_first_match(self) -> None:
+        for _, name in sidebar_order():
+            if self._matches(self.rows[name]):
+                self._pick(self.rows[name])
+                return
 
     def _on_page(self, _list, row) -> None:
-        if row is None:
+        # While a search hides the open page, the list may select another by itself: only a pick changes the page
+        if row is None or (self.search.get_text() and not self.picking):
             return
         self._remember_scroll()
         self.page = row.get_name()
-        self.content.set_title(self.page)
+        self.content.set_title(LABELS.get(self.page, self.page))
         self._show_page()
         self.split.set_show_content(True)
 
@@ -250,7 +343,10 @@ def main(argv: list[str]) -> int:
         if a.get_windows():
             a.get_windows()[0].present()
             return
-        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        from . import theme_override
+        from .. import livetheme
+        a.live_theme = livetheme.follow(a)  # follows a theme override switch while open
+        theme_override.match_scheme()  # dark, or light under a light theme override (XP style)
         provider = Gtk.CssProvider()
         provider.load_from_string(ui.css())
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)

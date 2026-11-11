@@ -17,7 +17,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import design, gtktheme, theme
+from . import design, gtktheme, livetheme, theme, theme_override
 
 HOME = Path.home()
 ROFI_MARK = "/* hyprdots theme"
@@ -47,7 +47,7 @@ def swaync_css(o: dict) -> str:
 * {{
     font-family: {design.font_list(o)};
 }}
-"""
+""" + theme_override.extra(o, "swaync")
 
 
 def write_swaync(o: dict) -> None:
@@ -71,7 +71,7 @@ def tray_css(o: dict) -> str:
 * {{
     font-family: {design.font_list(o)};
 }}
-"""
+""" + theme_override.extra(o, "tray")
 
 
 def write_tray(o: dict) -> None:
@@ -108,9 +108,36 @@ def write_rofi(o: dict) -> None:
     design.write(path, text + rofi_block(o))
 
 
+def lua_value(value, indent: str = "    ") -> str:
+    """A Python value as Lua: tables for dicts, quoted strings, numbers and booleans."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, dict):
+        inner = indent + "    "
+        body = "".join(f"{inner}{k} = {lua_value(v, inner)},\n" for k, v in value.items())
+        return "{\n" + body + indent + "}"
+    if isinstance(value, (list, tuple)):
+        inner = indent + "    "
+        return "{\n" + "".join(f"{inner}{lua_value(v, inner)},\n" for v in value) + indent + "}"
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def hypr_lua(o: dict) -> str:
     c = design.resolved(o)
     lua = lambda h: f'"rgb({h[1:]})"'  # noqa: E731
+    config = theme_override.hypr_config(o)
+    extra = ("    -- From the theme override: hyprland.lua applies these after your Hyprland page settings\n"
+             f"    config = {lua_value(config)},\n") if config else ""
+    rules = theme_override.layer_rules(o)
+    if rules:
+        extra += f"    layer_rules = {lua_value(rules)},\n"
+    curves, animations = theme_override.animations(o)
+    if curves:
+        extra += f"    curves = {lua_value(curves)},\n"
+    if animations:
+        extra += f"    animations = {lua_value(animations)},\n"
     return ("-- Window border colours, made by hypr-settings from the Theme page (rewritten when the wallpaper changes).\n"
             "-- window.lua uses these when this file exists. Do not edit by hand.\n"
             "return {\n"
@@ -118,7 +145,7 @@ def hypr_lua(o: dict) -> str:
             f"    inactive_border = {lua(c['muted'])},\n"
             f"    group_active = {lua(c['accent'])},\n"
             f"    group_inactive = {lua(c['muted'])},\n"
-            "}\n")
+            + extra + "}\n")
 
 
 def write_hypr(o: dict) -> None:
@@ -130,7 +157,9 @@ def write_lock(store) -> None:
     from . import account, lockscreen
     path = lockscreen.local_path(store.dir)
     if path.exists() or account.picture_path().exists():
-        lockscreen.write(path, lockscreen.render(store.lock_options(), accent=design.resolved(design.theme_options(store))["accent"]))
+        o = design.theme_options(store)
+        font = o["app_font"] if theme_override.active(o) != theme_override.NONE else None  # a look's font; else the usual
+        lockscreen.write(path, lockscreen.render(store.lock_options(), accent=design.resolved(o)["accent"], font=font))
 
 
 def gtk_colours(o: dict) -> dict[str, str]:
@@ -166,7 +195,10 @@ def gtk_css(o: dict, version: str) -> str:
     if version == "4.0":
         text += ":root {\n" + "".join(f"    --{k.replace('_', '-')}: {v};\n" for k, v in colours.items()
                                        if not k.startswith(("theme_", "borders", "unfocused_"))) + "}\n"
-    return text + GTK_END + "\n"
+    extra = theme_override.extra(o, "gtk" + version[0])
+    if version == "4.0":  # GTK keeps what it read at startup; our own open apps load it again (livetheme)
+        extra = livetheme.prefix(extra)
+    return text + extra + GTK_END + "\n"
 
 
 def _set_block(path: Path, block: str | None) -> None:

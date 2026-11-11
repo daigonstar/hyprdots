@@ -25,9 +25,10 @@ gi.require_version("GLibUnix", "2.0")
 from gi.repository import Gdk, Gio, GLib, GLibUnix, Gtk, Gtk4LayerShell as Layer, Pango
 
 HERE = Path(__file__).resolve().parent
-sys.path[:0] = [str(HERE), str(HERE.parent / "tray")]
+sys.path[:0] = [str(HERE), str(HERE.parent / "tray"), str(HERE.parent / "settings")]
 import markdown  # noqa: E402
 import notebook  # noqa: E402
+from hyprsettings import livetheme  # noqa: E402
 
 THEME = HERE.parent / "tray/theme.css"
 READY = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "hyprdots-notes.ready"
@@ -143,6 +144,7 @@ class Notes(Gtk.Application):
     # ---- the window --------------------------------------------------------------------------------------------
     def _build(self, _app):
         self.hold()
+        self.live_theme = livetheme.follow(self)  # follows a theme override switch while open
         win = self.win = Gtk.ApplicationWindow(application=self, title="Notes", css_classes=["notes"])
         Layer.init_for_window(win)
         Layer.set_namespace(win, "hyprdots-notes")

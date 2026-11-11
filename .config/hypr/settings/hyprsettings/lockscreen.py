@@ -20,8 +20,9 @@ def local_path(hypr_dir: Path | str) -> Path:
     return Path(hypr_dir) / "hyprlock.local.conf"
 
 
-def render(o: dict, header: str = "", accent: str | None = None) -> str:
-    """accent: a #hex for the password line and box (the Theme page's accent); white when not given."""
+def render(o: dict, header: str = "", accent: str | None = None, font: str | None = None) -> str:
+    """accent: a #hex for the password line and box (the Theme page's accent); white when not given.
+    font: the text's font (a theme override's); FONT when not given."""
     o = {**DEFAULTS, **o}
     line = f"rgba({accent[1:]}ee)" if accent else "$soft"
     shadow = "    shadow_passes = 2\n    shadow_size = 6\n    shadow_color = rgba(00000088)\n"
@@ -29,7 +30,7 @@ def render(o: dict, header: str = "", accent: str | None = None) -> str:
     parts = [header or "# Lock screen (hyprlock), made by hypr-settings from the Power & lock page.\n",
              "# Clear what you typed: Esc, Ctrl+U or Ctrl+Backspace.\n",
              f"# grace={int(o['grace'])}\n\n",
-             f"$font = {FONT}\n$text = rgba(ffffffee)\n$soft = rgba(ffffffbb)\n\n",
+             f"$font = {font or FONT}\n$text = rgba(ffffffee)\n$soft = rgba(ffffffbb)\n\n",
              "general {\n    hide_cursor = true\n}\n\n"]
     if o["fade"]:
         parts.append("animations {\n    enabled = true\n    bezier = linear, 1, 1, 0, 0\n"

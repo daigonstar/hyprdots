@@ -43,9 +43,18 @@ SHADOW = "0px 0px 2px rgba(0, 0, 0, 0.6)"
 
 
 def style_css(style: str) -> str:
-    """The bar's shape: what the panels behind the modules look like. waybar tags the bar window .top or .bottom."""
+    """The bar's shape: what the panels behind the modules look like. waybar tags the bar window .top or .bottom.
+    "luna" is the XP style theme override's taskbar: a plain strip here, the rest is theme_override.extra()."""
     zones = (".modules-left", ".modules-center", ".modules-right")
     bare = ", ".join(zones) + " {\n    padding: 0px 4px;\n    margin: 0px;\n    background: none;\n    border-radius: 0px;\n    box-shadow: none;\n}\n"
+    if style == "mac":  # Mac style's menu bar: a plain strip, the rest is theme_override.extra()
+        return "window#waybar {\n    all: unset;\n}\n" + bare.replace("0px 4px", "0px")
+    if style == "scifi":  # Sci-fi HUD: each zone becomes a bracketed panel in theme_override.extra()
+        return "window#waybar {\n    all: unset;\n}\n" + bare.replace("0px 4px", "0px 10px")
+    if style == "game":  # Game UI: each zone becomes a menu window in theme_override.extra()
+        return "window#waybar {\n    all: unset;\n}\n" + bare.replace("0px 4px", "1px 8px")
+    if style == "luna":
+        return "window#waybar {\n    all: unset;\n    background: @theme_surface_fill;\n}\n" + bare.replace("0px 4px", "0px")
     if style == "solid":
         return ("window#waybar {\n    all: unset;\n    background: @theme_surface_fill;\n}\n" + bare.replace("0px 4px", "4px 6px"))
     if style == "floating":
@@ -103,25 +112,39 @@ def empty_zones() -> list[str]:
         return []
 
 
+def colour_ref(value: str) -> str:
+    """A role's value in GTK CSS: a palette slot (@color4) or, from a theme override, a fixed #hex."""
+    return value if str(value).startswith("#") else f"@{value}"
+
+
 def render_waybar(o: dict, empty: list[str] | None = None) -> str:
+    from . import theme_override
     o = {**DEFAULTS, **o}
+    bar = theme_override.bar(o)
+    if bar is not None:  # the override brings its own layout
+        empty = [z for z in ("modules-left", "modules-center", "modules-right") if not bar.get(z)]
     empty = empty_zones() if empty is None else empty
     lines = ["/* The bar's colours and font, made by hypr-settings from the Theme page. Each role points at a slot of\n"
              "   wallust's palette (colors/colors.css), so the bar still follows your wallpaper. Do not edit by hand. */\n\n"]
     for key, _label, _help, _slot in ROLES:
-        lines.append(f"@define-color theme_{key} @{o[f'role_{key}']};\n")
-    lines.append(f"@define-color theme_surface_fill alpha(@{o['role_surface']}, {int(o['surface_opacity']) / 100:g});\n\n")
+        lines.append(f"@define-color theme_{key} {colour_ref(o[f'role_{key}'])};\n")
+    lines.append(f"@define-color theme_surface_fill alpha({colour_ref(o['role_surface'])}, {int(o['surface_opacity']) / 100:g});\n\n")
     lines.append(f'* {{\n    font-family: {font_list(o)};\n    font-size: {int(o["bar_font_size"])}px;\n}}\n')
     lines.append(f"\n/* Bar style: {dict(STYLES).get(o['bar_style'], o['bar_style'])} */\n" + style_css(o["bar_style"]))
     if empty:
         lines.append("\n/* Empty in your layout, so not drawn */\n" + ", ".join("." + z for z in empty)
                      + " {\n    background: none;\n    box-shadow: none;\n    padding: 0px;\n    margin: 0px;\n}\n")
+    lines.append(theme_override.extra(o, "bar"))
     return "".join(lines)
 
 
-def theme_options(store) -> dict:
+def theme_options(store, own: bool = False) -> dict:
+    """The Theme page settings every part of the desktop is built from, with the theme override laid over them when
+    one is on (own=True: just yours). Your saved settings are never changed by an override."""
+    from . import theme_override
     from .schema import SETTINGS
-    return {s.key: store.get(s)[0] for s in SETTINGS if s.section == "theme"}
+    o = {s.key: store.get(s)[0] for s in SETTINGS if s.section == "theme"}
+    return o if own else theme_override.apply(o)
 
 
 def write_bar_theme(store) -> None:
@@ -157,7 +180,8 @@ def resolved(o: dict) -> dict[str, str]:
     wallpaper changes, by refresh_all from wallust.sh). Missing palette entries fall back to a calm grey."""
     o = {**DEFAULTS, **o}
     pal = palette()
-    return {key: pal.get(o[f"role_{key}"], "#888888") for key, *_ in ROLES}
+    return {key: o[f"role_{key}"] if str(o[f"role_{key}"]).startswith("#") else pal.get(o[f"role_{key}"], "#888888")
+            for key, *_ in ROLES}
 
 
 def alpha_rgba(hex_colour: str, a: float) -> str:

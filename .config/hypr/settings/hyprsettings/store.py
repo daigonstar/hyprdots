@@ -79,7 +79,12 @@ class Store:
         """What GTK uses now, as the Theme page's Apps values (read once). The adw-gtk3 style the Theme page sets
         itself is not offered as your own style."""
         if self._gtk is None:
-            from . import gtktheme
+            from . import gtktheme, theme_override
+            on = self._from(self.local, BY_ID["theme.override"]) not in (None, theme_override.NONE)
+            now = theme_override.gtk_before() if on else None  # during an override: what GTK used before it
+            if now is not None:
+                self._gtk = dict(now)
+                return self._gtk
             now = gtktheme.current()
             family, size = gtktheme.font_parts(now["font"])
             self._gtk = {**now, "font": family}
@@ -273,6 +278,8 @@ class Store:
     def app_choices(self, s: Setting) -> list[tuple[str, str]]:
         seen, out = set(), []
         for cmd in [self.default(s), *APP_CANDIDATES.get(s.key, [])]:
+            if not str(cmd).strip():  # an empty default (a path not chosen yet) has nothing to offer
+                continue
             first = cmd.split()[0]
             if cmd not in seen and (cmd == self.default(s) or shutil.which(first)):
                 seen.add(cmd)
@@ -283,6 +290,11 @@ class Store:
     def save(self) -> list[str]:
         """Writes staged changes. Returns what the user should do for them to take effect."""
         touched_lua = False
+        ov = BY_ID["theme.override"]  # the theme override as saved before this save, when it is one of the changes
+        override_was = (self._from(self.local, ov) or self.default(ov)) if ov.id in self.staged else None
+        if override_was is not None:
+            from . import theme_override
+            theme_override.before_switch(self, override_was, self.get(ov)[0])
         for sid, value in list(self.staged.items()):
             if sid in ("calendar.sources", STARTUP_ID, CUSTOM_STARTUP_ID):
                 section, key = sid.split(".", 1)
@@ -313,12 +325,20 @@ class Store:
             from . import design  # the bar, notifications, rofi, window borders and the lock screen use these
             for problem in design.refresh_all(self):
                 self.warnings.append(f"Saved, but the {problem}")
+            now = self.get(BY_ID["theme.override"])[0]
+            if override_was is not None and override_was != now:
+                from . import theme_override  # the bar, Hyprland and the wallpaper follow a new theme override
+                theme_override.after_switch(override_was, now, theme_override.chosen_wallpaper(
+                    self, now if now != theme_override.NONE else override_was))
         if any(sid.startswith("lockscreen.") for sid in self.staged):
             from . import lockscreen  # hyprlock.local.conf is built from these settings
             try:
                 from . import design
-                accent = design.resolved(design.theme_options(self))["accent"]  # the password line follows the Theme page
-                lockscreen.write(lockscreen.local_path(self.dir), lockscreen.render(self.lock_options(), accent=accent))
+                from . import theme_override
+                o = design.theme_options(self)
+                accent = design.resolved(o)["accent"]  # the password line follows the Theme page
+                font = o["app_font"] if theme_override.active(o) != theme_override.NONE else None
+                lockscreen.write(lockscreen.local_path(self.dir), lockscreen.render(self.lock_options(), accent=accent, font=font))
             except OSError as e:
                 self.warnings.append(f"Saved, but the lock screen could not be updated: {e}")
         if any(sid.startswith("cloud.") for sid in self.staged):

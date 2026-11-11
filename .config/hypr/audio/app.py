@@ -16,9 +16,11 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parent.parent / "settings"))
 import filters  # noqa: E402
 import headset  # noqa: E402
 import pulse  # noqa: E402
+from hyprsettings import livetheme  # noqa: E402
 import ui  # noqa: E402
 from headset_ui import HeadsetPage  # noqa: E402
 from pages import AppsPage, DevicesPage, InputPage, OutputPage  # noqa: E402
@@ -56,6 +58,7 @@ class Sound(Gtk.Application):
             self._go(self.wanted_page)
             win.present()
             return
+        self.live_theme = livetheme.follow(self)  # follows a theme override switch while open
         win = Gtk.ApplicationWindow(application=self, title="Sound", default_width=560, default_height=820)
         win.add_css_class("sound")
         self.look = ui.Look(Gdk.Display.get_default())
