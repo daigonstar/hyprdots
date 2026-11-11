@@ -26,8 +26,10 @@ class DeviceRow(Gtk.Box):
         self.port.set_hexpand(False)
         top.append(self.port)
         self.append(top)
-        self.volume = ui.Volume(lambda v: ctl.act(lambda: pulse.set_volume(kind, name, v)),
-                                lambda m: ctl.act(lambda: pulse.set_mute(kind, name, m)), microphone=kind == "source")
+        self.volume_name = name  # the filter's node instead while one is in front of this device (pulse.stand_in)
+        self.volume = ui.Volume(lambda v: ctl.act(lambda n=self.volume_name: pulse.set_volume(kind, n, v)),
+                                lambda m: ctl.act(lambda n=self.volume_name: pulse.set_mute(kind, n, m)),
+                                microphone=kind == "source")
         self.volume.set_margin_start(28)
         self.append(self.volume)
         self.hint = ui.label("", "dim", wrap=True)
@@ -35,12 +37,14 @@ class DeviceRow(Gtk.Box):
         self.append(self.hint)
         self.quiet = False
 
-    def update(self, device, in_use, hint=""):
+    def update(self, device, in_use, hint="", volume_from=None):
         self.quiet = True
+        level = volume_from or device
+        self.volume_name = level["name"]
         self.title.set_text(device["description"])
         self.pick.set_active(in_use)
         (self.add_css_class if in_use else self.remove_css_class)("current")
-        self.volume.set(device["volume"], device["mute"])
+        self.volume.set(level["volume"], level["mute"])
         ports = [(n, d + ("" if available else " (not plugged in)")) for n, d, available in device["ports"]]
         self.port.set_visible(len(ports) > 1)
         if len(ports) > 1:
@@ -56,10 +60,10 @@ class DeviceList(Gtk.Box):
         self.group = Gtk.CheckButton()  # the radio group; never shown
         self.rows = ui.Keyed(self, lambda name: DeviceRow(ctl, kind, name, self.group))
 
-    def update(self, devices, in_use, hints=None):
-        hints = hints or {}
+    def update(self, devices, in_use, hints=None, stand_ins=None):
+        hints, stand_ins = hints or {}, stand_ins or {}
         for row, device in zip(self.rows.show(d["name"] for d in devices), devices):
-            row.update(device, device["name"] == in_use, hints.get(device["name"], ""))
+            row.update(device, device["name"] == in_use, hints.get(device["name"], ""), stand_ins.get(device["name"]))
 
 
 class OutputPage:
@@ -74,7 +78,9 @@ class OutputPage:
     def update(self, state):
         outs = pulse.outputs(state["sinks"])
         chat = state.get("headset", {}).get("chat")
-        self.devices.update(outs, state["output"], {chat: HINTS["chat"]} if chat else None)
+        self.devices.update(outs, state["output"], {chat: HINTS["chat"]} if chat else None,
+                            pulse.stand_in(state["sinks"], state["default_sink"], filters.EQ_NODE, state["eq_on"],
+                                           state["output"]))
         self.eq.update(state["eq_on"], self.ctl.describe(state["output"]))
 
 
@@ -109,7 +115,9 @@ class InputPage:
         self.quiet = False
 
     def update(self, state):
-        self.devices.update(pulse.inputs(state["sources"]), state["input"])
+        self.devices.update(pulse.inputs(state["sources"]), state["input"], None,
+                            pulse.stand_in(state["sources"], state["default_source"], filters.MIC_NODE, state["mic_on"],
+                                           state["input"]))
         self.meter_what.set_text("Clean microphone" if state["default_source"] == filters.MIC_NODE else "")
         self.quiet = True
         self.hear.set_active(state["hearing"])

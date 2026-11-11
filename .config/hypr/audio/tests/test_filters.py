@@ -94,6 +94,15 @@ class Equaliser(unittest.TestCase):
         self.assertGreater(audio.response(treble, 16000), audio.response(treble, 100))
 
 
+class Realtime(unittest.TestCase):
+    def test_filters_never_ask_rtkit_for_realtime(self):
+        # with RTKit installed, the filter's own pipewire process is killed by the kernel within a second
+        for conf in (audio.eq_conf([0.0] * len(audio.BANDS), "sink", "Speakers"), audio.HEADER):
+            rt = next(line for line in conf.splitlines() if "module-rt" in line)
+            self.assertIn("rtkit.enabled = false", rt)
+            self.assertIn("rtportal.enabled = false", rt)
+
+
 class Microphone(unittest.TestCase):
     def test_conf(self):
         text = audio.mic_conf(MIC, 150)

@@ -45,10 +45,12 @@ PRESETS = {
 }
 CUSTOM = "Custom"
 
+# rtportal and rtkit off: with RTKit installed, a filter running as its own pipewire process gets a realtime
+# thread that the kernel kills within a second (SIGKILL), so the equaliser vanished. PipeWire itself keeps realtime.
 HEADER = """context.properties = { log.level = 0 }
 context.spa-libs = { audio.convert.* = audioconvert/libspa-audioconvert support.* = support/libspa-support }
 context.modules = [
-  { name = libpipewire-module-rt args = { nice.level = -11 } flags = [ ifexists nofail ] }
+  { name = libpipewire-module-rt args = { nice.level = -11 rtportal.enabled = false rtkit.enabled = false } flags = [ ifexists nofail ] }
   { name = libpipewire-module-protocol-native }
   { name = libpipewire-module-client-node }
   { name = libpipewire-module-adapter }

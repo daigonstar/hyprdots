@@ -97,5 +97,21 @@ class Levels(unittest.TestCase):
         self.assertAlmostEqual(pulse.meter_level(0.1), 2 / 3, places=3)  # -20 dB
 
 
+
+class StandIn(unittest.TestCase):
+    speakers = {"name": "speakers", "volume": 87, "mute": False}
+    eq = {"name": "hyprdots_eq", "volume": 75, "mute": False}
+
+    def test_the_filters_volume_while_it_is_the_default(self):
+        got = pulse.stand_in([self.speakers, self.eq], "hyprdots_eq", "hyprdots_eq", True, "speakers")
+        self.assertEqual(got, {"speakers": self.eq})
+
+    def test_the_devices_own_otherwise(self):
+        devices = [self.speakers, self.eq]
+        self.assertEqual(pulse.stand_in(devices, "hyprdots_eq", "hyprdots_eq", False, "speakers"), {})  # filter off
+        self.assertEqual(pulse.stand_in(devices, "speakers", "hyprdots_eq", True, "speakers"), {})  # not the default
+        self.assertEqual(pulse.stand_in([self.speakers], "hyprdots_eq", "hyprdots_eq", True, "speakers"), {})  # gone
+
+
 if __name__ == "__main__":
     unittest.main()

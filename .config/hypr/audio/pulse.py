@@ -116,6 +116,16 @@ def current(default: str, filter_node: str, filter_on: bool, filter_device: str 
     return default
 
 
+def stand_in(devices: list[dict], default: str, filter_node: str, filter_on: bool, in_use: str) -> dict:
+    """{device in use: the filter in front of it} while that filter is the default. The volume keys, the bar and the
+    volume pop-up all change the default, so the device's row shows and sets the filter's volume, not the card's own
+    level underneath, which nothing else shows."""
+    if not filter_on or default != filter_node or in_use == filter_node:
+        return {}
+    found = next((d for d in devices if d["name"] == filter_node), None)
+    return {in_use: found} if found else {}
+
+
 def peak(chunk: bytes) -> float:
     """0-1: the loudest sample in a piece of s16le audio."""
     count = len(chunk) // 2
