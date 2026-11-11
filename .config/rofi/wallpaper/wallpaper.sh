@@ -152,6 +152,25 @@ main() {
   fi
 }
 
+# --apply FILE: set it, as a pick from the menu would (the GTK picker, hypr/launcher/wallpicker.py, uses this)
+if [[ "${1:-}" == "--apply" ]]; then
+  [[ -f "${2:-}" ]] || { echo "No such wallpaper: ${2:-}" >&2; exit 1; }
+  if [[ "$2" =~ \.(mp4|mkv|mov|webm|MP4|MKV|MOV|WEBM)$ ]]; then
+    apply_video_wallpaper "$2"
+  else
+    apply_image_wallpaper "$2"
+  fi
+  exit
+fi
+
+# The picker is hyprdots' own GTK window (categories, previews, a monitor round the one you are on). This rofi menu
+# stays as the fallback, and for --rofi.
+picker="$HOME/.config/hypr/launcher/wallpicker.sh"
+if [[ "${1:-}" != "--rofi" && -x "$picker" && -e /usr/lib/libgtk4-layer-shell.so ]] &&
+   python3 -c "import gi; gi.require_version('Gtk4LayerShell', '1.0')" 2>/dev/null; then
+  exec "$picker"
+fi
+
 if pidof rofi >/dev/null; then
   pkill rofi
 fi
