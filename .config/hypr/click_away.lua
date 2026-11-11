@@ -8,7 +8,7 @@ local close = {
     cheatsheet = "pkill -f '[h]ypr/cheatsheet/cheatsheet.py'",
     powermenu = "pkill -f '[p]owermenu/powermenu.py'",
     calendar = 'kill "$(cat "$XDG_RUNTIME_DIR/waybar-calendar.pid")"',
-    ["hyprdots-notes"] = "pkill -USR2 -f '[h]ypr/notes/notes.py'",  -- hides it unless it is pinned
+    ["hyprdots-notes"] = "pkill -USR2 -f '^[^ ]*/[h]yprdots-notes$|[h]ypr/notes/notes.py'",  -- hides it unless it is pinned
     ["quick-tray-overview"] = "pkill -HUP -f '[h]ypr/tray/quick_tray'",
     ["quick-tray"] = "swaync-client -cp -sw",  -- opens and closes with swaync's panel, which swaync 0.12 draws no window for
 }

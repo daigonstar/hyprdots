@@ -546,6 +546,10 @@ if [[ ${#SCRIPT_FILES[@]} -gt 0 ]]; then
   run_cmd "chmod +x $(printf '"%s" ' "${SCRIPT_FILES[@]}")"
 fi
 
+# Notes (Super+I) in Rust: lighter and quicker to open. Until it is built, or if the build fails, Notes runs notes.py
+echo "📝 Building Notes..."
+run_cmd "\"$DOTFILES_DIR/hypr/notes/build.sh\"" || log "WARN" "Could not build Notes in Rust; it uses notes.py. Run ~/.config/hypr/notes/build.sh to try again"
+
 # Thunar's "Open Terminal Here" needs a stand-in for xfce4-mime-helper (installed into ~/.local/bin)
 # and to know which terminal to open; hypr-settings re-runs this when the terminal is changed
 run_cmd "$DOTFILES_DIR/hypr/scripts/exo-terminal.sh"
@@ -729,6 +733,9 @@ run_cmd "sudo mkdir -p /etc/sddm.conf.d" # Ensure directory exists
 run_cmd "sudo cp \"$REPO_DIR/SDDM/sddm.conf\" /etc/sddm.conf.d/sddm.conf"
 
 # Plymouth Configuration
+
+# CPU, graphics card and RAM limits, with the heat guard on (see install/power.sh, and Settings > Performance)
+run_cmd "sudo bash \"$BASE_DIR/install/power.sh\"" || log "WARN" "Could not set up the power service; run sudo $BASE_DIR/install/power.sh to try again"
 
 # Undo for updates, on a btrfs system (see install/snapshots.sh). Last, so the install itself is not what gets kept.
 if [[ "$(findmnt -no FSTYPE / 2>/dev/null)" == btrfs ]] && [[ "${HYPR_SNAPSHOTS:-ask}" != no ]] &&

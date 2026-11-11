@@ -8,13 +8,14 @@ if [[ "${1:-}" == "--append" ]]; then
     shift
     exec python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import notebook; print(notebook.Notebook().append(" ".join(sys.argv[2:])))' "$dir" "$@"
 fi
-signal_it() { pkill -USR1 -f '[h]ypr/notes/notes\.py'; }
+# The Rust build (hyprdots-notes) or notes.py, whichever start.sh ran. One pkill: each one reads every process
+signal_it() { pkill -USR1 -f '^[^ ]*/[h]yprdots-notes$|[h]ypr/notes/notes\.py'; }
 signal_it && exit 0
 # Not running: start it (as the service when the desktop runs them), and ask once it is listening
 if systemctl --user cat hyprdots-notes.service >/dev/null 2>&1; then
     systemctl --user start hyprdots-notes.service
 else
-    LD_PRELOAD="/usr/lib/libgtk4-layer-shell.so${LD_PRELOAD:+:$LD_PRELOAD}" setsid python3 "$dir/notes.py" >/dev/null 2>&1 </dev/null &
+    LD_PRELOAD="/usr/lib/libgtk4-layer-shell.so${LD_PRELOAD:+:$LD_PRELOAD}" setsid "$dir/start.sh" >/dev/null 2>&1 </dev/null &
 fi
 for _ in $(seq 50); do
     [[ -e "${XDG_RUNTIME_DIR:-/tmp}/hyprdots-notes.ready" ]] && signal_it && exit 0

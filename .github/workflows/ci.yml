@@ -77,6 +77,24 @@ jobs:
         working-directory: .config/hypr/launcher
         run: /usr/bin/python3 -m unittest discover -s tests -v
 
+  notes-rust:
+    name: Notes (Rust) builds and passes its tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: archlinux:latest   # the same GTK 4 and gtk4-layer-shell as the desktop
+    steps:
+      - run: pacman -Syu --noconfirm --needed git rust gcc pkgconf gtk4 gtk4-layer-shell python
+      - uses: actions/checkout@v4
+      - name: Tests, including the check that it formats text exactly as notes.py does
+        working-directory: .config/hypr/notes/rs
+        run: cargo test --release --locked
+      - name: The build script builds and installs it, and the second run sees nothing changed
+        run: |
+          .config/hypr/notes/build.sh
+          ~/.local/lib/hyprdots/hyprdots-notes --version
+          .config/hypr/notes/build.sh | grep -q "up to date"
+          echo "a thought" | xargs ~/.local/lib/hyprdots/hyprdots-notes --append | xargs cat | grep -q "a thought"
+
   installer:
     name: Installer dry run
     runs-on: ubuntu-latest

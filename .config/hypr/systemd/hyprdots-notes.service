@@ -7,7 +7,8 @@ StartLimitIntervalSec=120
 StartLimitBurst=5
 
 [Service]
-ExecStart=/usr/bin/python3 %h/.config/hypr/notes/notes.py
+# The Rust build when it is installed (notes/build.sh), notes.py otherwise
+ExecStart=%h/.config/hypr/notes/start.sh
 # gtk4-layer-shell has to be loaded before GTK itself
 Environment=LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so
 Environment=PYTHONUNBUFFERED=1
