@@ -1258,6 +1258,28 @@ class Tray(Gtk.Window):
             self.theme.load_from_data(b"")  # missing, or half written: the defaults show until the next write
 
 
+POWER_STATUS = Path("/run/hyprdots-power/status.json")  # from hyprdots-power.service (install/power/powerd.py)
+
+
+class PowerNotices:
+    """Says when the heat guard holds the CPU or graphics card back, and when it lets go. Only events from after the
+    tray started: a restart of the tray does not repeat old ones."""
+    def __init__(self):
+        self.seen = time.time()
+
+    def check(self):
+        try:
+            events = json.loads(POWER_STATUS.read_text()).get("events", [])
+        except (OSError, ValueError, AttributeError):
+            return True
+        for e in events:
+            if e.get("time", 0) > self.seen:
+                urgency = "critical" if "held back" in e.get("text", "") else "normal"
+                subprocess.Popen(["notify-send", "-u", urgency, "-a", "Heat guard", "-i", "temperature-symbolic", "Heat guard", e["text"]])
+        self.seen = max([self.seen] + [e.get("time", 0) for e in events])
+        return True
+
+
 def main():
     lock = open(LOCK, "w")
     try:
@@ -1275,6 +1297,7 @@ def main():
     GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, lambda: tray.switcher.step(1) or True)
     GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGWINCH, lambda: tray.switcher.step(-1) or True)
     GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGHUP, lambda: tray.overview.toggle() or True)
+    GLib.timeout_add_seconds(5, PowerNotices().check)
     Gtk.main()
     return 0
 

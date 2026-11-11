@@ -111,6 +111,8 @@ Each update lists what changed, and keeps the list in `~/.local/state/hyprdots/l
 
 On a btrfs system the installer offers to keep a copy of the system from before each `pacman` or `paru` run, using snapper and snap-pac. `hyprundo` puts the last run back. It cannot undo an update that changed the kernel, and your home folder is never touched. To turn it on later: `sudo install/snapshots.sh`.
 
+The power service (`install/power.sh`, set up by the installer) applies the Performance page as root. Its heat guard turns CPU boost off, and the graphics card down to its lowest power limit, when either stays too hot for 15 seconds, and tells you so; it puts them back once they have cooled.
+
 A graphics card without its drivers is mentioned at login, and `update.sh` offers to install them.
 
 To test a real install, `install/tests/vm/vm.sh test` takes a blank Arch virtual machine through the installer and two logins. It needs qemu and KVM, not sudo.
@@ -148,6 +150,7 @@ Click the cog in the quick tray (or run `~/.config/hypr/scripts/settings.sh`) fo
 | Page | What you can change |
 | --- | --- |
 | User | Your name, your picture (shown on the quick tray and lock screen) and your password |
+| Performance | Full speed, Balanced or Cool and stable for the CPU and graphics card, a heat guard that holds them back when they stay too hot, and the RAM's speed against its rating |
 | Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |
 | Calendar | Add, rename or remove calendars (links stay private) |

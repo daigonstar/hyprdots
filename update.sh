@@ -230,13 +230,27 @@ main() {
 
   install_new_packages
   [[ "${SKIP_PACKAGES:-0}" == "1" ]] || bash "$repo_root/install/surface.sh" || true
+  # Notes in Rust, rebuilt only when its source changed, before the services restart; notes.py stands in if it fails
+  [[ -f "$repo_root/.config/hypr/notes/build.sh" ]] && { bash "$repo_root/.config/hypr/notes/build.sh" || true; }
   apply_symlinks
   install_missing_gpu_drivers
+  update_power_service
   "$HOME/.config/hypr/scripts/first-colours.sh" || true
   # Re-apply the settings Theme page to the files the reset just put back (best-effort)
   PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh || true
   show_changes "$before"
   exit 0
+}
+
+# The CPU, graphics card and RAM limits service runs a root-owned copy, so a newer one needs sudo to go in
+update_power_service() {
+  [[ "${SKIP_PACKAGES:-0}" == "1" ]] && return 0
+  cmp -s "$repo_root/install/power/powerd.py" /usr/local/lib/hyprdots/powerd.py && return 0
+  if [[ -t 0 ]]; then
+    sudo bash "$repo_root/install/power.sh" || echo "Could not update the power service: run sudo $repo_root/install/power.sh" >&2
+  else
+    echo "The power service needs updating: run sudo $repo_root/install/power.sh"
+  fi
 }
 
 # A graphics card without its drivers: offered in a terminal, otherwise only mentioned

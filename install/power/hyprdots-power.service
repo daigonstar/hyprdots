@@ -1,0 +1,15 @@
+[Unit]
+Description=Keeps the CPU, graphics card and RAM inside safe limits (hyprdots)
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/lib/hyprdots/powerd.py
+Restart=on-failure
+RuntimeDirectory=hyprdots-power
+RuntimeDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
