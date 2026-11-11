@@ -18,14 +18,7 @@ rofi_theme="$HOME/.config/rofi/wallpaper/wallpaper.rasi"
 thumbDIR="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper-thumbs-fit"
 mkdir -p "$thumbDIR"
 
-# Kill existing wallpaper daemons
-kill_wallpaper_for_video() {
-  awww kill 2>/dev/null
-  pkill mpvpaper 2>/dev/null
-  pkill swaybg 2>/dev/null
-  pkill hyprpaper 2>/dev/null
-}
-
+# Kill existing wallpaper daemons (a picture stops a playing video; wallust.sh's sync would too)
 kill_wallpaper_for_image() {
   pkill mpvpaper 2>/dev/null
   pkill swaybg 2>/dev/null
@@ -95,6 +88,10 @@ menu() {
 current_row() {
   local cur i
   cur=$(awww query 2>/dev/null | grep -o 'image: .*' | head -n1 | sed 's/^image: //')
+  # a video shows as its still: start on the video itself
+  if pgrep -x mpvpaper >/dev/null && [[ -e "$HOME/.config/rofi/.current_video" ]]; then
+    cur=$(readlink -f "$HOME/.config/rofi/.current_video")
+  fi
   for i in "${!PICS[@]}"; do
     [[ "${PICS[$i]}" == "$cur" ]] && { echo $((i + 1)); return; }
   done
@@ -124,14 +121,16 @@ apply_image_wallpaper() {
   fi
 }
 
+# A video: video-wallpaper.sh shows a still frame of it (colours, lock screen and login go by that), then plays it over
 apply_video_wallpaper() {
   local video_path="$1"
   if ! command -v mpvpaper &>/dev/null; then
-    notify-send "mpvpaper not found"
+    notify-send "Video wallpaper" "mpvpaper is not installed: paru -S mpvpaper"
     return 1
   fi
-  kill_wallpaper_for_video
-  mpvpaper '*' -o "load-scripts=no no-audio --loop" "$video_path" &
+  pkill swaybg 2>/dev/null
+  pkill hyprpaper 2>/dev/null
+  bash "$SCRIPTSDIR/video-wallpaper.sh" start "$video_path"
 }
 
 # Main function

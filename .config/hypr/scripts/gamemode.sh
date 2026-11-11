@@ -31,6 +31,7 @@ if [ "$HYPRGAMEMODE" = "true" ] ; then
     '
 
     awww kill
+    bash "$HOME/.config/hypr/scripts/video-wallpaper.sh" stop
     notify-send -e -u low -i "$notif" " Gamemode:" " enabled"
     exit
 else
@@ -42,6 +43,7 @@ else
         sleep 0.1
     done
     awww img "$(readlink -f "$HOME/.config/rofi/.current_wallpaper")"
+    bash "$HOME/.config/hypr/scripts/video-wallpaper.sh" sync  # a video wallpaper plays again
     hyprctl reload
     notify-send -e -u normal -i "$notif" " Gamemode:" " disabled"
     exit

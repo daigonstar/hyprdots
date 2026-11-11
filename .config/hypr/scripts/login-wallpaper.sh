@@ -11,3 +11,5 @@ if [[ -z "$wallpaper" ]]; then
     awww img "$wallpaper"
 fi
 wallust run "$wallpaper" && PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh
+# a video wallpaper: awww shows its still, and this plays the video over it again
+bash "$HOME/.config/hypr/scripts/video-wallpaper.sh" sync

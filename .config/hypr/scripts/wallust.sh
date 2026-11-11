@@ -28,6 +28,9 @@ if [ -f "$wallpaper_path" ]; then
     PYTHONPATH="$HOME/.config/hypr/settings" python3 -m hyprsettings.design refresh
     hyprctl reload
 
+    # A video wallpaper plays only while its still is the wallpaper: start it, or stop it for a picture
+    bash "$HOME/.config/hypr/scripts/video-wallpaper.sh" sync
+
     # 4. Refresh Waybar live
     # SIGUSR2 tells Waybar to re-read CSS without restarting
     killall -SIGUSR2 waybar
