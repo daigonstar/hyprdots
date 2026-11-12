@@ -16,3 +16,4 @@ Every dependency and design choice, with the reason. Newest at the bottom.
 | 2026-11-12 | The emoji picker types with `wtype` after it closes, and falls back to `wl-copy` plus a notification | Same as rofimoji did. `wl-copy` keeps the clipboard alive after the picker exits |
 | 2026-11-12 | Rust in this repo is formatted at 120 columns (`rustfmt.toml`) | Matches the Python and Notes; lets CI run `cargo fmt --check` |
 | 2026-11-12 | Every emoji pick is also copied to the clipboard, not only when typing fails | Electron apps (the Claude app) ignore what `wtype` types without it failing, so Ctrl+V has to work too. User's choice |
+| 2026-11-12 | A picked emoji is pasted (Hyprland `send_shortcut` Ctrl+V) rather than typed, except in terminals, which still get `wtype` | A real key press from the compositor reaches Electron apps; terminals do not paste on Ctrl+V |

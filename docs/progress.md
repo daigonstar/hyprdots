@@ -20,7 +20,7 @@ How a new Rust program fits in, following Notes (`.config/hypr/notes/rs`):
 
 | Feature | Replaces | Bind (id) | Status |
 |---|---|---|---|
-| Emoji picker | rofimoji + wtype (`scripts/emoji.sh`) | `SUPER + period` (`emoji`) | **Built** (`.config/hypr/emoji`). 15 tests, CI job `emoji-rust`. Checked on the desktop: opens, themed, search, arrow keys, Escape, toggle. Not yet checked by hand: Enter typing into an app, Shift+Enter copy, touch mode |
+| Emoji picker | rofimoji + wtype (`scripts/emoji.sh`) | `SUPER + period` (`emoji`) | **Built** (`.config/hypr/emoji`). 15 tests, CI job `emoji-rust`. Checked on the desktop: opens, themed, search, arrow keys, Escape, toggle. Checked: a pick reaches the clipboard. Not yet checked by hand: pasting into the Claude app, typing into a terminal, Shift+Enter copy, touch mode |
 | Clipboard history window | `clipvault list \| rofi -dmenu` | `SUPER + CTRL + C` (`clipboard`) | Not started. clipvault stays the store, and this is a window over it |
 
 ## Log

@@ -1,4 +1,4 @@
-//! Emoji picker (Super+.): search or browse, and the emoji you pick is copied and typed into the window you were in.
+//! Emoji picker (Super+.): search or browse, and the emoji you pick is copied and put into the window you were in.
 //! Recent picks, favourites and a skin tone are remembered. Replaces rofimoji, which scripts/emoji.sh still falls back to.
 //!
 //!   hyprdots-emoji             the picker
@@ -42,14 +42,16 @@ fn command(program: &str) -> Command {
     c
 }
 
-/// Every pick goes on the clipboard, and Enter or a click also types it. Some apps (Electron ones, such as the Claude
-/// app) ignore what wtype types, so Ctrl+V is always there as well.
+/// Every pick goes on the clipboard, and Enter or a click also puts it in the window you were in: pasted with Ctrl+V
+/// sent by Hyprland, or typed with wtype in a terminal (where Ctrl+V is not paste). Pasting is what reaches Electron
+/// apps such as the Claude app, which ignore what wtype types.
 fn deliver(pick: Pick) {
     let copied = command("wl-copy").arg("--").arg(&pick.emoji).status().is_ok_and(|s| s.success());
     if pick.action == Action::Type {
         // The window you were in gets the keyboard back once the picker has gone
         std::thread::sleep(Duration::from_millis(120));
-        if command("wtype").arg("--").arg(&pick.emoji).status().is_ok_and(|s| s.success()) {
+        let paste = copied && !active_class().is_some_and(|c| is_terminal(&c));
+        if (paste && send_paste()) || command("wtype").arg("--").arg(&pick.emoji).status().is_ok_and(|s| s.success()) {
             return;
         }
     }
@@ -64,4 +66,53 @@ fn deliver(pick: Pick) {
         }
     };
     let _ = command("notify-send").args(["-a", "Emoji picker", "-t", "2500", "--", &title, body]).status();
+}
+
+/// The class of the focused window, from Hyprland.
+fn active_class() -> Option<String> {
+    let out = command("hyprctl").args(["activewindow", "-j"]).output().ok()?;
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    json.get("class")?.as_str().map(str::to_string)
+}
+
+/// Ctrl+V to the focused window, as a real key press from Hyprland. hyprctl exits 0 even when the call fails, so its
+/// output is what tells.
+fn send_paste() -> bool {
+    command("hyprctl")
+        .args(["dispatch", r#"hl.dsp.send_shortcut({ mods = "CTRL", key = "V" })"#])
+        .output()
+        .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "ok")
+}
+
+/// Terminals paste with Ctrl+Shift+V, and some send Ctrl+V on to the program inside, so they get typed into instead.
+fn is_terminal(class: &str) -> bool {
+    let class = class.to_lowercase();
+    [
+        "ghostty",
+        "kitty",
+        "foot",
+        "alacritty",
+        "wezterm",
+        "konsole",
+        "terminal",
+        "xterm",
+        "console",
+        "terminator",
+        "tilix",
+    ]
+    .iter()
+    .any(|t| class.contains(t))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn terminals() {
+        for class in ["com.mitchellh.ghostty", "kitty", "footclient", "Alacritty", "org.wezfurlong.wezterm", "xterm"] {
+            assert!(super::is_terminal(class), "{class}");
+        }
+        for class in ["com.anthropic.Claude", "firefox", "org.gnome.TextEditor", "code", ""] {
+            assert!(!super::is_terminal(class), "{class}");
+        }
+    }
 }
