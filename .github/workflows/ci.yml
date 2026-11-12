@@ -95,6 +95,26 @@ jobs:
           .config/hypr/notes/build.sh | grep -q "up to date"
           echo "a thought" | xargs ~/.local/lib/hyprdots/hyprdots-notes --append | xargs cat | grep -q "a thought"
 
+  emoji-rust:
+    name: Emoji picker (Rust) builds and passes its tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: archlinux:latest   # the same GTK 4 and gtk4-layer-shell as the desktop
+    steps:
+      - run: pacman -Syu --noconfirm --needed git rust gcc pkgconf gtk4 gtk4-layer-shell
+      - uses: actions/checkout@v4
+      - name: Tests, formatting and lints
+        working-directory: .config/hypr/emoji/rs
+        run: |
+          cargo test --release --locked
+          cargo fmt --check
+          cargo clippy --release --locked --all-targets -- -D warnings
+      - name: The build script builds and installs it, and the second run sees nothing changed
+        run: |
+          .config/hypr/emoji/build.sh
+          ~/.local/lib/hyprdots/hyprdots-emoji --version
+          .config/hypr/emoji/build.sh | grep -q "up to date"
+
   installer:
     name: Installer dry run
     runs-on: ubuntu-latest

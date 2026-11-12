@@ -12,3 +12,6 @@ Every dependency and design choice, with the reason. Newest at the bottom.
 | 2026-11-12 | **Full migration shelved. New features are written in Rust, and existing Python stays Python** | Large cost (36k lines, two big GUIs) for little gain: Python is already portable, and the real gaps are laptop and tablet. See `progress.md` |
 | 2026-11-12 | New Rust programs use gtk4-rs + gtk4-layer-shell, not iced | Matches Notes and every existing overlay. No spike is needed, and the theme works the same way |
 | 2026-11-12 | Clipboard history keeps clipvault as the store | It already persists and dedupes. The new work is the window over it |
+| 2026-11-12 | Emoji data is generated from Unicode's `emoji-test.txt` and the CLDR English annotations into `emoji/rs/data/emoji.tsv`, built into the binary | Gives keywords ("happy" finds 😀) and exact skin tone versions. The `emojis` crate has no keywords. Nothing is downloaded at run time; `data/update.sh` refreshes it |
+| 2026-11-12 | The emoji picker types with `wtype` after it closes, and falls back to `wl-copy` plus a notification | Same as rofimoji did. `wl-copy` keeps the clipboard alive after the picker exits |
+| 2026-11-12 | Rust in this repo is formatted at 120 columns (`rustfmt.toml`) | Matches the Python and Notes; lets CI run `cargo fmt --check` |

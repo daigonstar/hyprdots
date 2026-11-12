@@ -1,0 +1,18 @@
+[package]
+name = "hyprdots-emoji"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtk = { version = "0.11.5", package = "gtk4", features = ["v4_12"] }
+gtk4-layer-shell = "0.8.1"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[profile.release]
+# Small and quick to load: one unit, no unwinding tables, symbols stripped
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

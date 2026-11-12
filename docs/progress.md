@@ -20,10 +20,12 @@ How a new Rust program fits in, following Notes (`.config/hypr/notes/rs`):
 
 | Feature | Replaces | Bind (id) | Status |
 |---|---|---|---|
-| Emoji picker | rofimoji + wtype (`scripts/emoji.sh`) | `SUPER + period` (`emoji`) | Not started |
+| Emoji picker | rofimoji + wtype (`scripts/emoji.sh`) | `SUPER + period` (`emoji`) | **Built** (`.config/hypr/emoji`). 15 tests, CI job `emoji-rust`. Checked on the desktop: opens, themed, search, arrow keys, Escape, toggle. Not yet checked by hand: Enter typing into an app, Shift+Enter copy, touch mode |
 | Clipboard history window | `clipvault list \| rofi -dmenu` | `SUPER + CTRL + C` (`clipboard`) | Not started. clipvault stays the store, and this is a window over it |
 
 ## Log
 
 - 2026-11-12: Phase 0 inventory (`docs/INVENTORY.md`), baseline (884 Python + 44 Rust tests pass), settings
   characterisation tests. Then the full migration was shelved for the policy above.
+- 2026-11-12: emoji picker in Rust (gtk4-rs + layer-shell). `scripts/emoji.sh` prefers it and falls back to rofimoji;
+  installer and `update.sh` run `emoji/build.sh`.
