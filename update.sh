@@ -232,6 +232,8 @@ main() {
   [[ "${SKIP_PACKAGES:-0}" == "1" ]] || bash "$repo_root/install/surface.sh" || true
   # Notes in Rust, rebuilt only when its source changed, before the services restart; notes.py stands in if it fails
   [[ -f "$repo_root/.config/hypr/notes/build.sh" ]] && { bash "$repo_root/.config/hypr/notes/build.sh" || true; }
+  # The emoji picker in Rust, the same way; rofimoji stands in if it fails
+  [[ -f "$repo_root/.config/hypr/emoji/build.sh" ]] && { bash "$repo_root/.config/hypr/emoji/build.sh" || true; }
   apply_symlinks
   install_missing_gpu_drivers
   update_power_service

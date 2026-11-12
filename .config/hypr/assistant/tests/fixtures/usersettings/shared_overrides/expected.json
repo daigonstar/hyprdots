@@ -1,0 +1,12 @@
+{
+  "model": "qwen3:8b",
+  "temperature": 0.5,
+  "max_steps": 12,
+  "show": true,
+  "sites": [
+    "a"
+  ],
+  "nested": {
+    "x": 1
+  }
+}

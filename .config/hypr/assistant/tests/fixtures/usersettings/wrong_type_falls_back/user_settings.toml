@@ -1,0 +1,4 @@
+[assistant]
+model = 3
+max_steps = "ten"
+sites = "x"

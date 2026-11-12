@@ -549,6 +549,9 @@ fi
 # Notes (Super+I) in Rust: lighter and quicker to open. Until it is built, or if the build fails, Notes runs notes.py
 echo "📝 Building Notes..."
 run_cmd "\"$DOTFILES_DIR/hypr/notes/build.sh\"" || log "WARN" "Could not build Notes in Rust; it uses notes.py. Run ~/.config/hypr/notes/build.sh to try again"
+# The emoji picker (Super+.) in Rust. Until it is built, or if the build fails, Super+. opens rofimoji
+echo "😀 Building the emoji picker..."
+run_cmd "\"$DOTFILES_DIR/hypr/emoji/build.sh\"" || log "WARN" "Could not build the emoji picker; Super+. uses rofimoji. Run ~/.config/hypr/emoji/build.sh to try again"
 
 # Thunar's "Open Terminal Here" needs a stand-in for xfce4-mime-helper (installed into ~/.local/bin)
 # and to know which terminal to open; hypr-settings re-runs this when the terminal is changed

@@ -1,0 +1,3 @@
+# The repo's Python and Notes use 120 columns
+max_width = 120
+use_small_heuristics = "Max"
