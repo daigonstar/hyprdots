@@ -1,0 +1,3 @@
+[assistant]
+model = "qwen3:8b"
+max_steps = 12

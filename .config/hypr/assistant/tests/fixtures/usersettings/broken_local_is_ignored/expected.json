@@ -1,0 +1,12 @@
+{
+  "model": "shared",
+  "temperature": 0.5,
+  "max_steps": 8,
+  "show": true,
+  "sites": [
+    "a"
+  ],
+  "nested": {
+    "x": 1
+  }
+}
