@@ -1,5 +1,8 @@
 # Hyprdots: Python to Rust Migration Plan
 
+> **Shelved 2026-11-12.** This plan is no longer followed. New features are written in Rust, and existing Python stays
+> as it is. See `docs/progress.md`. This text is kept for reference.
+
 Handoff document for a local coding session. Read all of it before touching anything. Corrections found in Phase 0 are
 in `docs/INVENTORY.md` section 0 and take precedence where they conflict with this text (keybinds, clipboard, scope).
 

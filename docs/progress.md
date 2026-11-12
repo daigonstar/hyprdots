@@ -1,30 +1,29 @@
-# Rust migration: progress
+# Rust: progress
 
-The plan is `docs/rust-migration-plan.md`. Each session: read this file, then the current phase of the plan.
+## Policy (decided 2026-11-12)
 
-| Phase | Status | Notes |
-|---|---|---|
-| 0. Inventory and spec | **Waiting for review** | `docs/INVENTORY.md`. Baseline: all 884 Python tests and 44 Rust notes tests pass. One characterisation suite added (settings). |
-| 1. Workspace, settings, theme | Not started | Blocked on Phase 0 review |
-| 2. iced spike | Not started | |
-| 3. `core`, events, TUI | Not started | |
-| 4. `clipboardd` | Not started | Scope question: clipvault already does this (INVENTORY 0.2) |
-| 5. Monitor, calendar, Waybar | Not started | |
-| 6. Palette | Not started | |
-| 7. `dnd-core` | Not started | |
-| 8. Assistant GUI | Not started | |
-| 9. Settings UI, installers | Not started | Larger than the plan assumed (INVENTORY 0.1) |
-| 10. Windows, macOS | Not started | |
+**New features are written in Rust. Existing Python stays Python.** The full migration in
+`docs/rust-migration-plan.md` is shelved: it would cost months and fix none of the gaps in `AUDIT.md`. An existing
+Python program is ported only for a measured reason, such as slow start-up, running as root or crashes.
 
-## Open questions for the user (Phase 0 exit)
+How a new Rust program fits in, following Notes (`.config/hypr/notes/rs`):
 
-1. Agree the port order in INVENTORY section 7?
-2. Which out-of-plan programs are in scope (tray, tablet mode, Sound, dock, welcome, game-autoworkspace, installer TUI,
-   `powerd`)? Default suggestion: they stay Python for now.
-3. Clipboard: keep clipvault and add a palette mode, or build `clipboardd`?
+- gtk4-rs + gtk4-layer-shell, the same as the notes window and the Python overlays, so it looks and behaves like them.
+- Colours and font from the Theme page, read the way `notes/rs/src/theme.rs` reads them.
+- A `build.sh` builds it into `~/.local/lib/hyprdots/` when its source changes. The installer and `update.sh` run it.
+- The launch script falls back to the tool it replaces when the binary is missing, so a failed build never leaves a
+  keybind dead.
+- The keybind keeps its id in `keybinds.lua`, so a custom combo from Settings still works.
+- Tests run in CI like `notes-rust`. Any Python logic it shares (settings, theme) gets a parity test.
+
+## Features
+
+| Feature | Replaces | Bind (id) | Status |
+|---|---|---|---|
+| Emoji picker | rofimoji + wtype (`scripts/emoji.sh`) | `SUPER + period` (`emoji`) | Not started |
+| Clipboard history window | `clipvault list \| rofi -dmenu` | `SUPER + CTRL + C` (`clipboard`) | Not started. clipvault stays the store, and this is a window over it |
 
 ## Log
 
-- 2026-11-12, Phase 0: inventory written, hooks checked against `hypr_assistant_app.py:install_hooks`, baseline
-  recorded, `assistant/tests/test_usersettings.py` + fixtures added. Branch
-  `claude/hyprdots-python-rust-migration-2b9e2d`.
+- 2026-11-12: Phase 0 inventory (`docs/INVENTORY.md`), baseline (884 Python + 44 Rust tests pass), settings
+  characterisation tests. Then the full migration was shelved for the policy above.
