@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 pub const COLUMNS: u32 = 10;
 const RECENT: usize = 0;
@@ -19,6 +20,8 @@ const FAVOURITES: usize = 1;
 const FIRST_GROUP: usize = 2;
 const TONE_HANDS: [&str; 6] = ["✋", "✋🏻", "✋🏼", "✋🏽", "✋🏾", "✋🏿"];
 const TONE_NAMES: [&str; 6] = ["Default", "Light", "Medium-light", "Medium", "Medium-dark", "Dark"];
+/// Enter presses this soon after opening are ignored: they belong to whatever launched the picker
+const ENTER_GRACE: Duration = Duration::from_millis(300);
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Action {
@@ -105,6 +108,9 @@ struct Ui {
     preview: gtk::Label,
     name: gtk::Label,
     pick: Rc<RefCell<Option<Pick>>>,
+    /// When the window opened, and the Enter press waiting for its release (see `key`)
+    opened: Instant,
+    enter: Cell<Option<Action>>,
 }
 
 pub fn run(pick: Rc<RefCell<Option<Pick>>>) -> glib::ExitCode {
@@ -282,6 +288,8 @@ fn build(app: &gtk::Application, pick: Rc<RefCell<Option<Pick>>>) {
         preview,
         name,
         pick,
+        opened: Instant::now(),
+        enter: Cell::new(None),
     });
     connect(&ui, &backdrop, &panel);
     ui.refresh();
@@ -342,6 +350,8 @@ fn connect(ui: &Rc<Ui>, backdrop: &gtk::Box, panel: &gtk::Box) {
     keys.set_propagation_phase(gtk::PropagationPhase::Capture);
     let me = ui.clone();
     keys.connect_key_pressed(move |_, key, _, mods| me.key(key, mods));
+    let me = ui.clone();
+    keys.connect_key_released(move |_, key, _, _| me.key_released(key));
     ui.win.add_controller(keys);
 }
 
@@ -505,14 +515,26 @@ impl Ui {
         self.select(next as u32);
     }
 
+    fn key_released(&self, key: gdk::Key) {
+        if matches!(key, gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::ISO_Enter)
+            && let Some(action) = self.enter.take()
+        {
+            self.choose(self.selection.selected(), action);
+        }
+    }
+
     fn key(&self, key: gdk::Key, mods: gdk::ModifierType) -> glib::Propagation {
         let ctrl = mods.contains(gdk::ModifierType::CONTROL_MASK);
         let shift = mods.contains(gdk::ModifierType::SHIFT_MASK);
         let columns = COLUMNS as i64;
         match key {
             gdk::Key::Escape => self.close(),
+            // Picks on release, and only after a press made here: the Enter that ran the launch command is often
+            // still down when the window opens, and would otherwise pick the first emoji at once
             gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::ISO_Enter => {
-                self.choose(self.selection.selected(), if shift { Action::Copy } else { Action::Type })
+                if self.opened.elapsed() >= ENTER_GRACE {
+                    self.enter.set(Some(if shift { Action::Copy } else { Action::Type }));
+                }
             }
             gdk::Key::Left => self.move_by(-1),
             gdk::Key::Right => self.move_by(1),
