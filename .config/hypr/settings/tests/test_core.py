@@ -92,6 +92,13 @@ class Schema(unittest.TestCase):
             if s.section == "hyprland":
                 self.assertTrue(s.lua, s.id)
 
+    def test_the_video_wallpaper_toggles_are_real_settings(self):
+        shared = tomledit.read(_paths.HYPR / "user_settings.toml")
+        for key in ("pause_for_models", "pause_for_games"):
+            s = schema.BY_ID[f"wallpaper.{key}"]
+            self.assertEqual((s.kind, s.default, s.page), ("bool", True, "Theme"))
+            self.assertIs(shared["wallpaper"][key], True)
+
     def test_every_assistant_and_monitor_key_exists_in_the_shared_file(self):
         shared = tomledit.read(_paths.HYPR / "user_settings.toml")
         for s in schema.SETTINGS:

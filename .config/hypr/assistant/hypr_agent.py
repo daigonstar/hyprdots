@@ -32,6 +32,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import contextlib
 import threading
 import time
 import urllib.error
@@ -610,6 +611,66 @@ SAMPLING = {"temperature": 0.3, "repeat_penalty": 1.1, "num_predict": 6144}
 # Used for one retry when Ollama aborts a response that got stuck repeating itself
 LOOP_RETRY_SAMPLING = {"temperature": 0.8, "repeat_penalty": 1.25, "num_predict": 4096}
 
+def new_session():
+    """Forgets this conversation the way closing the assistant would: what was said, the images it remembers and what
+    it read. Choices made this session (approvals, the mode, the model) stay."""
+    HISTORY.clear()
+    if SESSION_FILE[0]:
+        try:
+            open(SESSION_FILE[0], "w").close()
+        except OSError:
+            pass
+    IMAGE_NOTES.clear()
+    LAST_IMAGE[0] = None
+    for reads in RESEARCH.values():
+        reads.clear()
+    RESEARCH_START.clear()
+    CURRENT_USER_TEXT[0] = ""
+
+# --- A video wallpaper is stopped while a model is working ---
+# The graphics card draws the desktop and runs the model, and a crash on 14 November began with the video wallpaper's
+# process and a big prompt on the same card. Holding the wallpaper off while the model runs removes that overlap; the
+# still frame the video was made from is under it, so nothing visible changes. The hold belongs to this process, so if
+# the assistant dies the wallpaper comes back by itself.
+WALLPAPER_PAUSE = (usersettings.section("wallpaper", {"pause_for_models": True, "pause_for_games": True})["pause_for_models"]
+                   and not os.environ.get("HYPRDOTS_NO_WALLPAPER"))  # the tests set it so they never touch your real wallpaper
+_wallpaper_users = [0]
+_wallpaper_lock = threading.Lock()
+
+def _wallpaper(action):
+    script = os.path.join(usersettings.HYPR_DIR, "scripts", "video-wallpaper.sh")
+    if not os.path.exists(script):
+        return
+    command = ["bash", script, action, "model", str(os.getpid())]
+    try:
+        if action == "hold":  # finished before the model starts
+            subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        else:
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+@contextlib.contextmanager
+def wallpaper_paused():
+    """Stops a video wallpaper for as long as the model is working, and plays it again after. Nested uses (an image
+    question inside a request) count once."""
+    if not WALLPAPER_PAUSE:
+        yield
+        return
+    with _wallpaper_lock:
+        _wallpaper_users[0] += 1
+        first = _wallpaper_users[0] == 1
+    if first:
+        _wallpaper("hold")
+    try:
+        yield
+    finally:
+        with _wallpaper_lock:
+            _wallpaper_users[0] -= 1
+            last = _wallpaper_users[0] == 0
+        if last:
+            _wallpaper("release")
+
 # --- Live reasoning display ---
 THINK_EFFORTS = ("low", "medium", "high")
 THINK = {"show": SETTINGS["show_thinking"], "effort": SETTINGS["think_effort"] if SETTINGS["think_effort"] in THINK_EFFORTS else "medium"}
@@ -731,13 +792,14 @@ def _reasoning_chat(model, messages, tools, options, spinner):
                 'prompt_eval_count': _get(last, 'prompt_eval_count'), 'eval_count': _get(last, 'eval_count')}
     raise RuntimeError(f"{model} rejected every thinking mode")
 
-def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=False, think=None):
+def chat(model, messages, label="Thinking", tools=None, num_ctx=None, reason=False, think=None, options=None):
     """One model call. reason=True streams it and shows the model's reasoning live.
-    think=False asks a thinking model to answer straight away (used for image reading, where it only adds delay)."""
+    think=False asks a thinking model to answer straight away (used for image reading, where it only adds delay).
+    options overrides sampling settings for this call, such as num_predict to cap how long the reply can run."""
     spinner = Spinner(label)
     with spinner:
         for sampling in (SAMPLING, LOOP_RETRY_SAMPLING):
-            options = {"num_ctx": num_ctx or NUM_CTX, **sampling}
+            options = {"num_ctx": num_ctx or NUM_CTX, **sampling, **(options or {})}
             try:
                 if reason:
                     return _reasoning_chat(model, messages, tools, options, spinner)
@@ -868,13 +930,14 @@ VISION_SUFFIX = ("\n\nAnswer the question first. Then describe the image thoroug
 def analyze_image(path, question, label="Analyzing image", source="image"):
     """Asks the vision model about an image file and remembers its answer for the text model."""
     try:
-        response = chat(vision_model(), [
-            {
-                'role': 'user',
-                'content': question + VISION_SUFFIX,
-                'images': [path]
-            }
-        ], label, num_ctx=vision_num_ctx(), think=False)
+        with wallpaper_paused():
+            response = chat(vision_model(), [
+                {
+                    'role': 'user',
+                    'content': question + VISION_SUFFIX,
+                    'images': [path]
+                }
+            ], label, num_ctx=vision_num_ctx(), think=False)
         text = (response['message']['content'] or "").strip()
     except Exception as e:
         return f"Vision Analysis Failed (is {vision_model()} pulled, and can it read images?): {str(e)}"
@@ -4050,6 +4113,10 @@ def session_transcript():
     return head + "\n".join(reversed(shown))
 
 def process_prompt(user_input):
+    with wallpaper_paused():
+        return _answer(user_input)
+
+def _answer(user_input):
     now = datetime.datetime.now().astimezone()
     stamp = f"{now.strftime('%A %d %B %Y, %H:%M')} {now.tzname()}"
     messages = [{'role': 'system', 'content': agent_modes.system_prompt(SYSTEM_PROMPT) + ("" if agent_modes.fiction() else f"\n\nThe current local date and time is {stamp}. Your training data is older than this, so treat anything time-sensitive as possibly out of date. Use the date_info tool for date arithmetic.\n\n" + build_context())}]
@@ -4778,8 +4845,7 @@ CONTRADICTED - the evidence says otherwise
 UNBACKED - the evidence does not mention it
 Judge only whether each fact is true according to the evidence, never the tone, framing, opinions or what the draft implies: if the evidence states the same value or feature in any wording, it is BACKED. Use CONTRADICTED only when the evidence states a different value or the opposite. A fact stated in the user's request is NOT evidence, and neither is anything the assistant said earlier. Skip names and wording that simply repeat the user's request, opinions, advice and common general knowledge that is not about a specific product, model, version, price or recent event.
 
-Write one line per claim, starting with the verdict word, and nothing else. For example:
-BACKED | "uses 140 W at load" | the spec page in the evidence says 140 W
+Check every claim, but write a line only for the ones that are UNBACKED or CONTRADICTED, starting with the verdict word, and nothing else. Never write a line for a BACKED claim. If every claim is backed, write only: ALL BACKED. For example:
 UNBACKED | "the X200 has 16 GB of RAM" | nothing in the evidence mentions its memory
 CONTRADICTED | "both printers are CoreXY" | the evidence describes the first one as a bed slinger
 If the draft misreads the request (for example answers a comparison the wrong way round or describes the wrong item), add a line such as:
@@ -4820,15 +4886,22 @@ def fact_check(messages, user_input, draft):
         return []
     evidence = _evidence(messages)
     prompt = FACT_CHECK_PROMPT.format(request=user_input.strip(), evidence=evidence, draft=draft)
+    # A claim list is a few hundred tokens. Left alone the checker sometimes second-guesses itself for thousands
+    # (one check took 13 s, the same one again 59 s), so its length is capped by the size of the draft
+    cap = max(500, min(1200, 200 + len(draft) // 3))
     try:
-        response = chat(chat_model(), [{'role': 'user', 'content': prompt}], "Checking facts", think=False)
+        response = chat(chat_model(), [{'role': 'user', 'content': prompt}], "Checking facts", think=False,
+                        options={"num_predict": cap, "temperature": 0.1})
     except Exception:
         return []
     text = _get(_get(response, 'message'), 'content') or ""
     if re.search(r"^\W*TOPIC\W*\|?\W*GENERAL\b", text, re.I | re.M):
         return []
+    lines = text.splitlines()
+    if _get(response, 'done_reason') == "length" and lines:
+        lines = lines[:-1]  # cut off mid-line
     problems = []
-    for line in text.splitlines():
+    for line in lines:
         fields = [f.strip(" \t-*`#>") for f in line.split("|")]
         verdicts = [FACT_VERDICT_RE.match(f) for f in fields]
         found = next((m.group(1).lower() for m in verdicts if m), None)
@@ -4841,10 +4914,15 @@ def fact_check(messages, user_input, draft):
             rest = [fields[0].split(":", 1)[1].strip()]
         if not rest or (found != "misread" and _echoes_request(rest[0], user_input)):
             continue
+        if found != "misread" and SELF_CLEARED_RE.search(" ".join(rest)):
+            continue  # the checker flagged it and then, in the same line, decided it was backed after all
         if found == "unbacked" and (_numbers_found(rest[0], evidence) or _code_found(rest[0], evidence) or HEDGED_RE.search(rest[0])):
             continue
         problems.append((rest[0], found, " ".join(rest[1:])))
     return problems[:MAX_FACT_PROBLEMS]
+
+# "UNBACKED | claim | ... so this claim is BACKED after all": a verdict the line itself takes back
+SELF_CLEARED_RE = re.compile(r"(?<!not )(?<!n't )(?<!un)\bbacked\b|\bre-?evaluat|\bcorrection\b", re.I)
 
 NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 

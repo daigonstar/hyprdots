@@ -138,6 +138,73 @@ class MislabelledPages(unittest.TestCase):
         self.assertEqual(page["text"], self.PAGE)
 
 
+class WallpaperPause(unittest.TestCase):
+    """A video wallpaper is held off while a model works (hypr/scripts/video-wallpaper.sh hold)."""
+
+    def setUp(self):
+        self.calls = []
+        for patch in (mock.patch.object(a, "WALLPAPER_PAUSE", True), mock.patch.object(a, "_wallpaper", self.calls.append),
+                      mock.patch.object(a, "_wallpaper_users", [0])):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_tests_never_touch_the_real_wallpaper(self):
+        with mock.patch.object(a, "WALLPAPER_PAUSE", os.environ.get("HYPRDOTS_NO_WALLPAPER") is None):
+            self.assertFalse(a.WALLPAPER_PAUSE)
+
+    def test_held_for_the_job_then_released(self):
+        with a.wallpaper_paused():
+            self.assertEqual(self.calls, ["hold"])
+        self.assertEqual(self.calls, ["hold", "release"])
+
+    def test_nested_uses_count_once(self):
+        with a.wallpaper_paused():
+            with a.wallpaper_paused():
+                pass
+            self.assertEqual(self.calls, ["hold"])
+        self.assertEqual(self.calls, ["hold", "release"])
+
+    def test_released_even_when_the_job_fails(self):
+        with self.assertRaises(KeyboardInterrupt), a.wallpaper_paused():
+            raise KeyboardInterrupt
+        self.assertEqual(self.calls, ["hold", "release"])
+        self.assertEqual(a._wallpaper_users, [0])
+
+    def test_switched_off_does_nothing(self):
+        with mock.patch.object(a, "WALLPAPER_PAUSE", False), a.wallpaper_paused():
+            pass
+        self.assertEqual(self.calls, [])
+
+    def test_a_request_and_an_image_question_are_wrapped(self):
+        with mock.patch.object(a, "_answer", return_value="done"):
+            self.assertEqual(a.process_prompt("hi"), "done")
+        self.assertEqual(self.calls, ["hold", "release"])
+        self.calls.clear()
+        with mock.patch.object(a, "chat", return_value={"message": {"content": "a cat"}}):
+            self.assertIn("a cat", a.analyze_image("/tmp/x.png", "what?"))
+        self.assertEqual(self.calls, ["hold", "release"])
+
+
+
+class WallpaperCommand(unittest.TestCase):
+    def test_the_command_names_this_process(self):
+        with mock.patch.object(a.os.path, "exists", return_value=True), mock.patch.object(a.subprocess, "run") as run, \
+                mock.patch.object(a.subprocess, "Popen") as popen:
+            a._wallpaper("hold")
+            a._wallpaper("release")
+        hold, release = run.call_args.args[0], popen.call_args.args[0]
+        self.assertEqual((hold[0], hold[1].endswith("video-wallpaper.sh"), hold[2:]), ("bash", True, ["hold", "model", str(os.getpid())]))
+        self.assertEqual(release[2:], ["release", "model", str(os.getpid())])
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])      # the wallpaper restarting does not hold up the answer
+
+    def test_a_missing_script_or_a_failure_is_ignored(self):
+        with mock.patch.object(a.os.path, "exists", return_value=False), mock.patch.object(a.subprocess, "run") as run:
+            a._wallpaper("hold")
+        run.assert_not_called()
+        with mock.patch.object(a.os.path, "exists", return_value=True), mock.patch.object(a.subprocess, "run", side_effect=OSError):
+            a._wallpaper("hold")
+
+
 class SystemChanges(unittest.TestCase):
     """Changes to system config are checked against the docs first and verified after (the SDDM override loop)."""
     def setUp(self):
@@ -778,6 +845,13 @@ class VisionSettings(unittest.TestCase):
         with mock.patch.object(a.OLLAMA, "chat", side_effect=a.ollama.ResponseError("model not found", 404)):
             with self.assertRaises(a.ollama.ResponseError):
                 a.chat("m", [], think=False)
+
+    def test_a_call_can_cap_its_own_length(self):
+        with mock.patch.object(a.OLLAMA, "chat", return_value={"message": {"content": "x"}}) as call:
+            a.chat("m", [], options={"num_predict": 300})
+            self.assertEqual(call.call_args.kwargs["options"]["num_predict"], 300)
+            a.chat("m", [])
+            self.assertEqual(call.call_args.kwargs["options"]["num_predict"], a.SAMPLING["num_predict"])
 
     def test_chat_without_think_does_not_send_the_option(self):
         with mock.patch.object(a.OLLAMA, "chat", return_value={"message": {"content": "x"}}) as call:

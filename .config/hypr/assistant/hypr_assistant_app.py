@@ -2182,7 +2182,7 @@ class Assistant(Adw.Application):
         menu.append_submenu("Mode", modes)
         other = Gio.Menu()
         other.append("Paste image from clipboard", "app.paste")
-        other.append("New chat", "app.clear")
+        other.append("New session", "app.clear")
         menu.append_section(None, other)
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Options"))
         self.term_button = Gtk.ToggleButton(icon_name="utilities-terminal-symbolic", tooltip_text="Terminal (Ctrl+`)")
@@ -2191,6 +2191,10 @@ class Assistant(Adw.Application):
         self.web_button = Gtk.ToggleButton(icon_name="web-browser-symbolic", css_classes=["web-toggle"],
                                            tooltip_text="Watch what Hearthling is doing on the web")
         header.pack_end(self.web_button)
+        self.new_button = Gtk.Button(child=Adw.ButtonContent(icon_name="chat-message-new-symbolic", label="New session"),
+                                     tooltip_text="Start a new session (Ctrl+N)", css_classes=["flat", "new-session"], sensitive=False)
+        self.new_button.connect("clicked", lambda *_: self.clear())
+        header.pack_start(self.new_button)
         self.sheet_button = Gtk.ToggleButton(icon_name="avatar-default-symbolic", tooltip_text="Your character", active=True, visible=False)
         self.sheet_button.connect("toggled", lambda b: self.sheet_split.set_show_sidebar(b.get_active() and self.in_table))
         header.pack_start(self.sheet_button)
@@ -2701,7 +2705,7 @@ class Assistant(Adw.Application):
         self.actions = {a.get_name(): a for a in (approvals, reasoning, effort, mode)}
         self.set_accels_for_action("app.terminal", ["<Control>grave"])
         self.set_accels_for_action("app.stop", ["Escape"])
-        self.set_accels_for_action("app.clear", ["<Control>l"])
+        self.set_accels_for_action("app.clear", ["<Control>l", "<Control>n"])
 
     def say(self, text):
         """Starts a sentence for the player from the character sheet, for them to finish and send."""
@@ -2771,12 +2775,17 @@ class Assistant(Adw.Application):
         self.welcome.set_vexpand(not table)
         self.welcome.set_reveal_child(not table)
         if table:
-            self.character.last = None
-            self.character.refresh()
-            if dnd_mode.game()["character"]:
-                GLib.idle_add(lambda: (self.send(dnd_mode.OPENING, quiet=True), False)[1])
-            else:
-                GLib.idle_add(lambda: (self.open_builder(), False)[1])
+            self._open_table()
+        self._update_new_button()
+
+    def _open_table(self):
+        """Sits the player down: the Dungeon Master greets them and recaps, or the builder opens if there is no hero yet."""
+        self.character.last = None
+        self.character.refresh()
+        if dnd_mode.game()["character"]:
+            GLib.idle_add(lambda: (self.send(dnd_mode.OPENING, quiet=True), False)[1])
+        else:
+            GLib.idle_add(lambda: (self.open_builder(), False)[1])
 
     def refresh_status(self):
         self._sit_at_the_table()
@@ -2976,7 +2985,13 @@ class Assistant(Adw.Application):
         if not is_slash and not self.window.is_active():
             subprocess.Popen(["notify-send", "-a", "Hearthling", "--", "Done.", reply[:600]])
 
+    def _update_new_button(self, busy=None):
+        """There is something to forget only once a question has been asked, and not while an answer is on its way."""
+        busy = bool(self.worker) if busy is None else busy
+        self.new_button.set_sensitive(not busy and not self.welcome.get_reveal_child())
+
     def _busy(self, busy):
+        self._update_new_button(busy)
         self.header_logo.set_busy(busy)
         self.send_button.set_sensitive(True)  # it is the stop button while busy
         self.send_button.set_icon_name("media-playback-stop-symbolic" if busy else "go-up-symbolic")
@@ -3003,19 +3018,26 @@ class Assistant(Adw.Application):
             subprocess.Popen(["notify-send", "-a", "Hearthling", "-u", "critical", "--", title, body[:300]])
 
     def clear(self):
+        """A new session, as closing and reopening the assistant would give: nothing said so far is remembered."""
         if self.worker:
+            self.toast("Stop the answer first (Esc), then start a new session")
             return
-        agent.HISTORY.clear()
-        if agent.SESSION_FILE[0]:
-            try:
-                open(agent.SESSION_FILE[0], "w").close()
-            except OSError:
-                pass
+        agent.new_session()
+        self._clear_tray()
+        self._set_text("")
+        shutil.rmtree(UPLOAD_DIR, ignore_errors=True)
         self._clear_chat()
-        self.welcome.set_vexpand(True)
-        self.welcome.set_reveal_child(True)
         self.web.clear()
-        self.toast("New chat. Earlier messages are forgotten.")
+        self.stick = True
+        if self.in_table:  # the campaign carries on: the Dungeon Master greets the player and recaps from the record
+            dnd_mode.on_activate("", agent)
+            self._open_table()
+            self.toast("New session. The story so far is kept.")
+        else:
+            self.welcome.set_vexpand(True)
+            self.welcome.set_reveal_child(True)
+            self.toast("New session. Earlier messages are forgotten.")
+        self._update_new_button()
 
 
 APP = Assistant()

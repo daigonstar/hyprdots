@@ -174,6 +174,15 @@ SETTINGS: list[Setting] = [
     Setting(ASSISTANT, "assistant", "web_timeout", "Web request timeout", "int", 15,
             "Seconds before a web request gives up.", lo=5, hi=60, unit="s", group="Limits"),
     # ---- Monitor ---------------------------------------------------------------------------------------
+    Setting(THEME, "wallpaper", "pause_for_models", "Pause a video wallpaper while the assistant works", "bool", True,
+            "Stops the video while Hearthling's model is thinking, and plays it again after. The still frame it was made from stays on screen.",
+            tip="The video and the model both use the graphics card. A crash on 14 November began when they overlapped, so this keeps them apart. "
+                "Turn it off if you would rather keep the video moving.",
+            effect="the next time you ask the assistant something", group="Video wallpaper"),
+    Setting(THEME, "wallpaper", "pause_for_games", "Pause a video wallpaper while a game runs", "bool", True,
+            "Stops the video when a game opens from Steam, Lutris, Heroic or Wine, and plays it again when the game closes.",
+            tip="Games get the whole graphics card, and a video wallpaper behind them is work they do not need. Game mode (Super+Shift+G) does this too.",
+            effect="the next time a game opens", group="Video wallpaper"),
     Setting(MONITOR, "monitor", "defer_when_busy", "Pause while gaming", "bool", True,
             "Skip the health check while a game is running or the GPU is busy, so it never causes a stutter.",
             effect="on the next health check", group="Behaviour"),

@@ -78,6 +78,30 @@ TARGET_WORKSPACE = 3
 
 # address -> workspace id the user was on right before that game window opened.
 tracked_games = {}
+# address -> the game window's process id: a video wallpaper stays stopped while it is alive (see video-wallpaper.sh hold)
+game_pids = {}
+WALLPAPER_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "video-wallpaper.sh")
+HOLDS_DIR = os.environ.get("WALLPAPER_HOLDS_DIR") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "hyprdots", "wallpaper-holds")
+
+
+def pause_wallpaper_for_games():
+    """The Theme page's "Pause while a game runs" setting (on unless switched off)."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "assistant"))
+        import usersettings
+        return bool(usersettings.section("wallpaper", {"pause_for_models": True, "pause_for_games": True})["pause_for_games"])
+    except Exception:  # noqa: BLE001  (a settings problem must not stop game detection)
+        return True
+
+
+def wallpaper(*args):
+    """Runs video-wallpaper.sh; it only ever stops or starts the wallpaper video."""
+    if not os.path.exists(WALLPAPER_SCRIPT):
+        return
+    try:
+        subprocess.run(["bash", WALLPAPER_SCRIPT, *args], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def log(msg):
@@ -200,10 +224,18 @@ def handle_open_window(payload):
             f" (will return to workspace {origin_workspace} on close)")
         tracked_games[client["address"]] = origin_workspace
         route_to_workspace_3(client["address"])
+        if pause_wallpaper_for_games():
+            game_pids[client["address"]] = pid
+            wallpaper("hold", "game", str(pid))
 
 
 def handle_close_window(address):
     normalized_address = f"0x{address}" if not address.startswith("0x") else address
+    pid = game_pids.pop(normalized_address, None)
+    if pid is not None:
+        wallpaper("release", "game", str(pid))  # the video plays again once nothing else is holding it
+    elif normalized_address not in tracked_games and os.path.isdir(HOLDS_DIR) and any(n.startswith("game.") for n in os.listdir(HOLDS_DIR)):
+        wallpaper("sync")  # a game this daemon no longer knew about (it was restarted mid-game) has gone
     if normalized_address not in tracked_games:
         return
 

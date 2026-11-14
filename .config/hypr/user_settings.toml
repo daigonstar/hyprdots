@@ -35,6 +35,11 @@ searxng_url = ""            # your own SearXNG search (e.g. "http://127.0.0.1:88
 external = ""
 gaming = ""
 
+[wallpaper]
+# A video wallpaper is stopped while the graphics card has heavy work to do, and plays again afterwards.
+pause_for_models = true     # while the assistant's model is working
+pause_for_games = true      # while a game that was launched through Steam, Lutris, Heroic or Wine is open
+
 [monitor]
 renotify_hours = 6          # re-send a notification for a still-open problem after this long
 journal_window = "30 minutes ago"  # how far back to look for journal errors

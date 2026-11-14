@@ -7,6 +7,11 @@
 #   video-wallpaper.sh sync          play or stop the video to match the current wallpaper (wallust.sh runs this
 #                                    after every wallpaper change; login, game mode and theme overrides go through it)
 #   video-wallpaper.sh stop          stop playing (game mode); sync starts it again
+#   video-wallpaper.sh hold REASON [PID]     keep it stopped while PID (default: the caller) is alive, for REASON such as
+#                                    "model" (the assistant is working) or "game". sync, a login or a wallpaper change
+#                                    leave it stopped until every hold is released or its owner has exited
+#   video-wallpaper.sh release REASON [PID]  drop that hold (all of REASON's holds without a PID), then sync
+#   video-wallpaper.sh held          list what is holding it stopped now
 #   video-wallpaper.sh still VIDEO   print the still's path, making it if needed
 set -u
 
@@ -17,6 +22,7 @@ SCRIPTS="$HOME/.config/hypr/scripts"
 # no sound, loop forever, hardware decoding where the card has it; -p pauses while windows cover every screen
 MPV_OPTS="no-audio loop hwdec=auto load-scripts=no"
 PLAYER="${VIDEO_PLAYER:-mpvpaper}"  # the tests use a stand-in, so they never stop your real one
+HOLDS="${WALLPAPER_HOLDS_DIR:-${XDG_RUNTIME_DIR:-/tmp}/hyprdots/wallpaper-holds}"  # one empty file per holder, named REASON.PID
 
 still_for() {
     local video="$1" key
@@ -58,6 +64,34 @@ play() {
     setsid "${run[@]}" >/dev/null 2>&1 </dev/null &
 }
 
+# The reasons the video has to stay stopped, one per line. A holder that has exited no longer counts, so a crash cannot
+# leave the wallpaper off for good.
+live_holds() {
+    local f name pid
+    [[ -d "$HOLDS" ]] || return 0
+    for f in "$HOLDS"/*.*; do
+        [[ -e "$f" ]] || continue
+        name=${f##*/}
+        pid=${name##*.}
+        if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+            echo "${name%.*}"
+        else
+            rm -f "${f:?}"
+        fi
+    done
+}
+
+settle() {  # play or stop to match the wallpaper, unless something is holding it off
+    local video
+    if [[ -n "$(live_holds)" ]]; then
+        stop_video
+    elif video=$(wanted); then
+        play "$video"
+    else
+        stop_video
+    fi
+}
+
 # The video to play now: only while the current wallpaper is that video's still
 wanted() {
     local now video
@@ -79,16 +113,35 @@ case "${1:-}" in
         exec bash "$SCRIPTS/wallust.sh" "$still"  # colours from the still; it ends with sync, which starts the video
         ;;
     sync)
-        if video=$(wanted); then play "$video"; else stop_video; fi
+        settle
         ;;
     stop)
         stop_video
+        ;;
+    hold)
+        reason="${2:-}"; pid="${3:-$PPID}"
+        [[ "$reason" =~ ^[a-z-]+$ && "$pid" =~ ^[0-9]+$ ]] || { echo "usage: $0 hold REASON [PID]" >&2; exit 2; }
+        mkdir -p "$HOLDS" && : > "$HOLDS/$reason.$pid"
+        stop_video
+        ;;
+    release)
+        reason="${2:-}"; holder="${3:-}"
+        [[ "$reason" =~ ^[a-z-]+$ && ( -z "$holder" || "$holder" =~ ^[0-9]+$ ) ]] || { echo "usage: $0 release REASON [PID]" >&2; exit 2; }
+        if [[ -n "$holder" ]]; then
+            rm -f "${HOLDS:?}/${reason:?}.${holder:?}"
+        else
+            rm -f "${HOLDS:?}/${reason:?}".[0-9]*
+        fi
+        settle
+        ;;
+    held)
+        live_holds | sort -u
         ;;
     still)
         make_still "$(readlink -f "${2:-}")"
         ;;
     *)
-        echo "usage: $0 start VIDEO | sync | stop | still VIDEO" >&2
+        echo "usage: $0 start VIDEO | sync | stop | hold REASON [PID] | release REASON [PID] | held | still VIDEO" >&2
         exit 2
         ;;
 esac

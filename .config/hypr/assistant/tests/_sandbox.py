@@ -9,6 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+os.environ["HYPRDOTS_NO_WALLPAPER"] = "1"  # a test must never stop the real video wallpaper
 REAL_HOME = os.path.realpath(os.path.expanduser("~"))
 FAKE_HOME = os.path.realpath(tempfile.mkdtemp(prefix="hypr-agent-home-"))
 if "hypr_agent" not in sys.modules:

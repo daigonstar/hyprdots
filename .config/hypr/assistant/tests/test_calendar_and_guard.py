@@ -548,6 +548,29 @@ class FactCheck(unittest.TestCase):
         with mock.patch.object(a, "chat", return_value=_reply("TOPIC | GENERAL")):
             self.assertEqual(a.fact_check([{"role": "system", "content": ""}], "why are toddlers loud", self.DRAFT), [])
 
+    def test_a_verdict_the_line_takes_back_is_not_a_problem(self):
+        reply = ('TOPIC | SPECIFIC\nCONTRADICTED | "ring buffer timeouts" | the log says timeout, so this claim is BACKED after all\n'
+                 'CONTRADICTED | "Hyprland dumped core" | technically backed as a crash\n'
+                 'UNBACKED | "Let\'s re-evaluate the load" | x\n'
+                 'UNBACKED | "98% idle CPU" | nothing says it is not backed by any tool output\n'
+                 'UNBACKED | "2 extruders" | not mentioned\n'
+                 'CONTRADICTED | "runs at 5 GHz" | the evidence says 4 GHz (see Correction note)')
+        with mock.patch.object(a, "chat", return_value=_reply(reply)):
+            problems = a.fact_check([{"role": "system", "content": ""}], "q", self.DRAFT)
+        self.assertEqual([p[0] for p in problems], ['"98% idle CPU"', '"2 extruders"'])
+
+    def test_the_checker_is_capped_and_a_cut_off_line_is_dropped(self):
+        reply = dict(_reply('UNBACKED | "a real gap" | not mentioned\nUNBACKED | "a half written cla'), done_reason="length")
+        with mock.patch.object(a, "chat", return_value=reply) as call:
+            problems = a.fact_check([{"role": "system", "content": ""}], "q", self.DRAFT)
+        self.assertEqual([p[0] for p in problems], ['"a real gap"'])
+        options = call.call_args.kwargs["options"]
+        self.assertTrue(500 <= options["num_predict"] <= 1200)
+        self.assertLessEqual(options["temperature"], 0.2)
+        with mock.patch.object(a, "chat", return_value=_reply("TOPIC | GENERAL")) as call:
+            a.fact_check([{"role": "system", "content": ""}], "q", "x" * 6000)
+        self.assertEqual(call.call_args.kwargs["options"]["num_predict"], 1200)       # long drafts get more room, not unlimited
+
     def test_figures_that_were_looked_up_are_not_flagged(self):
         messages = [{"role": "system", "content": ""},
                     {"role": "tool", "tool_name": "web_fetch", "content": "Build volume 250*250*250mm, chamber heating 65℃, 2 fans"}]

@@ -5,6 +5,7 @@ builds, and the approval hook. Skipped when GTK 4 and libadwaita are not install
 """
 
 import json
+import os
 import re
 import sys
 import unittest
@@ -14,6 +15,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _sandbox  # noqa: E402,F401  (must come before hypr_agent)
 import hypr_agent as agent  # noqa: E402
+import agent_modes  # noqa: E402
 
 try:
     import hypr_assistant_app as app
@@ -212,6 +214,35 @@ class TerminalTool(unittest.TestCase):
             self.assertIn("no built-in terminal", agent.tool_read_terminal())
         with mock.patch.object(agent, "TERMINAL_READER", [lambda n: ""]):
             self.assertIn("read_terminal", names())
+
+
+class NewSession(unittest.TestCase):
+    def test_a_new_session_forgets_the_conversation_but_not_the_choices(self):
+        import tempfile
+        saved = (list(agent.HISTORY), list(agent.IMAGE_NOTES), agent.LAST_IMAGE[0], {k: list(v) for k, v in agent.RESEARCH.items()},
+                 dict(agent.RESEARCH_START), agent.SESSION_FILE[0], agent.CURRENT_USER_TEXT[0])
+        self.addCleanup(lambda: (agent.HISTORY.__setitem__(slice(None), saved[0]), agent.IMAGE_NOTES.__setitem__(slice(None), saved[1]),
+                                 agent.LAST_IMAGE.__setitem__(0, saved[2]), [agent.RESEARCH[k].__setitem__(slice(None), v) for k, v in saved[3].items()],
+                                 agent.RESEARCH_START.update(saved[4]), agent.SESSION_FILE.__setitem__(0, saved[5]),
+                                 agent.CURRENT_USER_TEXT.__setitem__(0, saved[6])))
+        with tempfile.NamedTemporaryFile("w", delete=False, dir=_sandbox.FAKE_HOME) as f:
+            f.write('{"user": "hello"}\n')
+        self.addCleanup(os.remove, f.name)
+        agent.HISTORY.append({"role": "user", "content": "hello"})
+        agent.IMAGE_NOTES.append({"text": "a cat"})
+        agent.LAST_IMAGE[0] = "/tmp/cat.png"
+        agent.RESEARCH["docs"].append("man ls")
+        agent.RESEARCH_START["docs"] = 1
+        agent.SESSION_FILE[0] = f.name
+        agent.CURRENT_USER_TEXT[0] = "hello"
+        with mock.patch.object(agent, "AUTO_APPROVE", [True]), mock.patch.object(agent_modes, "STATE", {"name": "gaming", "arg": ""}):
+            agent.new_session()
+            self.assertEqual(agent.AUTO_APPROVE, [True])
+            self.assertEqual(agent_modes.STATE["name"], "gaming")
+        self.assertEqual((agent.HISTORY, agent.IMAGE_NOTES, agent.LAST_IMAGE[0], agent.RESEARCH, agent.RESEARCH_START, agent.CURRENT_USER_TEXT[0]),
+                         ([], [], None, {"docs": [], "reads": []}, {}, ""))
+        self.assertEqual(agent.SESSION_FILE[0], f.name)           # still this session's file, now empty
+        self.assertEqual(Path(f.name).read_text(), "")
 
 
 class AskUserToRun(unittest.TestCase):
