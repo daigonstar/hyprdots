@@ -95,6 +95,25 @@ class Alerts(unittest.TestCase):
             said.append(now)
         self.assertEqual(said, [False, True, False, False, False, False, True])
 
+    def test_peripheral_quiet_while_charging_and_warns_again_after(self):
+        said, warned = [], False
+        for level, charging in ((10, False), (9, True), (12, True), (10, False), (8, False)):
+            now, warned = sysinfo.peripheral_alert(level, warned, charging)
+            said.append(now)
+        self.assertEqual(said, [True, False, False, True, False])
+
+    def test_peripheral_state(self):
+        def state(capacity, status="Discharging", name="hidpp_battery_1"):
+            return sysinfo.peripheral_state({"capacity": capacity, "status": status, "name": name})
+        self.assertEqual(state(50), "ok")
+        self.assertEqual(state(10), "low")
+        self.assertEqual(state(11), "ok")
+        self.assertEqual(state(5, "Charging"), "charging")
+        self.assertEqual(state(100, "Full"), "full")
+        self.assertEqual(state(100, "Unknown"), "full")
+        self.assertTrue(sysinfo.is_headset({"name": "steelseries_headset_battery_0003:1038:12AD.000F"}))
+        self.assertFalse(sysinfo.is_headset({"name": "hidpp_battery_1"}))
+
 
 class Numbers(unittest.TestCase):
     def setUp(self):

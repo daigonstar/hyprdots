@@ -39,8 +39,6 @@ from overview import Overview  # noqa: E402
 import touch_mode  # noqa: E402
 from popups import Meter, Osd, Switcher, label  # noqa: E402
 import sysinfo  # noqa: E402
-sys.path.insert(0, str(HERE.parent / "audio"))
-import headset  # noqa: E402
 
 THEME = HERE / "theme.css"
 SOUND_OFF = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quick-tray/sounds-off"
@@ -55,7 +53,6 @@ SAMPLE_SECONDS = 2
 HISTORY = 60  # samples on each graph: two minutes
 ATTENTION_DISK = 90
 ATTENTION_BATTERY = 15
-HEADSET_SECONDS = 60  # how often the headset is asked: headsetcontrol talks to it over the radio
 SOUND_APP = "~/.config/hypr/audio/audio.sh"
 
 ICON = {
@@ -118,6 +115,7 @@ scale slider { background: @tray_text; border-radius: 99px; min-width: 16px; min
 .stat { background: @tray_card; border-radius: 14px; padding: 9px 11px; }
 .stat-value { font-size: 19px; font-weight: 700; }
 .attention { color: @tray_attention; }
+.charging { color: @tray_accent; }
 .notes-head { background: @tray_card; border-radius: 14px; padding: 8px 10px; }
 .notes-head:hover, .note:hover { background: alpha(@tray_accent, 0.25); }
 .note { background: @tray_card; border-radius: 14px; padding: 8px 10px; }
@@ -1044,18 +1042,10 @@ class Tray(Gtk.Window):
     def _read_sample(self, visible):
         s = {"cpu": sysinfo.cpu_times(), "memory": sysinfo.memory(), "net": sysinfo.net_bytes(), "at": time.monotonic(),
              "visible": visible}
-        s.update(peripherals=sysinfo.peripherals() + self._headset(), battery=sysinfo.system_battery())
+        s.update(peripherals=sysinfo.peripherals(), battery=sysinfo.system_battery())
         if visible:
             s.update(cpu_temp=sysinfo.cpu_temp(), gpu=sysinfo.gpu(), disks=sysinfo.disks(), uptime=sysinfo.uptime())
         return s
-
-    def _headset(self):
-        """A wireless headset's battery, through headsetcontrol, asked once a minute (it answers over the radio)."""
-        now = time.monotonic()
-        if headset.available() and now - getattr(self, "headset_at", -HEADSET_SECONDS) >= HEADSET_SECONDS:
-            self.headset_at = now
-            self.headset_seen = headset.peripheral()
-        return [self.headset_seen] if getattr(self, "headset_seen", None) else []
 
     def _show_sample(self, s):
         self.sampling = False
@@ -1107,9 +1097,11 @@ class Tray(Gtk.Window):
                       "sleep 5; systemctl suspend")
         for device in peripherals:
             model = device["model"]
-            say, self.peripherals_warned[model] = sysinfo.peripheral_alert(device["capacity"], self.peripherals_warned.get(model, False))
+            say, self.peripherals_warned[model] = sysinfo.peripheral_alert(
+                device["capacity"], self.peripherals_warned.get(model, False), sysinfo.peripheral_charging(device))
             if say:
-                spawn(f"notify-send -a Battery -i battery-low {shlex.quote(model + ' battery low')} '{device['capacity']}% left.'")
+                spawn(f"notify-send -a Battery -i battery-low {shlex.quote(model + ' battery low')} "
+                      f"'{device['capacity']}% left. Time to charge it.'")
 
     def _show_disks(self, disks):
         wanted = {d["mount"] for d in disks}
@@ -1156,20 +1148,21 @@ class Tray(Gtk.Window):
             self.peripherals_box.remove(child)
         for device in peripherals:
             model = device["model"].lower()
-            icon = ICON["mouse"] if "mouse" in model else ICON["keyboard"] if "keyboard" in model else ICON["device"]
-            charging = device.get("charging") == "charging"
+            headset = sysinfo.is_headset(device)
+            icon = (ICON["headset"] if headset else ICON["mouse"] if "mouse" in model
+                    else ICON["keyboard"] if "keyboard" in model else ICON["device"])
+            state = sysinfo.peripheral_state(device)  # charging, full, low or ok
             chip = Gtk.Box(spacing=5)
-            tip = f"{device['model']}: {device['capacity']}%"
-            if device.get("headset"):
-                icon = ICON["headset"]
-                tip += f", {headset.CHARGING_TEXT[device['charging']].lower()}. Click for its settings"
-            chip.set_tooltip_text(tip)
+            tip = f"{device['model']}: {device['capacity']}%" + {
+                "charging": ", charging", "full": ", fully charged",
+                "low": ". Time to charge it", "ok": ""}[state]
+            chip.set_tooltip_text(tip + (". Click for its settings" if headset else ""))
             chip.pack_start(label(icon), False, False, 0)
-            text = label(f"{device['capacity']}%" + (f" {ICON['charging']}" if charging else ""))
-            if device["capacity"] <= ATTENTION_BATTERY and not charging:
-                text.get_style_context().add_class("attention")
+            text = label(f"{device['capacity']}%" + (f" {ICON['charging']}" if state == "charging" else ""))
+            if state in ("low", "charging"):
+                text.get_style_context().add_class("attention" if state == "low" else "charging")
             chip.pack_start(text, False, False, 0)
-            if device.get("headset"):
+            if headset:
                 button = Gtk.Button(relief=Gtk.ReliefStyle.NONE)
                 button.get_style_context().add_class("device")
                 button.add(chip)

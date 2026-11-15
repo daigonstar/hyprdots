@@ -63,9 +63,29 @@ def battery_alert(capacity: int | None, status: str, reached: int | None) -> tup
     return None, None
 
 
-def peripheral_alert(capacity: int, warned: bool) -> tuple[bool, bool]:
-    """(say it now, remember it) for a wireless mouse or keyboard. Readings wobble, so it has to recover before it can
-    warn again."""
+def peripheral_charging(device: dict) -> bool:
+    return device.get("status") == "Charging"
+
+
+def peripheral_state(device: dict) -> str:
+    """"charging", "full", "low" (at or under PERIPHERAL_LOW, not charging) or "ok", from the kernel's own reading."""
+    if peripheral_charging(device):
+        return "charging"
+    if device.get("status") == "Full" or (device["capacity"] or 0) >= 100:
+        return "full"
+    return "low" if device["capacity"] is not None and device["capacity"] <= PERIPHERAL_LOW else "ok"
+
+
+def is_headset(device: dict) -> bool:
+    """A headset the kernel reads itself (Linux 7.3's hid-steelseries names it steelseries_headset_battery_...)."""
+    return "headset" in device.get("name", "").lower()
+
+
+def peripheral_alert(capacity: int, warned: bool, charging: bool = False) -> tuple[bool, bool]:
+    """(say it now, remember it) for a wireless mouse, keyboard or headset. Readings wobble, so it has to recover
+    before it can warn again; plugging it in counts as recovering, and nothing is said while it charges."""
+    if charging:
+        return False, False
     if capacity <= PERIPHERAL_LOW:
         return not warned, True
     return False, warned and capacity <= PERIPHERAL_LOW + 5

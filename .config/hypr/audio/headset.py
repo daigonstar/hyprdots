@@ -1,7 +1,6 @@
 """What the headset app knows about a wireless headset, through headsetcontrol (github.com/Sapd/HeadsetControl).
 
-No GTK here, so the parsing and the charging guess can be tested on any machine. headset_app.py is the window, and
-the quick tray uses read() and the battery history for its chip.
+No GTK here, so the parsing and the charging guess can be tested on any machine. headset_ui.py is the Sound app's Headset page.
 
 Most headsets only take settings (sidetone, lights...) and never report them back, so the values the app shows are
 the ones last set here, kept in a small file. Some, like the Arctis 7, do not say whether they are charging either:
@@ -264,22 +263,3 @@ def charging(history: list, reported: bool | None = None, now: float | None = No
 
 CHARGING_TEXT = {"charging": "Charging", "discharging": "On battery", "full": "Full",
                  "unknown": "Not sure yet: watching the level"}
-
-
-def peripheral(devices: list[dict] | None = None, path: Path = CACHE, now: float | None = None) -> dict | None:
-    """The first headset as the quick tray lists wireless mice and keyboards, with the reading remembered so the
-    charging guess carries on while the headset window is closed. None when there is no headset or it is off."""
-    if devices is None:
-        devices = read()
-        if any(d["id"].lower() in kernel_batteries() for d in devices):
-            return None  # the kernel lists it already (Linux 7.3 and later), with the same name: listed twice, a low
-            #              and a full reading took turns, and the low-battery warning fired every two seconds
-    if not devices:
-        return None
-    d = devices[0]
-    product = d["product"] or d["name"]
-    history = record(product, d["battery"], path, now)
-    if d["battery"] is None:
-        return None
-    return {"model": d["name"], "capacity": d["battery"], "headset": True,
-            "charging": charging(history, d["charging"], now)}

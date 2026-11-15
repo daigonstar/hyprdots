@@ -2,7 +2,6 @@ import json
 import sys
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -116,18 +115,6 @@ class Kernel(unittest.TestCase):
         self.assertEqual(headset.charging([[0, 100]], False, now=0), "full")
         self.assertEqual(headset.charging([[0, 60]], True, now=0), "charging")
 
-    def test_the_tray_leaves_a_kernel_listed_headset_to_the_kernel(self):
-        zero = headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_AVAILABLE", "level": 0}}))
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(headset, "read", return_value=zero), \
-                mock.patch.object(headset, "kernel_batteries", return_value=headset.kernel_batteries(self.sys)):
-            self.assertIsNone(headset.peripheral(path=Path(tmp) / "h.json"))
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(headset, "read", return_value=headset.parse(output(ARCTIS))), \
-                mock.patch.object(headset, "kernel_batteries", return_value={}):
-            self.assertEqual(headset.peripheral(path=Path(tmp) / "h.json")["capacity"], 72)
-
-
 class ChatMix(unittest.TestCase):
     def test_text(self):
         self.assertEqual(headset.chatmix_text(64), "Even")
@@ -183,18 +170,6 @@ class Memory(unittest.TestCase):
             self.assertEqual(headset.setting(loaded, "A7", "inactive time"), headset.DEFAULTS["inactive time"])
             path.write_text("{broken", encoding="utf-8")
             self.assertEqual(headset.load(path), {})
-
-    def test_tray_reading_remembers_and_guesses(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "headset.json"
-            self.assertIsNone(headset.peripheral([], path))
-            at = lambda level: headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_AVAILABLE", "level": level}}))  # noqa: E731
-            headset.peripheral(at(50), path, now=0)
-            chip = headset.peripheral(at(53), path, now=600)
-            self.assertEqual(chip, {"model": ARCTIS["product"], "capacity": 53, "headset": True, "charging": "charging"})
-            off = headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_UNAVAILABLE", "level": -1}}))
-            self.assertIsNone(headset.peripheral(off, path, now=700))
-            self.assertEqual(headset.load(path)["history"][ARCTIS["product"]][-1], [700, None])
 
     def test_saving_own_parts_keeps_the_others(self):
         with tempfile.TemporaryDirectory() as tmp:
