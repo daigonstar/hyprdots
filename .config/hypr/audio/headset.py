@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
+SYS = Path("/sys")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "hyprdots/headset.json"
 TIMEOUT = 5
 HISTORY_SECONDS = 3 * 3600  # how long readings are kept for the charging guess
@@ -119,9 +121,47 @@ def run(*args: str, timeout: float = TIMEOUT) -> subprocess.CompletedProcess | N
 
 
 def read() -> list[dict]:
-    """Every headset headsetcontrol can see right now; [] without it or without permission to the device."""
+    """Every headset headsetcontrol can see right now, with the kernel's battery reading where it has one; [] without
+    headsetcontrol or without permission to the device."""
     out = run("-o", "json")
-    return parse(out.stdout) if out and out.stdout else []
+    return with_kernel(parse(out.stdout) if out and out.stdout else [], kernel_batteries())
+
+
+KERNEL_STATUS = {"Charging": True, "Discharging": False, "Not charging": False, "Full": False}
+
+
+def kernel_batteries(sys: Path = SYS) -> dict[str, dict]:
+    """"vendor:product" (as parse() gives it, "1038:12ad") -> {capacity, charging, model} for headsets whose battery
+    the kernel reads itself: since Linux 7.3, hid-steelseries does the Arctis 7. That reading wins over
+    headsetcontrol's: it is the device's own driver, it says when it is charging, and while it holds the device,
+    headsetcontrol's battery requests come back as 0%."""
+    found = {}
+    root = sys / "class/power_supply"
+    for d in sorted(root.iterdir()) if root.is_dir() else []:
+        try:
+            if (d / "type").read_text().strip() != "Battery" or (d / "scope").read_text().strip() != "Device":
+                continue
+            capacity = int((d / "capacity").read_text().strip())
+            status = (d / "status").read_text().strip()
+            model = (d / "model_name").read_text().strip()
+        except (OSError, ValueError):
+            continue
+        where = (d / "device").resolve().name + " " + d.name  # the HID device: 0003:1038:12AD.000F
+        hid = re.search(r"[0-9A-Fa-f]{4}:([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})\.", where)
+        if hid and 0 <= capacity <= 100:
+            found[f"{hid[1]}:{hid[2]}".lower()] = {"capacity": capacity, "charging": KERNEL_STATUS.get(status),
+                                                    "model": model}
+    return found
+
+
+def with_kernel(devices: list[dict], kernel: dict[str, dict]) -> list[dict]:
+    """headsetcontrol's readings, with the battery and charging state from the kernel where it reads that headset."""
+    for d in devices:
+        k = kernel.get(d["id"].lower())
+        if k:
+            d.update(battery=k["capacity"], charging=k["charging"], minutes_left=None,
+                     status="charging" if k["charging"] else "on")
+    return devices
 
 
 def set_control(capability: str, value: int) -> tuple[bool, str]:
@@ -195,6 +235,9 @@ def charging(history: list, reported: bool | None = None, now: float | None = No
     since it was last switched on. Needs RISING percent of change within TREND_SECONDS to call it either way."""
     if reported:
         return "charging"
+    if reported is False:  # the kernel says it is not charging: on battery, or full
+        latest = next((level for _at, level in reversed(history) if level is not None), None)
+        return "full" if latest is not None and latest >= 100 else "discharging"
     now = time.time() if now is None else now
     run_ = []
     for at, level in reversed(history):  # the latest readings, back to when the headset was last off
@@ -226,7 +269,11 @@ CHARGING_TEXT = {"charging": "Charging", "discharging": "On battery", "full": "F
 def peripheral(devices: list[dict] | None = None, path: Path = CACHE, now: float | None = None) -> dict | None:
     """The first headset as the quick tray lists wireless mice and keyboards, with the reading remembered so the
     charging guess carries on while the headset window is closed. None when there is no headset or it is off."""
-    devices = read() if devices is None else devices
+    if devices is None:
+        devices = read()
+        if any(d["id"].lower() in kernel_batteries() for d in devices):
+            return None  # the kernel lists it already (Linux 7.3 and later), with the same name: listed twice, a low
+            #              and a full reading took turns, and the low-battery warning fired every two seconds
     if not devices:
         return None
     d = devices[0]

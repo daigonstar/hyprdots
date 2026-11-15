@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -68,6 +69,63 @@ class Parse(unittest.TestCase):
         [d] = headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_AVAILABLE", "level": 255}, "chatmix": 300}))
         self.assertIsNone(d["battery"])
         self.assertIsNone(d["chatmix"])
+
+
+def fake_battery(sys, name, hid, capacity, status, model, scope="Device"):
+    """A /sys/class/power_supply entry, linked to its HID device as the kernel does it."""
+    device = sys / "devices" / hid
+    device.mkdir(parents=True)
+    d = sys / "class/power_supply" / name
+    d.mkdir(parents=True)
+    for key, value in (("type", "Battery"), ("scope", scope), ("capacity", str(capacity)), ("status", status),
+                       ("model_name", f" {model}")):
+        (d / key).write_text(value + "\n")
+    (d / "device").symlink_to(device)
+
+
+class Kernel(unittest.TestCase):
+    """Since Linux 7.3 the kernel reads the Arctis 7's battery itself, and headsetcontrol then gets 0%."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.sys = Path(tmp.name)
+        fake_battery(self.sys, "steelseries_headset_battery_0003:1038:12AD.000F", "0003:1038:12AD.000F", 99,
+                     "Discharging", "SteelSeries Arctis 7")
+        fake_battery(self.sys, "hidpp_battery_1", "0003:046D:407F.0009", 18, "Discharging", "G502 Mouse")
+        fake_battery(self.sys, "BAT0", "PNP0C0A:00", 50, "Charging", "Laptop", scope="System")
+
+    def test_read(self):
+        found = headset.kernel_batteries(self.sys)
+        self.assertEqual(found["1038:12ad"], {"capacity": 99, "charging": False, "model": "SteelSeries Arctis 7"})
+        self.assertIn("046d:407f", found)
+        self.assertEqual(len(found), 2)  # not the PC's own battery
+        self.assertEqual(headset.kernel_batteries(self.sys / "nowhere"), {})
+
+    def test_it_wins_over_headsetcontrol(self):
+        zero = headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_AVAILABLE", "level": 0,
+                                                          "time_to_empty_min": 5}}))
+        [d] = headset.with_kernel(zero, headset.kernel_batteries(self.sys))
+        self.assertEqual((d["battery"], d["charging"], d["minutes_left"], d["status"]), (99, False, None, "on"))
+        [plain] = headset.with_kernel(headset.parse(output(ARCTIS)), {})
+        self.assertEqual(plain["battery"], 72)
+
+    def test_charging_from_the_kernel(self):
+        self.assertEqual(headset.KERNEL_STATUS.get("Charging"), True)
+        self.assertEqual(headset.charging([[0, 60]], False, now=0), "discharging")
+        self.assertEqual(headset.charging([[0, 100]], False, now=0), "full")
+        self.assertEqual(headset.charging([[0, 60]], True, now=0), "charging")
+
+    def test_the_tray_leaves_a_kernel_listed_headset_to_the_kernel(self):
+        zero = headset.parse(output({**ARCTIS, "battery": {"status": "BATTERY_AVAILABLE", "level": 0}}))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(headset, "read", return_value=zero), \
+                mock.patch.object(headset, "kernel_batteries", return_value=headset.kernel_batteries(self.sys)):
+            self.assertIsNone(headset.peripheral(path=Path(tmp) / "h.json"))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(headset, "read", return_value=headset.parse(output(ARCTIS))), \
+                mock.patch.object(headset, "kernel_batteries", return_value={}):
+            self.assertEqual(headset.peripheral(path=Path(tmp) / "h.json")["capacity"], 72)
 
 
 class ChatMix(unittest.TestCase):
