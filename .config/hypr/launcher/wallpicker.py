@@ -306,12 +306,21 @@ def build(app, Gtk, Gdk, GLib, GdkPixbuf, Pango, Gtk4LayerShell):
     main.append(footer)
     footer.set_visible(bool(opts["hints"]))
 
-    def size_panel(*_):
+    def size_panel(mon=None):
         surface = win.get_surface()
-        mon = display.get_monitor_at_surface(surface) if surface else None
-        g = (mon or monitors.get_item(0)).get_geometry()
+        if mon is None:
+            mon = display.get_monitor_at_surface(surface) if surface else None
+        mon = mon or (monitors.get_item(0) if monitors.get_n_items() else None)
+        if mon is None:
+            return
+        g = mon.get_geometry()
         panel.set_size_request(min(max(int(g.width * 0.74), 1100), int(g.width * 0.96)), int(g.height * 0.74))
-    win.connect("realize", size_panel)
+
+    def on_realize(*_):
+        # Not on any screen yet when it is made, so the first sizing is a guess; size again once it lands on one.
+        size_panel()
+        win.get_surface().connect("enter-monitor", lambda _s, monitor: size_panel(monitor))
+    win.connect("realize", on_realize)
 
     # ---- thumbnails, made in the background ----
     jobs = {"queue": [], "busy": 0}
