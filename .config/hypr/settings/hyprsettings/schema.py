@@ -14,6 +14,8 @@ PAGES = ["Assistant", "Assistant Monitor", "Calendar", "Network", "Cloud drives"
 # One short explanation shown at the top of each page
 PAGE_INTRO = {
     "User": "Your name, your picture and your password.",
+    "Computer": "This PC's name, what kind of device it is, what is inside it, its clock and its language. "
+                "Changes apply straight away and ask for your password.",
     "Performance": "Keeps the CPU, graphics card and RAM inside safe limits, so a long game does not freeze the PC.",
     "Assistant": "Hearthling, the local AI helper you open with Super+C: which models it uses and how it behaves.",
     "Assistant Monitor": "This is NOT about your screens. It is the assistant's background health monitor: every few minutes it checks "

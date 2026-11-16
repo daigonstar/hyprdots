@@ -21,12 +21,12 @@ from . import pages, ui  # noqa: E402
 APP_ID = "com.hyprdots.settings"
 
 
-PAGES = ["User", "Performance", *SHARED_PAGES]  # only in the window: the terminal version has neither
+PAGES = ["User", "Computer", "Performance", *SHARED_PAGES]  # only in the window: the terminal version has none of these
 
 # The sidebar, in groups of what belongs together. A page missing from here still shows, under Other.
 SECTIONS = (
     ("You", ("User", "Calendar", "Cloud drives")),
-    ("System", ("Network", "Displays", "Performance", "Power & lock")),
+    ("System", ("Computer", "Network", "Displays", "Performance", "Power & lock")),
     ("Look", ("Theme", "Bar layout", "Launcher")),
     ("Windows and keys", ("Workspaces", "Window rules", "Keybinds", "Hyprland")),
     ("Apps", ("Hyprdots", "File types")),
@@ -46,6 +46,7 @@ def sidebar_order() -> list[tuple[str, str]]:
 # Words people search with that a page's own text may not use (pages built by hand list no settings to search)
 KEYWORDS = {
     "User": "password picture photo avatar name account",
+    "Computer": "about pc name rename hostname device specs specifications model processor graphics storage date time clock timezone time zone ntp language locale region dual boot windows",
     "Performance": "cpu gpu ram memory temperature heat hot boost power limit freeze crash overheating",
     "Network": "wifi wireless ethernet internet vpn dns ip hotspot",
     "Displays": "monitor screen resolution refresh rate hz scale rotate hidpi",
@@ -77,9 +78,9 @@ def search_text(page: str) -> str:
 
 def builders() -> dict:
     """Page name -> function(win) returning the page widget. Pages that apply live have their own modules."""
-    from . import account, barlayout, power, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
+    from . import account, barlayout, computer, power, cloud, displays, filetypes, keybinds, network, windowrules, workspaces
     out = {name: (lambda win, name=name: pages.basic_page(win, name)) for name in PAGES}
-    out.update({"User": account.build, "Performance": power.build, "Keybinds": keybinds.build, "File types": filetypes.build,
+    out.update({"User": account.build, "Computer": computer.build, "Performance": power.build, "Keybinds": keybinds.build, "File types": filetypes.build,
                 "Displays": displays.build, "Workspaces": workspaces.build, "Bar layout": barlayout.build, "Cloud drives": cloud.build,
                 "Network": network.build, "Window rules": windowrules.build})
     return out

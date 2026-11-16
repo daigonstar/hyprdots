@@ -150,6 +150,7 @@ Click the cog in the quick tray (or run `~/.config/hypr/scripts/settings.sh`) fo
 | Page | What you can change |
 | --- | --- |
 | User | Your name, your picture (shown on the quick tray and lock screen) and your password |
+| Computer | Like "About" and "Rename this PC" on Windows or a Mac: the computer name (with the network name made from it, and its `name.local` address), what kind of device it is and where it is, the specs (model, processor, graphics, memory, drives, system, firmware) with a button to copy them, the date, time zone, setting the time from the internet, keeping the clock in local time beside Windows, and the system language. Changes apply straight away and ask for your password |
 | Performance | Full speed, Balanced or Cool and stable for the CPU and graphics card, a heat guard that holds them back when they stay too hot, and the RAM's speed against its rating |
 | Assistant | Pick the chat and vision model from the ones you have installed (or download one), thinking effort, memory use, colours, and switch the assistant on or off |
 | Assistant Monitor | The assistant's background health checks (not your screens): when to warn about full disks, heat and failed services, and what to ignore |

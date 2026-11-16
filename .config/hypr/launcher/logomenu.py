@@ -322,7 +322,7 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell, logo: str, font_list: str,
             grid.attach(Gtk.Label(label=value, xalign=0, wrap=True, max_width_chars=30), 1, i, 1, 1)
         card.append(grid)
         more = Gtk.Button(label="More in Settings…", css_classes=["about-button"], halign=Gtk.Align.CENTER)
-        more.connect("clicked", lambda _b: (run_cmd([SETTINGS]), close()))
+        more.connect("clicked", lambda _b: (run_cmd([SETTINGS, "--page=Computer"]), close()))
         card.append(more)
         menu.append(card)
         menu.set_size_request(340, -1)
