@@ -502,10 +502,11 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
     main.append(footer)
     footer.set_visible(bool(opts["hints"]))
 
-    def size_panel(*_):
+    def size_panel(mon=None):
         surface = win.get_surface()
         display = win.get_display()
-        mon = display.get_monitor_at_surface(surface) if surface else None
+        if mon is None:
+            mon = display.get_monitor_at_surface(surface) if surface else None
         if mon is None and display.get_monitors().get_n_items():
             mon = display.get_monitors().get_item(0)
         if mon is None:
@@ -523,7 +524,13 @@ def build(app, Gtk, Gdk, GLib, Pango, Gtk4LayerShell):
             scroller.set_max_content_height(layout["rows"] * (layout["icon"] + layout["row"]))
         if "max_width" in layout:
             scroller.set_max_content_width(int(g.width * layout["max_width"]))
-    win.connect("realize", size_panel)
+
+    def on_realize(*_):
+        # When the window is made it is not on any screen yet, so the first sizing is a guess (the first monitor).
+        # The compositor then says which screen it landed on, and the panel is sized again for that one.
+        size_panel()
+        win.get_surface().connect("enter-monitor", lambda _s, monitor: size_panel(monitor))
+    win.connect("realize", on_realize)
 
     # ---- categories sidebar ----
     def categories():
